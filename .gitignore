@@ -1,0 +1,9 @@
+# Local secrets and outputs
+.env
+.local/
+.tools/
+node_modules/
+dist/
+coverage/
+__pycache__/
+*.pyc
