@@ -1,0 +1,5 @@
+FROM scratch
+COPY --chmod=0555 .local/identity-api /identity-api
+COPY --chmod=0555 .local/event-worker /event-worker
+USER 65532:65532
+ENTRYPOINT ["/identity-api"]

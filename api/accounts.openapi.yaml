@@ -1,0 +1,120 @@
+openapi: 3.1.0
+info:
+  title: Local identity account proofs
+  version: 0.2.0
+  description: >-
+    Registration proof and password recovery only. These endpoints are anonymous,
+    require the configured same Origin, never create a login session, and never
+    return OAuth tokens. Local file mailbox is not a production email transport.
+paths:
+  /v1/registrations:
+    post:
+      summary: Request an email ownership proof before setting a password
+      parameters: [{$ref: '#/components/parameters/Origin'}]
+      requestBody: {$ref: '#/components/requestBodies/Email'}
+      responses:
+        '202': {$ref: '#/components/responses/Accepted'}
+        '400': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '415': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Limited'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/email-verifications:
+    post:
+      summary: Atomically consume a registration proof, set password and bootstrap personal tenant
+      parameters: [{$ref: '#/components/parameters/Origin'}]
+      requestBody: {$ref: '#/components/requestBodies/Proof'}
+      responses:
+        '204': {description: Account created; initiate login from an application}
+        '400': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '415': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Limited'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/password-resets:
+    post:
+      summary: Request recovery instructions without revealing account existence
+      parameters: [{$ref: '#/components/parameters/Origin'}]
+      requestBody: {$ref: '#/components/requestBodies/Email'}
+      responses:
+        '202': {$ref: '#/components/responses/Accepted'}
+        '400': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '415': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Limited'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/password-resets/complete:
+    post:
+      summary: Consume a recovery proof and increment the authoritative user security version
+      parameters: [{$ref: '#/components/parameters/Origin'}]
+      requestBody: {$ref: '#/components/requestBodies/Proof'}
+      responses:
+        '204': {description: Password changed; no login session created}
+        '400': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '415': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Limited'}
+        '503': {$ref: '#/components/responses/Error'}
+components:
+  parameters:
+    Origin:
+      in: header
+      name: Origin
+      required: true
+      description: CSRF boundary, not a credential. CORS is not enabled.
+      schema: {type: string, const: 'http://127.0.0.1:8080'}
+  requestBodies:
+    Email:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [email]
+            properties:
+              email: {type: string, format: email, maxLength: 254}
+    Proof:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [token, password]
+            properties:
+              token: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+              password: {type: string, minLength: 12, maxLength: 128, writeOnly: true}
+  responses:
+    Accepted:
+      description: Identical response for eligible and ineligible addresses; no proof or account IDs
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [message]
+            properties:
+              message: {type: string, const: '若地址符合条件，将发送后续操作说明。'}
+    Error:
+      description: Controlled error code and request ID; never includes submitted credentials
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [code, request_id]
+            properties:
+              code:
+                type: string
+                enum: [invalid_request, invalid_challenge, password_policy, invalid_origin, unsupported_media_type, temporarily_unavailable]
+              request_id: {type: string}
+    Limited:
+      description: Local bounded rate limit reached
+      headers:
+        Retry-After: {schema: {type: integer}}
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              code: {type: string, const: rate_limited}
+              request_id: {type: string}

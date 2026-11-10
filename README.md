@@ -37,3 +37,16 @@ scripts/m1 test
 ```
 
 本地验收现有 28 项真实协议测试和 10 项业务数据库测试。后续开发与本地验收继续在此仓库进行；GCP 部署和云端运维由 SRE 专门负责。
+
+## 本地账户验证与恢复
+
+已提供真实账户页面、注册邮箱证明、Argon2id 密码、原子个人空间创建、一次性密码重置，以及加密通知/私有本地邮箱 worker。接口见 [账户 OpenAPI](api/accounts.openapi.yaml)，运行方式见 [M2 账户手册](docs/runbooks/m2-accounts.md)，安全边界见 [ADR 0004](docs/adr/0004-account-proof-lifecycle.md)。
+
+```sh
+scripts/m2 prepare
+scripts/m2 up
+scripts/m2 test
+node tests/accounts/browser.cjs
+```
+
+这是账户因素与恢复切片；还没有公开密码登录、Hydra 可信交互、中央会话、MFA 或正式控制台。通知仅写本地私有目录，不发送外部邮件。GCP 部署继续由 SRE 负责。

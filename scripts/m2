@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+export PATH="$PWD/.tools/go/bin:$PATH"
+export GOPATH="$PWD/.local/go" GOCACHE="$PWD/.local/go-cache" GOMODCACHE="$PWD/.local/go-mod"
+compose() { docker compose --env-file .local/m0.env -f deploy/local/compose.yml "$@"; }
+case "${1:-}" in
+ prepare)
+  scripts/m1 prepare
+  python3 scripts/prepare_m2.py
+  CGO_ENABLED=0 go build -trimpath -o .local/identity-api ./cmd/identity-api
+  CGO_ENABLED=0 go build -trimpath -o .local/event-worker ./cmd/event-worker
+  CGO_ENABLED=0 go test -c -o .local/identity-tests ./internal/identity
+  chmod 555 .local/identity-tests
+  compose build identity-api
+  ;;
+ up)
+  scripts/m1 up
+  python3 scripts/prepare_m2.py
+  compose build identity-api
+  compose up -d identity-api mail-worker
+  python3 - <<'PY'
+import time,urllib.request
+for attempt in range(60):
+ try:
+  with urllib.request.urlopen('http://127.0.0.1:8080/health/ready',timeout=2) as r:assert r.status==204
+  break
+ except Exception:
+  if attempt==59:raise
+  time.sleep(1)
+print('Local account API ready')
+PY
+  ;;
+ test)
+  compose stop mail-worker
+  result=0
+  compose run --rm --no-deps identity-tests || result=$?
+  compose start mail-worker
+  exit "$result"
+  ;;
+ mail-once) compose run --rm --no-deps mail-worker -once ;;
+ down) compose --profile accounts down ;;
+ *) echo 'Usage: scripts/m2 {prepare|up|test|mail-once|down}' >&2; exit 2 ;;
+esac

@@ -4,3 +4,7 @@
 !deploy/
 !deploy/local/
 !deploy/local/Dockerfile.hook
+
+!.local/identity-api
+!.local/event-worker
+!deploy/local/Dockerfile.accounts

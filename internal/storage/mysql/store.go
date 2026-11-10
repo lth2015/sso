@@ -48,6 +48,18 @@ func (s Store) BootstrapTenant(ctx context.Context, user ID, slug, name string) 
 	if status != "active" {
 		return Bootstrap{}, ErrDenied
 	}
+	b, err := bootstrapTenantTx(ctx, tx, user, slug, name)
+	if err != nil {
+		return Bootstrap{}, err
+	}
+	if err = tx.Commit(); err != nil {
+		return Bootstrap{}, err
+	}
+	return b, nil
+}
+
+func bootstrapTenantTx(ctx context.Context, tx *sql.Tx, user ID, slug, name string) (Bootstrap, error) {
+	var err error
 	var b Bootstrap
 	if b.Tenant, err = NewID(); err != nil {
 		return b, err
@@ -80,9 +92,6 @@ func (s Store) BootstrapTenant(ctx context.Context, user ID, slug, name string) 
 		}
 	}
 	if err = record(ctx, tx, b.Tenant, b.Membership, "tenant.created", b.Tenant, 1); err != nil {
-		return Bootstrap{}, err
-	}
-	if err = tx.Commit(); err != nil {
 		return Bootstrap{}, err
 	}
 	return b, nil

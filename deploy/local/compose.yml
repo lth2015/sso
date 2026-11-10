@@ -9,7 +9,47 @@ x-hydra: &hydra
     DSN: mysql://hydra:${HYDRA_DB_PASSWORD}@tcp(mysql:3306)/hydra?parseTime=true
     SECRETS_SYSTEM: ${HYDRA_SYSTEM_SECRET}
     OAUTH2_TOKEN_HOOK: '{"url":"http://hook:8081/token-hook","auth":{"type":"api_key","config":{"in":"header","name":"X-Hook-Key","value":"${HOOK_KEY}"}}}'
+x-accounts: &accounts
+  pull_policy: never
+  image: ${COMPOSE_PROJECT_NAME:-sso-m0}-accounts
+  build:
+    context: ../..
+    dockerfile: deploy/local/Dockerfile.accounts
+  environment:
+    SSO_MODE: local-accounts
+    M1_DB_PASSWORD: ${M1_DB_PASSWORD:-}
+    IDENTITY_MAIL_KEY: ${IDENTITY_MAIL_KEY:-}
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
 services:
+  identity-api:
+    <<: *accounts
+    profiles: [accounts]
+    ports:
+      - 127.0.0.1:8080:8080
+  mail-worker:
+    <<: *accounts
+    profiles: [accounts]
+    # Match the bind-mounted private directory owner; never grant DAC override.
+    # API remains UID 65532; no process receives additional capabilities.
+    user: '${MAILBOX_UID:-1000}:${MAILBOX_GID:-1000}'
+    entrypoint: [/event-worker]
+    volumes:
+      - ../../.local/mailbox:/mailbox
+  identity-tests:
+    <<: *accounts
+    profiles: [testing]
+    entrypoint: [/identity-tests]
+    command: [-test.v]
+    environment:
+      SSO_ACCOUNT_TEST: 'true'
+      M1_DB_PASSWORD: ${M1_DB_PASSWORD:-}
+      IDENTITY_MAIL_KEY: ${IDENTITY_MAIL_KEY:-}
+    volumes:
+      - ../../.local/identity-tests:/identity-tests:ro
+    tmpfs:
+      - /tmp:mode=1777,size=64m
   business-tests:
     profiles: [testing]
     image: ${COMPOSE_PROJECT_NAME:-sso-m0}-hook
