@@ -1,0 +1,25 @@
+# M0 only: public/admin host ports are loopback-bound by Compose.
+urls:
+  self:
+    issuer: http://127.0.0.1:4444/
+  login: http://127.0.0.1:3000/login
+  consent: http://127.0.0.1:3000/consent
+  logout: http://127.0.0.1:3000/logout
+strategies:
+  access_token: jwt
+oauth2:
+  expose_internal_errors: false
+  pkce:
+    enforced: true
+ttl:
+  access_token: 5m
+  id_token: 5m
+  auth_code: 1m
+  refresh_token: 168h
+oidc:
+  subject_identifiers:
+    supported_types:
+      - public
+log:
+  level: error
+  leak_sensitive_values: false

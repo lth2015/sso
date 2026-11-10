@@ -1,0 +1,6 @@
+**
+!.local/
+!.local/token-policy-hook
+!deploy/
+!deploy/local/
+!deploy/local/Dockerfile.hook

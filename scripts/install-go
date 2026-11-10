@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+# Official distribution and published checksum. No verification bypass.
+if [[ -x .tools/go/bin/go ]] && [[ "$(.tools/go/bin/go version)" == 'go version go1.27.3 linux/amd64' ]]; then
+  exit 0
+fi
+[[ "$(uname -sm)" == 'Linux x86_64' ]] || { echo 'This M0 bootstrap pins Linux amd64; select a verified distribution for this platform.' >&2; exit 1; }
+[[ ! -e .tools/go ]] || { echo 'Existing Go directory has another version; preserve it before replacing.' >&2; exit 1; }
+mkdir -p .tools
+archive=$(mktemp)
+trap 'rm -f "$archive"' EXIT
+curl --fail --show-error --location --proto '=https' --tlsv1.2 --max-time 180 https://go.dev/dl/go1.27.3.linux-amd64.tar.gz -o "$archive"
+printf '%s  %s\n' 65efbc80fdc1fa2cd2631cad5b481777a68e8725f34e89f50fc6ac714e379b40 "$archive" | sha256sum -c -
+tar -xzf "$archive" -C .tools
+.tools/go/bin/go version

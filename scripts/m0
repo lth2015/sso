@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+export PATH="$PWD/.tools/go/bin:$PATH"
+export GOPATH="$PWD/.local/go" GOCACHE="$PWD/.local/go-cache" GOMODCACHE="$PWD/.local/go-mod"
+compose() { docker compose --env-file .local/m0.env -f deploy/local/compose.yml "$@"; }
+case "${1:-}" in
+ prepare)
+  mkdir -p .local
+  python3 scripts/prepare_m0.py
+  chmod 644 deploy/local/hydra.yml
+  go mod download
+  go test ./...
+  CGO_ENABLED=0 go build -trimpath -o .local/token-policy-hook ./cmd/token-policy-hook
+  compose build hook
+  ;;
+ up)
+  compose up -d
+  python3 - <<'PY'
+import time,urllib.request
+for url in ['http://127.0.0.1:8081/health/ready','http://127.0.0.1:4445/health/ready']:
+ for attempt in range(90):
+  try:
+   with urllib.request.urlopen(url, timeout=2) as r:
+    assert r.status in (200,204)
+   break
+  except Exception:
+   if attempt==89: raise
+   time.sleep(1)
+print('M0 hook and Hydra ready')
+PY
+  ;;
+ test) python3 -m unittest discover -s tests/protocol -v ;;
+ down) compose down ;;
+ logs) compose logs --tail=60 ;;
+ *) echo 'Usage: scripts/m0 {prepare|up|test|down|logs}' >&2; exit 2 ;;
+esac

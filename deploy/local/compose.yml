@@ -1,0 +1,59 @@
+name: sso-m0
+x-hydra: &hydra
+  image: oryd/hydra@sha256:b94007e19a1f7f78157e7f4ea340da8a55b5f104a0f1198755c256f38ef32b4b
+  volumes:
+    - ./hydra.yml:/etc/hydra/config.yml:ro
+  environment: &hydra-env
+    NO_PROXY: ${NO_PROXY:-},hook,mysql
+    no_proxy: ${no_proxy:-},hook,mysql
+    DSN: mysql://hydra:${HYDRA_DB_PASSWORD}@tcp(mysql:3306)/hydra?parseTime=true
+    SECRETS_SYSTEM: ${HYDRA_SYSTEM_SECRET}
+    OAUTH2_TOKEN_HOOK: '{"url":"http://hook:8081/token-hook","auth":{"type":"api_key","config":{"in":"header","name":"X-Hook-Key","value":"${HOOK_KEY}"}}}'
+services:
+  mysql:
+    image: mysql@sha256:a81d043930e51745522bd5c430961cf8286f0a23f0a9a2a6e0108f7ea71b0902
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - mysql:/var/lib/mysql
+      - ../../.local/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: [CMD-SHELL, 'MYSQL_PWD="$$MYSQL_ROOT_PASSWORD" mysql -uroot -e "SELECT 1" >/dev/null']
+      interval: 3s
+      timeout: 2s
+      retries: 60
+  migrate:
+    <<: *hydra
+    command: migrate sql -e --yes
+    depends_on:
+      mysql:
+        condition: service_healthy
+  hook:
+    build:
+      context: ../..
+      dockerfile: deploy/local/Dockerfile.hook
+    environment:
+      SSO_MODE: m0-laboratory
+      HOOK_KEY: ${HOOK_KEY}
+      HOOK_DB_PASSWORD: ${HOOK_DB_PASSWORD}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    ports:
+      - 127.0.0.1:8081:8081
+    depends_on:
+      mysql:
+        condition: service_healthy
+  hydra:
+    <<: *hydra
+    command: serve all --dev -c /etc/hydra/config.yml
+    ports:
+      - 127.0.0.1:4444:4444
+      - 127.0.0.1:4445:4445
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      hook:
+        condition: service_started
+volumes:
+  mysql:
