@@ -8,3 +8,9 @@
 !.local/identity-api
 !.local/event-worker
 !deploy/local/Dockerfile.accounts
+
+!.local/demo-app
+!.local/demo-admin
+!deploy/local/Dockerfile.demo
+
+!.local/protocol-public

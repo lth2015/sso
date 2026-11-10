@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+export PATH="$PWD/.tools/go/bin:$PATH"
+export GOPATH="$PWD/.local/go" GOCACHE="$PWD/.local/go-cache" GOMODCACHE="$PWD/.local/go-mod"
+compose() { docker compose --env-file .local/m0.env -f deploy/local/compose.yml "$@"; }
+case "${1:-}" in
+ prepare)
+  scripts/m2 prepare
+  python3 scripts/prepare_sso.py
+  CGO_ENABLED=0 go build -trimpath -o .local/demo-app ./cmd/demo-app
+  CGO_ENABLED=0 go build -trimpath -o .local/demo-admin ./cmd/demo-admin
+  CGO_ENABLED=0 go test -c -o .local/demo-tests ./internal/demo
+  chmod 555 .local/demo-tests
+  CGO_ENABLED=0 go build -trimpath -o .local/protocol-public ./cmd/protocol-public
+  compose build demo-a
+  ;;
+ up)
+  python3 scripts/prepare_sso.py
+  scripts/m2 up
+  compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot' < .local/sso-init.sql
+  compose up -d hydra-sso-migrate
+  compose up -d hydra-login
+  python3 - <<'PY'
+import time,urllib.request
+for i in range(90):
+ try:
+  with urllib.request.urlopen('http://127.0.0.1:4465/health/ready',timeout=2) as r:assert r.status==200
+  break
+ except Exception:
+  if i==89:raise
+  time.sleep(1)
+PY
+  python3 scripts/seed_sso.py
+  compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot' < .local/bff-init.sql
+  compose build demo-a
+  compose up -d protocol-public demo-a demo-b
+  python3 - <<'READY'
+import time,urllib.request
+for port,host,path,status in [(8080,'auth.localhost:8080','/sso/health/ready',204),(3001,'app-a.localhost:3001','/',200),(3002,'app-b.localhost:3002','/',200)]:
+ for attempt in range(30):
+  try:
+   request=urllib.request.Request(f'http://127.0.0.1:{port}{path}',headers={'Host':host})
+   with urllib.request.urlopen(request,timeout=2) as response:assert response.status==status
+   break
+  except Exception:
+   if attempt==29:raise SystemExit('Local SSO functional readiness failed')
+   time.sleep(1)
+print('Trusted login and both BFF origins ready')
+READY
+  ;;
+ network-test)
+  hydra_id=$(compose ps -q hydra-login)
+  identity_id=$(compose ps -q identity-api)
+  hydra_ip=$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$hydra_id")
+  identity_ip=$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$identity_id")
+  [[ "$hydra_ip" =~ ^[0-9.]+$ && "$identity_ip" =~ ^[0-9.]+$ ]] || exit 2
+  compose run --rm --no-deps -e "CORE_HYDRA_IP=$hydra_ip" -e "CORE_IDENTITY_IP=$identity_ip" demo-network-tests
+  ;;
+ test)
+  compose stop mail-worker
+  result=0
+  compose run --rm --no-deps sso-tests || result=$?
+  compose start mail-worker
+  exit "$result"
+  ;;
+ verify-fixture)
+  [[ "${2:-}" == '--user' && "${3:-}" =~ ^[a-f0-9]{32}$ ]] || exit 2
+  phase=live
+  if [[ "${4:-}" == '--revoked' ]]; then phase=revoked; elif [[ -n "${4:-}" ]]; then exit 2; fi
+  compose run --rm --no-deps -e "DEMO_TEST_USER=$3" -e "DEMO_TEST_PHASE=$phase" demo-tests
+  ;;
+ enable) shift; compose run --rm --no-deps --entrypoint /demo-admin demo-admin "$@" ;;
+ down) compose --profile accounts --profile sso down ;;
+ *) echo 'Usage: scripts/sso {prepare|up|test|network-test|enable --email ADDRESS [--second-tenant]|down}' >&2; exit 2 ;;
+esac

@@ -12,16 +12,29 @@ import (
 )
 
 func Database() (*sql.DB, error) {
-	password := os.Getenv("M1_DB_PASSWORD")
+	user, dbname, password := "business_app", "sso_business", os.Getenv("M1_DB_PASSWORD")
+	switch os.Getenv("LOCAL_DB_KIND") {
+	case "demo_a":
+		user = "demo_a"
+		dbname = "local_demo_a_state"
+		password = os.Getenv("DEMO_DB_PASSWORD")
+	case "demo_b":
+		user = "demo_b"
+		dbname = "local_demo_b_state"
+		password = os.Getenv("DEMO_DB_PASSWORD")
+	case "":
+	default:
+		return nil, errors.New("unknown local database role")
+	}
 	if len(password) != 64 {
-		return nil, errors.New("missing local business credential")
+		return nil, errors.New("missing local database credential")
 	}
 	cfg := driver.NewConfig()
-	cfg.User = "business_app"
+	cfg.User = user
 	cfg.Passwd = password
 	cfg.Net = "tcp"
 	cfg.Addr = "mysql:3306"
-	cfg.DBName = "sso_business"
+	cfg.DBName = dbname
 	cfg.ParseTime = true
 	cfg.Timeout = 2 * time.Second
 	cfg.ReadTimeout = 5 * time.Second

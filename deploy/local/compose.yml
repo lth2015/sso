@@ -1,5 +1,6 @@
 name: sso-m0
 x-hydra: &hydra
+  networks: [core]
   image: oryd/hydra@sha256:b94007e19a1f7f78157e7f4ea340da8a55b5f104a0f1198755c256f38ef32b4b
   volumes:
     - ./hydra.yml:/etc/hydra/config.yml:ro
@@ -10,6 +11,7 @@ x-hydra: &hydra
     SECRETS_SYSTEM: ${HYDRA_SYSTEM_SECRET}
     OAUTH2_TOKEN_HOOK: '{"url":"http://hook:8081/token-hook","auth":{"type":"api_key","config":{"in":"header","name":"X-Hook-Key","value":"${HOOK_KEY}"}}}'
 x-accounts: &accounts
+  networks: [core]
   pull_policy: never
   image: ${COMPOSE_PROJECT_NAME:-sso-m0}-accounts
   build:
@@ -17,12 +19,89 @@ x-accounts: &accounts
     dockerfile: deploy/local/Dockerfile.accounts
   environment:
     SSO_MODE: local-accounts
+    NO_PROXY: ${NO_PROXY:-},mysql,identity-api,hydra-login
+    no_proxy: ${no_proxy:-},mysql,identity-api,hydra-login
+    SSO_ENABLED: ${SSO_ENABLED:-false}
+    SSO_FLOW_KEY: ${SSO_FLOW_KEY:-}
+    SSO_MFA_KEY: ${SSO_MFA_KEY:-}
+    BUSINESS_HOOK_KEY: ${BUSINESS_HOOK_KEY:-}
     M1_DB_PASSWORD: ${M1_DB_PASSWORD:-}
     IDENTITY_MAIL_KEY: ${IDENTITY_MAIL_KEY:-}
   read_only: true
   cap_drop: [ALL]
   security_opt: [no-new-privileges:true]
+x-hydra-sso: &hydra-sso
+  networks: [core]
+  image: oryd/hydra@sha256:b94007e19a1f7f78157e7f4ea340da8a55b5f104a0f1198755c256f38ef32b4b
+  profiles: [sso]
+  volumes:
+    - ./hydra-sso.yml:/etc/hydra/config.yml:ro
+  environment:
+    DSN: mysql://hydra_sso:${BUSINESS_HYDRA_DB_PASSWORD:-}@tcp(mysql:3306)/hydra_sso?parseTime=true
+    SECRETS_SYSTEM: ${BUSINESS_HYDRA_SYSTEM_SECRET:-}
+    NO_PROXY: ${NO_PROXY:-},mysql,identity-api,hydra-login
+    no_proxy: ${no_proxy:-},mysql,identity-api,hydra-login
+    OAUTH2_TOKEN_HOOK: '{"url":"http://identity-api:8082/token-hook","auth":{"type":"api_key","config":{"in":"header","name":"X-Hook-Key","value":"${BUSINESS_HOOK_KEY:-}"}}}'
+x-demo: &demo
+  networks: [core]
+  image: ${COMPOSE_PROJECT_NAME:-sso-m0}-demo
+  pull_policy: never
+  build:
+    context: ../..
+    dockerfile: deploy/local/Dockerfile.demo
+  profiles: [sso]
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
 services:
+  protocol-public:
+    <<: *demo
+    networks: [core,app_a,app_b]
+    entrypoint: [/protocol-public]
+  hydra-sso-migrate:
+    <<: *hydra-sso
+    command: migrate sql -e --yes
+  hydra-login:
+    <<: *hydra-sso
+    command: serve all --dev -c /etc/hydra/config.yml
+    ports:
+      - 127.0.0.1:4464:4444
+      - 127.0.0.1:4465:4445
+    depends_on:
+      hydra-sso-migrate:
+        condition: service_completed_successfully
+  demo-a:
+    <<: *demo
+    networks: [app_a]
+    depends_on: [protocol-public]
+    environment:
+      SSO_MODE: local-accounts
+      LOCAL_DB_KIND: demo_a
+      DEMO_DB_PASSWORD: ${DEMO_A_DB_PASSWORD:-}
+      SSO_BFF_KEY: ${DEMO_A_BFF_KEY:-}
+      DEMO_CLIENT_ID: local-demo-a
+      DEMO_CLIENT_SECRET: ${DEMO_A_SECRET:-}
+    ports:
+      - 127.0.0.1:3001:3000
+  demo-b:
+    <<: *demo
+    networks: [app_b]
+    depends_on: [protocol-public]
+    environment:
+      SSO_MODE: local-accounts
+      LOCAL_DB_KIND: demo_b
+      DEMO_DB_PASSWORD: ${DEMO_B_DB_PASSWORD:-}
+      SSO_BFF_KEY: ${DEMO_B_BFF_KEY:-}
+      DEMO_CLIENT_ID: local-demo-b
+      DEMO_CLIENT_SECRET: ${DEMO_B_SECRET:-}
+    ports:
+      - 127.0.0.1:3002:3000
+  demo-admin:
+    <<: *demo
+    entrypoint: [/demo-admin]
+    environment:
+      SSO_MODE: local-accounts
+      M1_DB_PASSWORD: ${M1_DB_PASSWORD:-}
   identity-api:
     <<: *accounts
     profiles: [accounts]
@@ -37,6 +116,46 @@ services:
     entrypoint: [/event-worker]
     volumes:
       - ../../.local/mailbox:/mailbox
+  demo-tests:
+    <<: *demo
+    profiles: [testing]
+    entrypoint: [/demo-tests]
+    command: [-test.v]
+    environment:
+      SSO_DEMO_TEST: 'true'
+      M1_DB_PASSWORD: ${M1_DB_PASSWORD:-}
+      SSO_BFF_KEY: ${SSO_BFF_KEY:-}
+      DEMO_A_SECRET: ${DEMO_A_SECRET:-}
+      DEMO_B_SECRET: ${DEMO_B_SECRET:-}
+      DEMO_A_BFF_KEY: ${DEMO_A_BFF_KEY:-}
+      DEMO_B_BFF_KEY: ${DEMO_B_BFF_KEY:-}
+      DEMO_A_DB_PASSWORD: ${DEMO_A_DB_PASSWORD:-}
+      DEMO_B_DB_PASSWORD: ${DEMO_B_DB_PASSWORD:-}
+    volumes:
+      - ../../.local/demo-tests:/demo-tests:ro
+  demo-network-tests:
+    <<: *demo
+    networks: [app_a]
+    profiles: [testing]
+    entrypoint: [/demo-tests]
+    command: [-test.v, -test.run, TestDemoNetworkBoundary]
+    environment:
+      SSO_DEMO_NETWORK_TEST: 'true'
+    volumes:
+      - ../../.local/demo-tests:/demo-tests:ro
+  sso-tests:
+    <<: *accounts
+    profiles: [testing]
+    entrypoint: [/identity-tests]
+    command: [-test.v, -test.run, TestSSO]
+    environment:
+      SSO_ACCOUNT_TEST: 'true'
+      SSO_LOGIN_TEST: 'true'
+      M1_DB_PASSWORD: ${M1_DB_PASSWORD:-}
+    volumes:
+      - ../../.local/identity-tests:/identity-tests:ro
+    tmpfs:
+      - /tmp:mode=1777,size=64m
   identity-tests:
     <<: *accounts
     profiles: [testing]
@@ -51,6 +170,7 @@ services:
     tmpfs:
       - /tmp:mode=1777,size=64m
   business-tests:
+    networks: [core]
     profiles: [testing]
     image: ${COMPOSE_PROJECT_NAME:-sso-m0}-hook
     entrypoint: [/business-tests]
@@ -64,6 +184,7 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
   mysql:
+    networks: [core,app_a,app_b]
     image: mysql@sha256:a81d043930e51745522bd5c430961cf8286f0a23f0a9a2a6e0108f7ea71b0902
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
@@ -82,6 +203,7 @@ services:
       mysql:
         condition: service_healthy
   hook:
+    networks: [core]
     build:
       context: ../..
       dockerfile: deploy/local/Dockerfile.hook
@@ -110,3 +232,11 @@ services:
         condition: service_started
 volumes:
   mysql:
+
+networks:
+  core:
+    driver: bridge
+  app_a:
+    driver: bridge
+  app_b:
+    driver: bridge

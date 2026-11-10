@@ -16,10 +16,12 @@ user=sql(f"SELECT HEX(user_id) FROM login_aliases WHERE normalized_email='{email
 sql(f"DELETE n FROM account_notifications n JOIN account_challenges c ON c.id=n.challenge_id WHERE c.normalized_email='{email}'; DELETE e FROM identity_events e JOIN account_challenges c ON c.id=e.target_id WHERE c.normalized_email='{email}'; DELETE FROM account_challenges WHERE normalized_email='{email}';")
 if user:
     if not re.fullmatch('[0-9A-F]{32}',user):raise SystemExit('Invalid fixture user ID')
+    for table in ['protocol_logout_jobs','bff_sessions','business_grants','login_interactions','sso_sessions','mfa_recovery_codes','mfa_factors']:
+        sql(f"DELETE FROM {table} WHERE user_id=UNHEX('{user}');")
     tenants=sql(f"SELECT HEX(tenant_id) FROM memberships WHERE user_id=UNHEX('{user}');").splitlines()
     for tenant in tenants:
         if not re.fullmatch('[0-9A-F]{32}',tenant):raise SystemExit('Invalid fixture tenant ID')
-        for table in ['outbox_events','audit_events','role_bindings','roles','org_closure','tenant_roots','org_nodes','memberships']:
+        for table in ['outbox_events','audit_events','tenant_applications','role_bindings','roles','org_closure','tenant_roots','org_nodes','memberships']:
             sql(f"DELETE FROM {table} WHERE tenant_id=UNHEX('{tenant}');")
         sql(f"DELETE FROM tenants WHERE id=UNHEX('{tenant}');")
     for table in ['identity_events','password_credentials','account_profiles','login_aliases']:

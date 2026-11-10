@@ -1,0 +1,6 @@
+FROM scratch
+COPY --chmod=0555 .local/demo-app /demo-app
+COPY --chmod=0555 .local/demo-admin /demo-admin
+COPY --chmod=0555 .local/protocol-public /protocol-public
+USER 65532:65532
+ENTRYPOINT ["/demo-app"]

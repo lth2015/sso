@@ -37,3 +37,13 @@ func (id *ID) Scan(src any) error {
 	return nil
 }
 func (id ID) empty() bool { return id == ID{} }
+
+func ParseID(value string) (ID, error) {
+	var id ID
+	b, err := hex.DecodeString(value)
+	if err != nil || len(b) != 16 {
+		return id, errors.New("invalid ID")
+	}
+	copy(id[:], b)
+	return id, nil
+}

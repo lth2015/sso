@@ -1,17 +1,24 @@
 # 当前交付验证记录
 
-日期：2026-11-10。本地交付 M0 协议实验、M1 数据仓储、M2 账户验证/恢复 API 与页面。GCP 部署及云端运维由 SRE 负责。
+日期：2026-11-10。本地交付 M0 协议实验、M1 数据仓储、M2 账户生命周期，以及真实 Hydra 登录/MFA/中央会话与双应用 BFF。GCP 部署及云端运维由 SRE 负责。
 
 | 检查 | 实际结果 | 边界 |
 | --- | --- | --- |
-| 固定工具链/依赖 | Go 1.27.3；x/crypto v0.58.0 与传递依赖锁定在 go.mod/go.sum，校验保持启用 | 未执行完整依赖漏洞审计 |
+| 固定工具链/依赖 | Go 1.27.3；x/crypto v0.58.0、go-oidc v3.21.0、x/oauth2 v0.36.0 及传递依赖锁定在 go.mod/go.sum，校验保持启用 | 未执行完整依赖漏洞审计 |
 | 密码单元测试 | 2 项通过，覆盖 Argon2id salt/格式/校验、畸形参数拒绝和输入策略 | 并发容量另在账户测试中验证 |
-| 全新数据库启动 | sso-m2-validation 项目新 volume、Hydra/M0/业务 001–003 迁移通过 | 真实本地 MySQL 8.4.13 |
+| 全新数据库启动 | sso-final-validation 项目新 volume，M0 与独立业务 Hydra、业务 001–004 迁移、受限 BFF 账号/视图/routine 从零建立通过 | 真实本地 MySQL 8.4.13；验证后仅删除自己创建的临时 volume，恢复默认服务 |
 | `scripts/m0 test` | 28 项协议测试全部通过 | 合成身份，真实 Hydra |
 | `scripts/m1 test` | 10 项业务数据库测试全部通过 | 真实 MySQL，无 mock |
-| `scripts/m2 test` | 12 项账户/HTTP 测试全部通过，其中 11 项连接真实 MySQL、1 项测试限流器容量 | 普通 Go run 跳过 DB 测试，不能替代此命令 |
+| `scripts/m2 test` | 12 项账户/HTTP 测试全部通过，其中 11 项连接真实 MySQL、1 项测试限流器容量；此 profile 明确跳过 5 项 SSO 测试 | SSO 由专用 profile 另行执行 |
 | `node tests/accounts/browser.cjs` | 实际浏览器注册、私有邮箱投递、验证设密、密码确认、恢复流程通过；桌面/手机截图已生成 | 无 cookie/浏览器存储凭证，fragment 已清除；无外部邮件发送 |
 | 账户 OpenAPI | YAML 可解析，四个 POST 合同存在 | 不是正式管理 API 合同 |
+| `scripts/sso test` | 5 项真实数据库测试通过，没有跳过 | 绑定/重放/并发激活/过期次数/退出竞态；协议成功另由真实浏览器证明 |
+| `scripts/sso network-test` | 1 项实际 app_a 网络检查通过 | 核心 Admin/私有 Hook 的 DNS 与实际 IP 不可达；窄代理拒绝管理路径，允许 discovery |
+| `node tests/sso/browser.cjs` | 真实注册 → Hydra → 密码/MFA → code+PKCE → 两个 BFF 不同租户 → 续期/撤销/退出全部通过 | 连接真实 DB、worker、Hydra；fixture 清理；桌面/手机安全截图 |
+| 浏览器中实际 token/权限检查 | 两个应用的真实 ID/access token 验证；错误 nonce、篡改签名、alg=none、ID/access 混用与不可信 JWKS 目标拒绝；密码重置后两个实际旧 refresh 均经 Hook 返回 403 | 固定本地 issuer/RS256/audience/client，非自制签名假 fixture |
+| BFF 数据库权限 | 两个专用账号均验证原表受保护字段被 MySQL 1142/1143 拒绝、另一 client 会话不可见、跨 client 写入被视图 CHECK OPTION 1369 拒绝 | 本地 definer 初始化，生产最小权限账号仍需单独实施 |
+| `go vet ./...` 与 `go test -count=1 ./...` | 通过；TOTP 包包含 6 个 RFC 向量及防重放窗口检查 | 普通 Go 测试明确跳过需要服务/fixture 的情况，不能替代上述集成命令 |
+| SSO OpenAPI | 11 个路径 YAML 可解析，所有本地引用可解析 | 可信交互合同；正式管理 API/BFF SDK 产品合同待后续交付 |
 
 M2 数据证据：邮箱证明后才创建 User/凭证/个人 Tenant/Root/Membership/owner；挑战与相关事件同事务；同一挑战及同邮箱不同挑战并发时只有一个账户成功且无孤立 User。恢复递增安全版本，旧密码与旧版本恢复挑战拒绝。
 
@@ -19,6 +26,10 @@ M2 安全证据：不匹配 Origin、未知字段、多 JSON、非法 UTF-8、�
 
 M0/M1 既有证据仍包括跨租户/授权链隔离、会话/退出与签名轮换、组合 FK、组织闭包与并发移动、最后 owner 保护、审计回滚、邀请一次性/并发/过期和组织归属不隐式提权。
 
-尚未交付：可信 Hydra 登录交互、中央会话/MFA、业务 User 与 M0 权威资格正式连接、BFF/SDK、正式控制台、完整 scoped RBAC、真实邮件供应商和租户事件 outbox 消费。当前账户页面不直接签发 token；密码重置的安全版本递增不等于现有 M0 token 已撤销。生产负载/安全/云端 HA/DR/SLO 验收另行实施，不在本地记录为通过。
+可信 SSO 证据还包括：缺失/错误 CSRF 与其他浏览器请求拒绝，已消费 callback 重放和无绑定 cookie 的 callback 拒绝；多租户静默授权返回 interaction_required；TOTP 时间片和恢复码不能重用；成员恢复不会复活旧版本 grant；取消不影响另一有效会话；仅退出应用 B 不影响 A；全设备退出使 A 失效。token 未进入浏览器 storage，cookie 为 HttpOnly/host-only，MFA 密钥与恢复码未进入截图。账号恢复保留 MFA，不允许凭邮箱证明跳过第二因素。
+
+验收期间修复了本地 BFF 共用账号/key、平面网络可达 Admin 的隔离缺口、中文 seed SQL 字符集，以及浏览器测试 API 客户端不解析 .localhost 的测试工具问题；最终浏览器请求使用 Chromium 的真实 cookie/域名行为。修复后相关检查均重新执行通过。
+
+尚未交付：正式 React 控制台、完整 scoped RBAC、MFA 管理/受控恢复、正式多语言 SDK、30 天 refresh、真实邮件供应商与全部租户事件消费者。当前两个 BFF 属于同一 Application，不代表完整跨产品权限已验收。账户页面不直接签发 token；M0 合成身份实验独立，业务密码重置不会撤销 M0 token。生产 TLS/Secure cookie、分布式限流、KMS/轮换、负载/安全/云端 HA/DR/SLO 仍需后续实施验收，不在本地记录为通过。
 
 原始上传文档字节保留；随机本地秘密不进入 Git。源码推送不是生产发布。

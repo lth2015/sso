@@ -145,11 +145,15 @@ func (s *Service) Complete(ctx context.Context, token, newPassword, purpose stri
 // CheckPassword is only an identity factor. Callers must still bind a trusted
 // protocol interaction, enforce MFA and recheck authority before accepting it.
 func (s *Service) CheckPassword(ctx context.Context, email, value string) (store.ID, error) {
+	proof, err := s.CheckPasswordProof(ctx, email, value)
+	return proof.User, err
+}
+func (s *Service) CheckPasswordProof(ctx context.Context, email, value string) (store.PasswordCredential, error) {
 	select {
 	case s.pool <- struct{}{}:
 		defer func() { <-s.pool }()
 	default:
-		return store.ID{}, ErrBusy
+		return store.PasswordCredential{}, ErrBusy
 	}
 	normalized, err := store.NormalizeEmail(email)
 	var credential store.PasswordCredential
@@ -162,15 +166,15 @@ func (s *Service) CheckPassword(ctx context.Context, email, value string) (store
 	}
 	valid := password.Verify(encoded, value)
 	if err != nil && !errors.Is(err, store.ErrDenied) && !errors.Is(err, store.ErrInvalid) {
-		return store.ID{}, err
+		return store.PasswordCredential{}, err
 	}
 	if err != nil || !valid {
-		return store.ID{}, store.ErrDenied
+		return store.PasswordCredential{}, store.ErrDenied
 	}
 	if err = s.Store.CredentialCurrent(ctx, credential.User, credential.Version); err != nil {
-		return store.ID{}, err
+		return store.PasswordCredential{}, err
 	}
-	return credential.User, nil
+	return credential, nil
 }
 func Decrypt(aead cipher.AEAD, n store.Notification) ([]byte, error) {
 	if len(n.Ciphertext) < aead.NonceSize()+aead.Overhead() {

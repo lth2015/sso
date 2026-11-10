@@ -1,0 +1,465 @@
+openapi: 3.1.0
+info:
+  title: Local trusted SSO interactions
+  version: 0.3.0
+  description: Fixed local HTTP reference only; production requires TLS/Secure __Host-
+    cookies. Hydra issues tokens; no password-to-token endpoint. Flow TTL 5 minutes
+    and five failed attempts. All sensitive responses no-store. JSON requests reject
+    unknown fields, extra documents, invalid encoding, query parameters and oversized
+    bodies. Rate limits are process-local. See ADR 0005 for real security boundaries
+    and remaining work.
+servers:
+- url: http://auth.localhost:8080
+paths:
+  /login:
+    get:
+      summary: Enter trusted login from Hydra; not a standalone login API
+      parameters:
+      - in: query
+        name: login_challenge
+        required: true
+        schema:
+          type: string
+          maxLength: 24576
+      responses:
+        '200':
+          description: Trusted no-store HTML with browser-bound flow and CSRF metadata
+        '303':
+          description: Server-validated Hydra continuation or protocol error
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /consent:
+    get:
+      summary: Enter trusted consent from Hydra; not a standalone login API
+      parameters:
+      - in: query
+        name: consent_challenge
+        required: true
+        schema:
+          type: string
+          maxLength: 24576
+      responses:
+        '200':
+          description: Trusted no-store HTML with browser-bound flow and CSRF metadata
+        '303':
+          description: Server-validated Hydra continuation or protocol error
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /v1/flows/{id}:
+    get:
+      summary: Read non-secret interaction state; consent requires matching central
+        session
+      security:
+      - BrowserCookie: []
+      parameters:
+      - $ref: '#/components/parameters/FlowID'
+      responses:
+        '200':
+          description: State only; never seed, recovery codes or protocol challenges
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Flow'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /v1/flows/{id}/password:
+    post:
+      summary: Prove password against the current User security version
+      security:
+      - BrowserCookie: []
+      parameters:
+      - $ref: '#/components/parameters/FlowID'
+      - $ref: '#/components/parameters/Origin'
+      - $ref: '#/components/parameters/CSRF'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Password'
+      responses:
+        '200':
+          description: Successful transition; response is no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordResult'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /v1/flows/{id}/mfa:
+    post:
+      summary: Verify TOTP or a one-time recovery code
+      security:
+      - BrowserCookie: []
+      parameters:
+      - $ref: '#/components/parameters/FlowID'
+      - $ref: '#/components/parameters/Origin'
+      - $ref: '#/components/parameters/CSRF'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MFA'
+      responses:
+        '200':
+          description: Successful transition; response is no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MFAResult'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /v1/flows/{id}/complete:
+    post:
+      summary: Accept Hydra login only after MFA and establish or reuse central session
+      security:
+      - BrowserCookie: []
+      parameters:
+      - $ref: '#/components/parameters/FlowID'
+      - $ref: '#/components/parameters/Origin'
+      - $ref: '#/components/parameters/CSRF'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Empty'
+      responses:
+        '200':
+          description: Successful transition; response is no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Redirect'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /v1/flows/{id}/consent:
+    post:
+      summary: Create one client/user/session/tenant grant after current eligibility
+        checks
+      security:
+      - BrowserCookie: []
+        CentralCookie: []
+      parameters:
+      - $ref: '#/components/parameters/FlowID'
+      - $ref: '#/components/parameters/Origin'
+      - $ref: '#/components/parameters/CSRF'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Consent'
+      responses:
+        '200':
+          description: Successful transition; response is no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Redirect'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /v1/flows/{id}/reject:
+    post:
+      summary: Cancel an unfinished interaction through Hydra access_denied
+      security:
+      - BrowserCookie: []
+      parameters:
+      - $ref: '#/components/parameters/FlowID'
+      - $ref: '#/components/parameters/Origin'
+      - $ref: '#/components/parameters/CSRF'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Empty'
+      responses:
+        '200':
+          description: Successful transition; response is no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Redirect'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /sso/logout:
+    get:
+      summary: Render explicit all-device logout confirmation with new CSRF proof
+      security:
+      - CentralCookie: []
+      responses:
+        '200':
+          description: Trusted confirmation HTML
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /v1/sso/logout:
+    post:
+      summary: Revoke all central sessions and increment User security version atomically
+      security:
+      - CentralCookie: []
+      parameters:
+      - $ref: '#/components/parameters/Origin'
+      - $ref: '#/components/parameters/CSRF'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Empty'
+      responses:
+        '204':
+          description: Business authorization revoked; protocol cleanup queued and
+            cookie deleted
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /sso/health/ready:
+    get:
+      summary: Check business migration and Hydra Admin readiness
+      responses:
+        '204':
+          description: Ready
+        '503':
+          $ref: '#/components/responses/Error'
+components:
+  securitySchemes:
+    BrowserCookie:
+      type: apiKey
+      in: cookie
+      name: local_sso_browser
+      description: Host-only HttpOnly SameSite=Lax; HTTP local mode only. Never return
+        cookie values in JSON.
+    CentralCookie:
+      type: apiKey
+      in: cookie
+      name: local_sso_session
+  parameters:
+    FlowID:
+      in: path
+      name: id
+      required: true
+      schema: &id001
+        type: string
+        pattern: ^[a-f0-9]{32}$
+    Origin:
+      in: header
+      name: Origin
+      required: true
+      schema:
+        type: string
+        const: http://auth.localhost:8080
+    CSRF:
+      in: header
+      name: X-CSRF-Token
+      required: true
+      schema:
+        type: string
+        pattern: ^[A-Za-z0-9_-]{43}$
+      description: Generated for this browser-bound interaction in trusted HTML; store
+        only in page memory.
+  responses:
+    Error:
+      description: Controlled code and request_id; no submitted credentials
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+            - code
+            - request_id
+            properties:
+              code:
+                type: string
+              request_id:
+                type: string
+  schemas:
+    Password:
+      type: object
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          maxLength: 128
+          writeOnly: true
+      required:
+      - email
+      - password
+    MFA:
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          pattern: ^([0-9]{6})?$
+          writeOnly: true
+        recovery_code:
+          type: string
+          maxLength: 40
+          writeOnly: true
+      required: []
+    Consent:
+      type: object
+      additionalProperties: false
+      properties:
+        tenant_id: *id001
+      required:
+      - tenant_id
+    Empty:
+      type: object
+      additionalProperties: false
+      properties: {}
+      required: []
+    Redirect:
+      type: object
+      additionalProperties: false
+      properties:
+        redirect_to:
+          type: string
+          description: Adapter-validated Hydra continuation, never an arbitrary next
+            URL.
+      required:
+      - redirect_to
+    MFAResult:
+      type: object
+      additionalProperties: false
+      properties:
+        state:
+          const: passed
+        recovery_codes:
+          type: array
+          items:
+            type: string
+          description: Ten codes returned only at successful initial enrollment; otherwise
+            empty. Cannot be fetched again.
+      required:
+      - state
+      - recovery_codes
+    PasswordResult:
+      type: object
+      additionalProperties: false
+      properties:
+        state:
+          enum:
+          - enroll
+          - mfa
+        secret:
+          type: string
+          description: TOTP seed returned once for initial enrollment; absent for
+            an existing factor.
+      required:
+      - state
+    Flow:
+      type: object
+      additionalProperties: false
+      properties:
+        state:
+          enum:
+          - password
+          - enroll
+          - mfa
+          - passed
+          - consent
+        application: &id002
+          type: string
+        scopes:
+          type: array
+          items: *id002
+        tenants:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              id: *id001
+              name: *id002
+            required:
+            - id
+            - name
+      required:
+      - state
+      - application
+      - scopes
