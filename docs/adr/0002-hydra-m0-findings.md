@@ -1,6 +1,6 @@
 # ADR 0002：Hydra 2.3.0 M0 协议适配结果
 
-状态：本地候选验证；不等于生产版本冻结。
+状态：本地候选验证已扩展，参见 ADR 0003；不等于生产版本冻结。
 
 ## 已核对的制品
 
@@ -21,10 +21,10 @@
 
 ## 不可误用的实验边界
 
-M0 policies 是合成权威上下文，每 client 固定一个 tenant/context；没有真实 User/Membership/Session 数据模型，不支持生产多标签/多交易和跨租户客户端。观察表只证明 Hook 执行及结果，不等于完整生产审计账本。客户端与策略由本地测试管理，不能对普通调用者开放。
+初始 M0 使用每 client 固定上下文。后续已增加每笔授权交易独立记录、合成租户资格与授权链绑定，详见 ADR 0003；这些仍不是生产 User/Membership/Session 模型。观察表只证明 Hook 执行及结果，不等于完整生产审计账本。客户端与策略由本地测试管理，不能对普通调用者开放。
 
 Hydra Admin 在本地为测试绑定 loopback，HTTP/--dev 仅此实验允许。不能部署此 Compose 到生产，不能把 harness 的合成 subject/consent 接受逻辑接到登录 UI。
 
 ## 继续推进业务前的门槛
 
-Cloud SQL HA/重连验证、真实每交易/refresh chain 绑定、logout/remembered consent/prompt=none/max_age、签名 key 轮换、镜像漏洞/维护确认仍须完成。当前交付是可运行 M0 实验工程，不声明整个 M0 架构冻结或 M1–M5 完成。不得跳过门槛开始扩写生产业务。
+每交易/refresh chain 绑定、logout/remembered consent/prompt=none/max_age、签名 key 轮换的本地真实引擎验证已补充。用户随后明确 Cloud SQL 由其准备且本轮无需验证，因此云端 HA/DR 不作为本轮本地代码推进阻塞项，也不记为通过。镜像漏洞/维护确认及生产部署前的云端验收仍需另行完成。M1 已开始内部数据与仓储切片，未开放生产功能。

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+export PATH="$PWD/.tools/go/bin:$PATH"
+export GOPATH="$PWD/.local/go" GOCACHE="$PWD/.local/go-cache" GOMODCACHE="$PWD/.local/go-mod"
+compose() { docker compose --env-file .local/m0.env -f deploy/local/compose.yml "$@"; }
+case "${1:-}" in
+ prepare)
+  scripts/m0 prepare
+  python3 scripts/prepare_m1.py
+  CGO_ENABLED=0 go test -c -o .local/business-tests ./internal/storage/mysql
+  chmod 555 .local/business-tests
+  ;;
+ up)
+  scripts/m0 up
+  python3 scripts/prepare_m1.py
+  compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot' < .local/business-init.sql
+  python3 scripts/migrate_business.py
+  ;;
+ test) compose run --rm --no-deps business-tests ;;
+ *) echo 'Usage: scripts/m1 {prepare|up|test}' >&2; exit 2 ;;
+esac

@@ -96,11 +96,14 @@ class ProtocolTests(unittest.TestCase):
             'grant_types': ['client_credentials'] if kind == 'service' else ['authorization_code', 'refresh_token'],
             'response_types': [] if kind == 'service' else ['code'],
             'redirect_uris': [] if kind == 'service' else [CALLBACK],
+            'post_logout_redirect_uris': [] if kind=='service' else [CALLBACK+'/logout'],
             'scope': scopes, 'audience': [AUD],
             'token_endpoint_auth_method': 'client_secret_basic',
         })
         if policy:
             sql(f"INSERT INTO policies VALUES('{client}','{tenant}','principal-a','{kind}','user-a','ctx-{client}','{AUD}','{scopes}',TRUE,1,{int(time.time())+3600});")
+        if policy and kind == 'user':
+            sql(f"INSERT INTO tenant_qualifications VALUES('{client}','{tenant}','user-a',TRUE,1);")
         return client, secret
 
     def token(self, client, secret, **fields):
@@ -113,7 +116,7 @@ class ProtocolTests(unittest.TestCase):
     def m2m(self, client, secret, **kw):
         return self.token(client, secret, grant_type='client_credentials', scope='read', audience=AUD, **kw)
 
-    def code(self, client, *, tenant_hint=None, pkce=True, context=None, bad_redirect=False):
+    def code(self, client, *, tenant_hint=None, pkce=True, context=None, bad_redirect=False, browser=None, remember=False, prompt=None, max_age=None, selected_tenant='tenant-a', interactive=True):
         verifier = secrets.token_urlsafe(40)
         state, nonce = secrets.token_urlsafe(20), secrets.token_urlsafe(20)
         query = dict(client_id=client, response_type='code', redirect_uri=CALLBACK + ('/evil' if bad_redirect else ''),
@@ -122,13 +125,17 @@ class ProtocolTests(unittest.TestCase):
             query.update(code_challenge=base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b'=').decode(), code_challenge_method='S256')
         if tenant_hint:
             query['tenant_id'] = tenant_hint
-        browser = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()), NoRedirect())
+        if prompt is not None: query['prompt']=prompt
+        if max_age is not None: query['max_age']=str(max_age)
+        self.last_auth={'login_skips':[],'consent_skips':[], 'error':None}
+        browser = browser or urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()), NoRedirect())
         url = PUBLIC + '/oauth2/auth?' + urllib.parse.urlencode(query)
         for _ in range(15):
             parsed = urllib.parse.urlparse(url)
             args = urllib.parse.parse_qs(parsed.query)
-            if url.startswith(CALLBACK):
+            if (parsed.scheme,parsed.netloc,parsed.path)==('http','127.0.0.1:3000','/callback'):
                 if 'code' not in args:
+                    self.last_auth['error']=args.get('error',[None])[0]
                     return None, verifier, nonce
                 self.assertEqual(args.get('state'), [state])
                 return args['code'][0], verifier, nonce
@@ -137,16 +144,33 @@ class ProtocolTests(unittest.TestCase):
                     challenge = args['login_challenge'][0]
                     info = api('/admin/oauth2/auth/requests/login?login_challenge=' + challenge)
                     self.assertEqual(info['client']['client_id'], client)
+                    self.last_auth['login_skips'].append(info['skip'])
+                    if not interactive and not info['skip']:
+                        url=api('/admin/oauth2/auth/requests/login/reject?login_challenge='+challenge,{'error':'login_required'},'PUT')['redirect_to']
+                        continue
                     url = api('/admin/oauth2/auth/requests/login/accept?login_challenge=' + challenge,
-                              {'subject': 'user-a', 'remember': False}, 'PUT')['redirect_to']
+                              {'subject': info['subject'] if info['skip'] else 'user-a', 'remember': remember, 'remember_for':3600}, 'PUT')['redirect_to']
                 elif 'consent_challenge' in args:
                     challenge = args['consent_challenge'][0]
                     info = api('/admin/oauth2/auth/requests/consent?consent_challenge=' + challenge)
                     self.assertEqual(info['subject'], 'user-a')
+                    self.last_auth['consent_skips'].append(info['skip'])
+                    if not interactive and not info['skip']:
+                        url=api('/admin/oauth2/auth/requests/consent/reject?consent_challenge='+challenge,{'error':'consent_required'},'PUT')['redirect_to']
+                        continue
+                    # Persist a fresh immutable authorization context for this transaction.
+                    # Only this trusted lab adapter creates bindings; hints never choose the tenant.
+                    context_id=secrets.token_hex(32)
+                    qualification=sql(f"SELECT security_version FROM tenant_qualifications WHERE client_id='{client}' AND tenant_id='{selected_tenant}' AND subject_id='user-a' AND active=TRUE;")
+                    if not qualification.isdigit(): raise AssertionError('No active synthetic tenant qualification')
+                    version=sql(f"SELECT security_version FROM policies WHERE client_id='{client}';")
+                    binding=hashlib.sha256(info['challenge'].encode()).hexdigest()
+                    granted_scopes=' '.join(info['requested_scope'])
+                    sql(f"INSERT INTO authorization_contexts VALUES('{context_id}','{client}','{selected_tenant}','user-a','principal-a',UNHEX('{binding}'),NULL,'{info['login_session_id']}','{AUD}','{granted_scopes}',TRUE,{qualification},{version},{int(time.time())+3600});")
+                    self.last_context=context_id
                     url = api('/admin/oauth2/auth/requests/consent/accept?consent_challenge=' + challenge,
                         {'grant_scope': info['requested_scope'], 'grant_access_token_audience': info['requested_access_token_audience'],
-                         'remember': False, 'session': {'access_token': {'m0_context_id': context or 'ctx-' + client,
-                             'm0_grant_audience': AUD, 'm0_grant_scopes': info['requested_scope']}}}, 'PUT')['redirect_to']
+                         'remember': remember, 'remember_for':3600, 'session': {'access_token': {'m0_context_id': context or context_id}}}, 'PUT')['redirect_to']
                 else:
                     return None, verifier, nonce
             else:
@@ -387,3 +411,189 @@ class ProtocolTests(unittest.TestCase):
         finally:
             if connection and connection.isdigit(): sql('KILL '+connection+';')
             blocker.wait(timeout=5)
+
+    def test_17_independent_transactions_tenants_and_refresh_chains(self):
+        client,secret=self.client('user')
+        sql(f"INSERT INTO tenant_qualifications VALUES('{client}','tenant-b','user-a',TRUE,1);")
+        code_a,ver_a,_=self.code(client)
+        context_a=self.last_context
+        code_b,ver_b,_=self.code(client,selected_tenant='tenant-b')
+        context_b=self.last_context
+        self.assertNotEqual(context_a,context_b)
+        a=self.redeem(client,secret,code_a,ver_a)
+        b=self.redeem(client,secret,code_b,ver_b)
+        self.assertEqual(a[0],200,a[1].get('error'))
+        self.assertEqual(b[0],200,b[1].get('error'))
+        self.claims(a[1]['access_token'],'tenant-a')
+        self.claims(b[1]['access_token'],'tenant-b')
+        sql(f"UPDATE authorization_contexts SET active=FALSE WHERE id='{context_a}';")
+        self.denied(self.token(client,secret,grant_type='refresh_token',refresh_token=a[1]['refresh_token']))
+        refreshed=self.token(client,secret,grant_type='refresh_token',refresh_token=b[1]['refresh_token'],tenant_id='tenant-a')
+        self.assertEqual(refreshed[0],200)
+        self.claims(refreshed[1]['access_token'],'tenant-b')
+
+    def test_18_bound_context_cannot_be_reused_for_another_code(self):
+        client,secret=self.client('user')
+        code,verifier,_=self.code(client)
+        first=self.last_context
+        self.assertEqual(self.redeem(client,secret,code,verifier)[0],200)
+        # Even the privileged lab adapter cannot bind another engine chain to this context.
+        code,verifier,_=self.code(client,context=first)
+        self.denied(self.redeem(client,secret,code,verifier))
+
+    def test_19_qualification_version_and_absolute_expiry(self):
+        for change in ['qualification_version','context_expiry','client_version']:
+            with self.subTest(change=change):
+                client,secret=self.client('user')
+                code,verifier,_=self.code(client)
+                status,body=self.redeem(client,secret,code,verifier)
+                self.assertEqual(status,200)
+                if change=='qualification_version':
+                    sql(f"UPDATE tenant_qualifications SET security_version=security_version+1 WHERE client_id='{client}';")
+                elif change=='context_expiry':
+                    sql(f"UPDATE authorization_contexts SET absolute_expires_at=1 WHERE id='{self.last_context}';")
+                else:
+                    sql(f"UPDATE policies SET security_version=security_version+1 WHERE client_id='{client}';")
+                self.denied(self.token(client,secret,grant_type='refresh_token',refresh_token=body['refresh_token']))
+
+    def test_20_stored_context_cannot_exceed_client_boundary(self):
+        for column,value in [('audience','https://evil.invalid'),('scopes','read write')]:
+            with self.subTest(column=column):
+                client,secret=self.client('user')
+                code,verifier,_=self.code(client)
+                sql(f"UPDATE authorization_contexts SET {column}='{value}' WHERE id='{self.last_context}';")
+                self.denied(self.redeem(client,secret,code,verifier))
+
+    def browser(self):
+        return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()),NoRedirect())
+
+    def test_21_remembered_login_consent_and_second_application(self):
+        browser=self.browser()
+        client,secret=self.client('user')
+        code,verifier,_=self.code(client,browser=browser,remember=True)
+        self.assertEqual(self.last_auth['login_skips'],[False])
+        self.assertEqual(self.last_auth['consent_skips'],[False])
+        self.assertEqual(self.redeem(client,secret,code,verifier)[0],200)
+        code,verifier,_=self.code(client,browser=browser,remember=True,prompt='none',interactive=False)
+        self.assertIsNotNone(code)
+        self.assertEqual(self.last_auth['login_skips'],[True])
+        self.assertEqual(self.last_auth['consent_skips'],[True])
+        self.assertEqual(self.redeem(client,secret,code,verifier)[0],200)
+        other,osecret=self.client('user')
+        code,verifier,_=self.code(other,browser=browser,remember=True)
+        self.assertEqual(self.last_auth['login_skips'],[True])
+        self.assertEqual(self.last_auth['consent_skips'],[False])
+        self.assertEqual(self.redeem(other,osecret,code,verifier)[0],200)
+
+    def test_22_prompt_none_and_max_age(self):
+        browser=self.browser()
+        client,secret=self.client('user')
+        code,_,_=self.code(client,browser=browser,prompt='none',interactive=False)
+        self.assertIsNone(code)
+        self.assertEqual(self.last_auth['error'],'login_required')
+        code,verifier,_=self.code(client,browser=browser,remember=True)
+        self.assertEqual(self.redeem(client,secret,code,verifier)[0],200)
+        code,_,_=self.code(client,browser=browser,prompt='none',max_age=0,interactive=False)
+        self.assertIsNone(code)
+        self.assertEqual(self.last_auth['error'],'login_required')
+
+    def logout(self,browser,token,client):
+        state=secrets.token_urlsafe(20)
+        url=PUBLIC+'/oauth2/sessions/logout?'+urllib.parse.urlencode({'id_token_hint':token,'post_logout_redirect_uri':CALLBACK+'/logout','state':state})
+        for _ in range(10):
+            p=urllib.parse.urlparse(url);args=urllib.parse.parse_qs(p.query)
+            if (p.netloc,p.path)==('127.0.0.1:3000','/callback/logout'):
+                self.assertEqual(args.get('state'),[state]);return
+            if (p.netloc,p.path)==('127.0.0.1:3000','/logout'):
+                challenge=args['logout_challenge'][0]
+                info=api('/admin/oauth2/auth/requests/logout?logout_challenge='+challenge)
+                self.assertEqual(info['subject'],'user-a')
+                self.assertTrue(info.get('sid'),'Logout has no trusted session binding')
+                # Platform-side logout revokes all authorization contexts of this
+                # central session before accepting the protocol logout. Engine
+                # logout alone is not claimed to be refresh-chain revocation.
+                sql(f"UPDATE authorization_contexts SET active=FALSE WHERE login_session_id='{info['sid']}' AND subject_id='user-a';")
+                url=api('/admin/oauth2/auth/requests/logout/accept?logout_challenge='+challenge,{},'PUT')['redirect_to']
+            else:
+                status,headers,_=request(url,opener=browser)
+                self.assertIn(status,(302,303))
+                url=urllib.parse.urljoin(url,headers['Location'])
+        self.fail('Logout did not reach the registered callback')
+
+    def test_23_logout_adapter_revokes_context_and_remembered_login(self):
+        browser=self.browser()
+        client,secret=self.client('user')
+        code,verifier,_=self.code(client,browser=browser,remember=True)
+        status,body=self.redeem(client,secret,code,verifier)
+        self.assertEqual(status,200)
+        self.logout(browser,body['id_token'],client)
+        self.denied(self.token(client,secret,grant_type='refresh_token',refresh_token=body['refresh_token']))
+        # Already-issued JWTs remain cryptographically valid within their TTL.
+        self.claims(body['access_token'])
+        code,_,_=self.code(client,browser=browser,prompt='none',interactive=False)
+        self.assertIsNone(code)
+        self.assertEqual(self.last_auth['error'],'login_required')
+
+    def test_24_consent_revocation_rejects_refresh(self):
+        client,secret=self.client('user')
+        code,verifier,_=self.code(client,remember=True)
+        status,body=self.redeem(client,secret,code,verifier)
+        self.assertEqual(status,200)
+        api('/admin/oauth2/auth/sessions/consent?'+urllib.parse.urlencode({'subject':'user-a','client':client}),method='DELETE')
+        self.denied(self.token(client,secret,grant_type='refresh_token',refresh_token=body['refresh_token']))
+
+    def test_25_signing_key_rotation_keeps_previous_public_key(self):
+        client,secret=self.client()
+        status,body=self.m2m(client,secret)
+        self.assertEqual(status,200)
+        old=body['access_token']
+        header=lambda token:json.loads(base64.urlsafe_b64decode(token.split('.')[0]+'=='))
+        old_kid=header(old)['kid']
+        new_kid='m0-rotation-'+self.run_id
+        # Never print/store Admin's returned private key material.
+        api('/admin/keys/hydra.jwt.access-token',{'alg':'RS256','use':'sig','kid':new_kid})
+        status,new=self.m2m(client,secret)
+        self.assertEqual(status,200)
+        self.assertNotEqual(header(new['access_token'])['kid'],old_kid)
+        status,_,data=request(PUBLIC+'/.well-known/jwks.json')
+        self.assertEqual(status,200)
+        keys=json.loads(data)['keys']
+        self.assertTrue(any(k['kid']==old_kid for k in keys))
+        self.assertTrue(all(not any(field in k for field in ('d','p','q','dp','dq','qi')) for k in keys))
+        self.claims(old)
+        self.claims(new['access_token'])
+        # Keep both keys: pruning before the token trust window ends is unsafe.
+
+    def test_26_unbound_refresh_and_wrong_session_subject_rejected(self):
+        client,secret=self.client('user')
+        code,_,_=self.code(client)
+        self.assertIsNotNone(code)
+        context=self.last_context
+        sid=sql(f"SELECT login_session_id FROM authorization_contexts WHERE id='{context}';")
+        for grant,subject,session in [('refresh_token','user-a',sid),('authorization_code','user-b',sid),('authorization_code','user-a','wrong-session')]:
+            payload={'request':{'client_id':client,'grant_types':[grant]},'session':{'id_token':{'subject':subject,'id_token_claims':{'ext':{'sid':session}}},'extra':{'m0_context_id':context},'consent_challenge':'test-cannot-activate-context'}}
+            status,_,_=request('http://127.0.0.1:8081/token-hook','POST',payload,{'X-Hook-Key':ENV['HOOK_KEY']})
+            self.assertEqual(status,403)
+            self.assertEqual(sql(f"SELECT protocol_binding IS NULL FROM authorization_contexts WHERE id='{context}';"),'1')
+
+    def test_27_qualification_suspend_is_tenant_scoped(self):
+        client,secret=self.client('user')
+        sql(f"INSERT INTO tenant_qualifications VALUES('{client}','tenant-b','user-a',TRUE,1);")
+        first,verifier,_=self.code(client)
+        a=self.redeem(client,secret,first,verifier)
+        second,verifier,_=self.code(client,selected_tenant='tenant-b')
+        b=self.redeem(client,secret,second,verifier)
+        self.assertEqual(a[0],200)
+        self.assertEqual(b[0],200)
+        sql(f"UPDATE tenant_qualifications SET active=FALSE WHERE client_id='{client}' AND tenant_id='tenant-a';")
+        self.denied(self.token(client,secret,grant_type='refresh_token',refresh_token=a[1]['refresh_token']))
+        status,body=self.token(client,secret,grant_type='refresh_token',refresh_token=b[1]['refresh_token'])
+        self.assertEqual(status,200)
+        self.claims(body['access_token'],'tenant-b')
+
+    def test_28_refresh_scope_cannot_exceed_original_consent(self):
+        client,secret=self.client('user')
+        code,verifier,_=self.code(client)
+        status,body=self.redeem(client,secret,code,verifier)
+        self.assertEqual(status,200)
+        self.denied(self.token(client,secret,grant_type='refresh_token',refresh_token=body['refresh_token'],scope='read write'))

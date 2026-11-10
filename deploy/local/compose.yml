@@ -10,6 +10,19 @@ x-hydra: &hydra
     SECRETS_SYSTEM: ${HYDRA_SYSTEM_SECRET}
     OAUTH2_TOKEN_HOOK: '{"url":"http://hook:8081/token-hook","auth":{"type":"api_key","config":{"in":"header","name":"X-Hook-Key","value":"${HOOK_KEY}"}}}'
 services:
+  business-tests:
+    profiles: [testing]
+    image: ${COMPOSE_PROJECT_NAME:-sso-m0}-hook
+    entrypoint: [/business-tests]
+    command: [-test.v]
+    volumes:
+      - ../../.local/business-tests:/business-tests:ro
+    environment:
+      SSO_M1_TEST: 'true'
+      M1_DB_PASSWORD: ${M1_DB_PASSWORD:-}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
   mysql:
     image: mysql@sha256:a81d043930e51745522bd5c430961cf8286f0a23f0a9a2a6e0108f7ea71b0902
     environment:

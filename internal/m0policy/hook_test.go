@@ -32,22 +32,17 @@ func TestEvaluateBoundaries(t *testing.T) {
 		{"service cannot use user grant", func(p *Policy, _ *Request) { p.Kind = "service" }, false},
 		{"user cannot use m2m", func(_ *Policy, r *Request) { r.Request.GrantTypes = []string{"client_credentials"} }, false},
 		{"valid m2m", func(p *Policy, r *Request) { p.Kind = "service"; r.Request.GrantTypes = []string{"client_credentials"} }, true},
-		{"empty user grant without consent binding", func(_ *Policy, r *Request) { r.Request.GrantedScopes = nil; r.Request.GrantedAudience = nil }, false},
-		{"code consent binding", func(_ *Policy, r *Request) {
+		{"unresolved context denied", func(p *Policy, r *Request) {
+			p.ContextID = ""
 			r.Request.GrantedScopes = nil
 			r.Request.GrantedAudience = nil
-			r.Session.Extra = map[string]any{"m0_context_id": "ctx-a", "m0_grant_audience": "api-a", "m0_grant_scopes": []any{"read"}}
+		}, false},
+		{"resolved code context", func(_ *Policy, r *Request) { r.Request.GrantedScopes = nil; r.Request.GrantedAudience = nil }, true},
+		{"session metadata cannot override authority", func(_ *Policy, r *Request) {
+			r.Request.GrantedScopes = nil
+			r.Request.GrantedAudience = nil
+			r.Session.Extra = map[string]any{"m0_context_id": "ctx-a", "m0_grant_audience": "api-b", "m0_grant_scopes": []any{"write"}}
 		}, true},
-		{"consent audience escalation", func(_ *Policy, r *Request) {
-			r.Request.GrantedScopes = nil
-			r.Request.GrantedAudience = nil
-			r.Session.Extra = map[string]any{"m0_context_id": "ctx-a", "m0_grant_audience": "api-b", "m0_grant_scopes": []any{"read"}}
-		}, false},
-		{"consent scope escalation", func(_ *Policy, r *Request) {
-			r.Request.GrantedScopes = nil
-			r.Request.GrantedAudience = nil
-			r.Session.Extra = map[string]any{"m0_context_id": "ctx-a", "m0_grant_audience": "api-a", "m0_grant_scopes": []any{"write"}}
-		}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

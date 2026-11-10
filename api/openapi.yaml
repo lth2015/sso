@@ -41,7 +41,7 @@ paths:
                         subject: {type: string}
                     extra:
                       type: object
-                      description: Server-owned consent binding required for user grants; never browser input.
+                      description: Only the opaque m0_context_id is consumed. Grant boundaries are loaded from the authoritative database; never browser input.
       responses:
         '200':
           description: Qualified issuance with controlled claims, wrapped in ext by Hydra

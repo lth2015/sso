@@ -17,7 +17,7 @@
 
 ## 当前代码交付
 
-已提供 Go token-policy-hook、本地 MySQL + Hydra、固定镜像/工具链、真实协议测试；运行方式见 [M0 运行手册](docs/runbooks/m0.md)，具体适配发现与未通过的生产门槛见 [ADR 0002](docs/adr/0002-hydra-m0-findings.md)。当前是 M0 实验工程；完整登录、React 控制台及 M1–M5 尚未实现。
+已提供 Go token-policy-hook、本地 MySQL + Hydra、固定镜像/工具链、真实协议测试；运行方式见 [M0 运行手册](docs/runbooks/m0.md)，具体适配发现与未通过的生产门槛见 [ADR 0002](docs/adr/0002-hydra-m0-findings.md)。M0 本地协议验证已扩展，M1 已交付第一批内部数据/仓储能力；完整登录、React 控制台和后续生产功能尚未实现。
 
 ```sh
 scripts/install-go
@@ -25,3 +25,15 @@ scripts/m0 prepare
 scripts/m0 up
 scripts/m0 test
 ```
+
+## M1 数据与租户骨架
+
+新增事务性租户引导、组合外键隔离、组织创建/移动/预览、并发版本控制、最后 owner 保护、邀请一次性接受、组织成员关联、audit/outbox。见 [M1 手册](docs/runbooks/m1.md) 和 [ADR 0003](docs/adr/0003-transaction-bindings-and-m1.md)。当前仅内部仓储，没有公开业务 API，M0 与 M1 权威状态尚未连通。
+
+```sh
+scripts/m1 prepare
+scripts/m1 up
+scripts/m1 test
+```
+
+本地验收现有 28 项真实协议测试和 10 项业务数据库测试。后续开发与本地验收继续在此仓库进行；GCP 部署和云端运维由 SRE 专门负责。

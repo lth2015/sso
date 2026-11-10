@@ -3,26 +3,40 @@
 package m0policy
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/go-sql-driver/mysql"
 )
 
 type Request struct {
 	Session struct {
 		IDToken struct {
 			Subject string `json:"subject"`
+			Claims  struct {
+				Extra map[string]any `json:"ext"`
+			} `json:"id_token_claims"`
 		} `json:"id_token"`
-		Extra map[string]any `json:"extra"`
+		Extra            map[string]any `json:"extra"`
+		ConsentChallenge string         `json:"consent_challenge"`
 	} `json:"session"`
 	Request struct {
 		ClientID        string   `json:"client_id"`
+		RequestedScopes []string `json:"requested_scopes"`
+		Payload         struct {
+			Scopes    []string `json:"scope"`
+			Audiences []string `json:"audience"`
+		} `json:"payload"`
 		GrantedScopes   []string `json:"granted_scopes"`
 		GrantedAudience []string `json:"granted_audience"`
 		GrantTypes      []string `json:"grant_types"`
@@ -44,27 +58,28 @@ func Evaluate(p Policy, r Request, now time.Time) bool {
 	if len(r.Request.GrantTypes) != 1 {
 		return false
 	}
+	if len(r.Request.RequestedScopes) > 0 && !scopeSubset(r.Request.RequestedScopes, p.Scopes) {
+		return false
+	}
+	for _, value := range r.Request.Payload.Scopes {
+		if !scopeSubset(strings.Fields(value), p.Scopes) {
+			return false
+		}
+	}
+	for _, audience := range r.Request.Payload.Audiences {
+		if audience != p.Audience {
+			return false
+		}
+	}
 	scopes, audiences := r.Request.GrantedScopes, r.Request.GrantedAudience
-	// Hydra 2.3 invokes the code hook before populating GrantedScopes/Audience.
-	// In that phase require the immutable server-owned consent binding instead.
-	// An empty grant without this trusted context never authorizes issuance.
+	// Hydra invokes the code hook before populating grants. The caller must
+	// resolve a server-owned per-transaction DB context before Evaluate.
 	if p.Kind == "user" && len(scopes) == 0 && len(audiences) == 0 {
-		aud, ok := r.Session.Extra["m0_grant_audience"].(string)
-		if !ok {
+		if r.Session.Extra["m0_context_id"] != p.ContextID {
 			return false
 		}
-		list, ok := r.Session.Extra["m0_grant_scopes"].([]any)
-		if !ok {
-			return false
-		}
-		audiences = []string{aud}
-		for _, value := range list {
-			scope, ok := value.(string)
-			if !ok {
-				return false
-			}
-			scopes = append(scopes, scope)
-		}
+		scopes = strings.Fields(p.Scopes)
+		audiences = []string{p.Audience}
 	}
 	if len(audiences) != 1 || audiences[0] != p.Audience {
 		return false
@@ -139,9 +154,63 @@ func Handler(db *sql.DB, key string) http.Handler {
 			http.Error(w, "authority_unavailable", 503)
 			return
 		}
+		var pendingBinding []byte
+		var loginSessionID string
+		if p.Kind == "user" {
+			contextID, ok := req.Session.Extra["m0_context_id"].(string)
+			if !ok || contextID == "" || len(contextID) > 128 {
+				http.Error(w, "denied", 403)
+				return
+			}
+			registry := p
+			var binding []byte
+			var qualificationActive, contextActive bool
+			var qualificationVersion, boundQualificationVersion, boundClientVersion int64
+			err = tx.QueryRowContext(ctx, `SELECT c.tenant_id,c.principal_id,c.subject_id,c.id,c.audience,c.scopes,c.active,c.absolute_expires_at,c.protocol_binding,q.active,q.security_version,c.qualification_version,c.client_version,c.login_session_id
+              FROM authorization_contexts c JOIN tenant_qualifications q ON q.client_id=c.client_id AND q.tenant_id=c.tenant_id AND q.subject_id=c.subject_id
+              WHERE c.id=? AND c.client_id=? FOR UPDATE OF c FOR SHARE OF q`, contextID, req.Request.ClientID).Scan(&p.Tenant, &p.Principal, &p.Subject, &p.ContextID, &p.Audience, &p.Scopes, &contextActive, &p.Expires, &binding, &qualificationActive, &qualificationVersion, &boundQualificationVersion, &boundClientVersion, &loginSessionID)
+			if err == sql.ErrNoRows {
+				http.Error(w, "denied", 403)
+				return
+			}
+			if err != nil {
+				var databaseError *mysql.MySQLError
+				if errors.As(err, &databaseError) {
+					log.Printf("context_query_failed database_code=%d", databaseError.Number)
+				}
+				http.Error(w, "authority_unavailable", 503)
+				return
+			}
+			// Binding is independent from the extensible claims. A context ID
+			// copied from another authorization transaction cannot rebind its tenant.
+			actualBinding := sha256.Sum256([]byte(req.Session.ConsentChallenge))
+			p.Active = registry.Active && contextActive && qualificationActive && qualificationVersion == boundQualificationVersion && registry.Version == boundClientVersion && req.Session.IDToken.Claims.Extra["sid"] == loginSessionID && loginSessionID != "" && req.Session.ConsentChallenge != ""
+			if binding == nil {
+				p.Active = p.Active && len(req.Request.GrantTypes) == 1 && req.Request.GrantTypes[0] == "authorization_code"
+				pendingBinding = actualBinding[:]
+			} else {
+				p.Active = p.Active && bytes.Equal(actualBinding[:], binding)
+			}
+			if registry.Expires < p.Expires {
+				p.Expires = registry.Expires
+			}
+			p.Version = qualificationVersion
+			if p.Audience != registry.Audience || !scopeSubset(strings.Fields(p.Scopes), registry.Scopes) {
+				p.Active = false
+			}
+		}
 		granted := Evaluate(p, req, time.Now())
-		if !granted {
-			log.Printf("M0 denied: active=%t scopes=%d audiences=%d grants=%v subject_match=%t context_match=%t", p.Active, len(req.Request.GrantedScopes), len(req.Request.GrantedAudience), req.Request.GrantTypes, req.Session.IDToken.Subject == p.Subject, req.Session.Extra["m0_context_id"] == p.ContextID)
+		if granted && pendingBinding != nil {
+			result, err := tx.ExecContext(ctx, `UPDATE authorization_contexts SET protocol_binding=? WHERE id=? AND protocol_binding IS NULL`, pendingBinding, p.ContextID)
+			if err != nil {
+				http.Error(w, "authority_unavailable", 503)
+				return
+			}
+			count, err := result.RowsAffected()
+			if err != nil || count != 1 {
+				http.Error(w, "authority_unavailable", 503)
+				return
+			}
 		}
 		grant := "invalid"
 		if len(req.Request.GrantTypes) == 1 {
@@ -164,15 +233,35 @@ func Handler(db *sql.DB, key string) http.Handler {
 			return
 		}
 		claims := map[string]any{"tenant_id": p.Tenant, "principal_id": p.Principal, "principal_type": p.Kind, "security_version": p.Version, "m0_context_id": p.ContextID}
-		if p.Kind == "user" {
-			claims["m0_grant_audience"] = req.Session.Extra["m0_grant_audience"]
-			claims["m0_grant_scopes"] = req.Session.Extra["m0_grant_scopes"]
-		}
+
 		if p.Kind == "service" {
 			claims["credential_id"] = req.Request.ClientID
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"session": map[string]any{"access_token": claims, "id_token": map[string]any{}}})
+		_ = json.NewEncoder(w).Encode(map[string]any{"session": map[string]any{"access_token": claims, "id_token": idTokenClaims(p, loginSessionID)}})
 	})
 	return mux
+}
+
+func scopeSubset(scopes []string, upper string) bool {
+	allowed := map[string]bool{}
+	for _, s := range strings.Fields(upper) {
+		allowed[s] = true
+	}
+	if len(scopes) == 0 {
+		return false
+	}
+	for _, s := range scopes {
+		if !allowed[s] {
+			return false
+		}
+	}
+	return true
+}
+
+func idTokenClaims(p Policy, sid string) map[string]any {
+	if p.Kind == "user" {
+		return map[string]any{"sid": sid}
+	}
+	return map[string]any{}
 }
