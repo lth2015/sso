@@ -67,6 +67,12 @@ func (s TenantStore) CreateInvitation(ctx context.Context, email string) (ID, st
 // AcceptInvitation requires an existing verified login alias and active User.
 // The opaque token selects its tenant from the DB; callers cannot override it.
 func (s Store) AcceptInvitation(ctx context.Context, user ID, token string) (ID, error) {
+	return s.acceptInvitation(ctx, user, token, nil)
+}
+func (s Store) APIAcceptInvitation(ctx context.Context, a Authorization, token string) (ID, error) {
+	return s.acceptInvitation(ctx, a.User, token, &a)
+}
+func (s Store) acceptInvitation(ctx context.Context, user ID, token string, a *Authorization) (ID, error) {
 	if user.empty() || len(token) != 43 {
 		return ID{}, ErrInvalid
 	}
@@ -79,6 +85,11 @@ func (s Store) AcceptInvitation(ctx context.Context, user ID, token string) (ID,
 		return ID{}, err
 	}
 	defer tx.Rollback()
+	if a != nil {
+		if err = lockAuthorization(ctx, tx, *a); err != nil {
+			return ID{}, err
+		}
+	}
 	var tenant, creator ID
 	if err = tx.QueryRowContext(ctx, `SELECT tenant_id,creator_membership_id FROM invitations WHERE token_digest=?`, digest[:]).Scan(&tenant, &creator); err == sql.ErrNoRows {
 		return ID{}, ErrInvalid

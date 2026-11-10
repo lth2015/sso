@@ -102,9 +102,12 @@ func bootstrapTenantTx(ctx context.Context, tx *sql.Tx, user ID, slug, name stri
 type TenantStore struct {
 	store         Store
 	tenant, actor ID
+	authority     *Authorization
 }
 
-func (s Store) ForTenant(tenant, actor ID) TenantStore { return TenantStore{s, tenant, actor} }
+func (s Store) ForTenant(tenant, actor ID) TenantStore {
+	return TenantStore{store: s, tenant: tenant, actor: actor}
+}
 
 // lockOwner serializes safety-critical changes per tenant, then checks active
 // User, Membership, Tenant and owner binding from the primary inside the tx.
@@ -123,6 +126,14 @@ func (s TenantStore) lockOwner(ctx context.Context, tx *sql.Tx) (int64, int64, e
 	}
 	if status != "active" {
 		return 0, 0, ErrDenied
+	}
+	if s.authority != nil {
+		if s.authority.Tenant != s.tenant || s.authority.Member != s.actor {
+			return 0, 0, ErrDenied
+		}
+		if err = lockAuthorization(ctx, tx, *s.authority); err != nil {
+			return 0, 0, err
+		}
 	}
 	var count int
 	err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM memberships m JOIN users u ON u.id=m.user_id JOIN role_bindings b ON b.tenant_id=m.tenant_id AND b.membership_id=m.id JOIN roles r ON r.tenant_id=b.tenant_id AND r.id=b.role_id WHERE m.tenant_id=? AND m.id=? AND m.status='active' AND u.status='active' AND r.code='owner'`, s.tenant, s.actor).Scan(&count)

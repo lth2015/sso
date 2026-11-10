@@ -1,0 +1,4 @@
+FROM scratch
+COPY --chmod=0555 .local/platform-api /platform-api
+USER 65532:65532
+ENTRYPOINT ["/platform-api"]

@@ -1,0 +1,2289 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "SSO Public Platform API",
+    "version": "0.4.0",
+    "description": "External server/native-client contract. Local reference server only; production requires TLS and configured public origins. OAuth code+S256 PKCE, platform audience https://api.sso.local. No cookie authentication or wildcard CORS; browser integrations use a BFF. All writes require MFA authenticated within 300 seconds; refresh does not update auth_time. Active owners manage tenant resources; this slice does not implement arbitrary scoped RBAC. Authorization is checked against the business primary inside each operation transaction. Tenant-version mutations invalidate prior tenant grants, requiring new authorization. JSON objects reject duplicates, unknown fields, nested objects/arrays, invalid UTF-8 and extra documents. Request body limit 4096 bytes. UUIDs are lowercase 32-hex strings. List limit 1–100, default 50; after is previous next_cursor. No pagination snapshot guarantee. Error format follows RFC 9457. All responses no-store. Invitation proofs never appear in lists/audit."
+  },
+  "servers": [
+    {
+      "url": "http://api.localhost:8083",
+      "description": "Local acceptance only; SRE owns production deployment"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Identity"
+    },
+    {
+      "name": "Tenant management"
+    }
+  ],
+  "paths": {
+    "/v1/me": {
+      "get": {
+        "operationId": "getMe",
+        "summary": "Get the verified current principal",
+        "description": "Requires current User, MFA session and tenant-bound grant.",
+        "tags": [
+          "Identity"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:read"
+            ]
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Get the verified current principal",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/v1/tenants": {
+      "get": {
+        "operationId": "listMyTenants",
+        "summary": "List active spaces of the current user",
+        "description": "Requires current User, MFA session and tenant-bound grant.",
+        "tags": [
+          "Identity"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/After"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List active spaces of the current user",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createTenant",
+        "summary": "Create a space and initial owner atomically",
+        "description": "Recent MFA required. Maximum 20 active owned spaces. The first-party platform is enabled in the new space; unrelated applications are not enabled. Duplicate slug is 409; no automatic retry or idempotency-key guarantee.",
+        "tags": [
+          "Identity"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:write"
+            ]
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Create a space and initial owner atomically",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              },
+              "Location": {
+                "description": "Created tenant path; obtain a new tenant-bound authorization before using it.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCreated"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-recent-mfa-seconds": 300,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tenants/{tenant}": {
+      "get": {
+        "operationId": "getTenant",
+        "summary": "Get the token-bound space and versions",
+        "description": "Requires current User, MFA session and tenant-bound grant.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Get the token-bound space and versions",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tenant"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/v1/tenants/{tenant}/members": {
+      "get": {
+        "operationId": "listMembers",
+        "summary": "List space memberships",
+        "description": "Active tenant owner required.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/After"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List space memberships",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "active_owner"
+      }
+    },
+    "/v1/tenants/{tenant}/members/{member}/suspend": {
+      "post": {
+        "operationId": "suspendMember",
+        "summary": "Suspend a membership",
+        "description": "Owner and recent MFA required. Last active owner cannot be suspended. Changes increment membership and tenant versions, invalidating existing tenant grants; restoration never revives old grants.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/memberID"
+          },
+          {
+            "$ref": "#/components/parameters/AuthzMatch"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Suspend a membership",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "active_owner",
+        "x-recent-mfa-seconds": 300,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Empty"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tenants/{tenant}/members/{member}/restore": {
+      "post": {
+        "operationId": "restoreMember",
+        "summary": "Restore a membership",
+        "description": "Owner and recent MFA required. Last active owner cannot be suspended. Changes increment membership and tenant versions, invalidating existing tenant grants; restoration never revives old grants.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/memberID"
+          },
+          {
+            "$ref": "#/components/parameters/AuthzMatch"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Restore a membership",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "active_owner",
+        "x-recent-mfa-seconds": 300,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Empty"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tenants/{tenant}/organizations": {
+      "get": {
+        "operationId": "listOrganizations",
+        "summary": "List space organization nodes",
+        "description": "Active tenant owner required.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/After"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List space organization nodes",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "active_owner"
+      },
+      "post": {
+        "operationId": "createOrganization",
+        "summary": "Create an organization under an existing parent",
+        "description": "Active tenant owner required.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/OrgMatch"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Create an organization under an existing parent",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationCreated"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "active_owner",
+        "x-recent-mfa-seconds": 300,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrganizationInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tenants/{tenant}/organizations/{org}/move": {
+      "post": {
+        "operationId": "moveOrganization",
+        "summary": "Preview or execute an organization move",
+        "description": "Owner and recent MFA required, including preview. Root/cycle/depth checks apply. Preview changes no state. Executing changes organization and tenant authorization versions; obtain a new authorization afterwards.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/orgID"
+          },
+          {
+            "$ref": "#/components/parameters/OrgMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Preview or execute an organization move",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoveResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "active_owner",
+        "x-recent-mfa-seconds": 300,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tenants/{tenant}/organizations/{org}/members/{member}": {
+      "put": {
+        "operationId": "assignOrganization",
+        "summary": "Associate a membership with an organization",
+        "description": "Association does not grant owner or other roles. Changes tenant authorization version; obtain a new authorization afterwards.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/memberID"
+          },
+          {
+            "$ref": "#/components/parameters/orgID"
+          },
+          {
+            "$ref": "#/components/parameters/AuthzMatch"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Associate a membership with an organization",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "active_owner",
+        "x-recent-mfa-seconds": 300,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Empty"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tenants/{tenant}/invitations": {
+      "get": {
+        "operationId": "listInvitations",
+        "summary": "List invitation metadata without bearer secrets",
+        "description": "Active tenant owner required.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/After"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List invitation metadata without bearer secrets",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "active_owner"
+      },
+      "post": {
+        "operationId": "createInvitation",
+        "summary": "Create an email-bound one-time invitation",
+        "description": "Owner and recent MFA required. Token is returned once, stored only as a digest and never in audit/outbox. The caller delivers it securely; no external email is sent. Invitations grant membership only.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Create an email-bound one-time invitation",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationCreated"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "active_owner",
+        "x-recent-mfa-seconds": 300,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvitationInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tenants/{tenant}/invitations/{invitation}/revoke": {
+      "post": {
+        "operationId": "revokeInvitation",
+        "summary": "Close an invitation so its proof cannot be accepted",
+        "description": "Owner and recent MFA required. Idempotently closes the proof; already closed proofs stay closed. Audit records the first revocation; closed includes accepted or revoked.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/invitationID"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Close an invitation so its proof cannot be accepted",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "active_owner",
+        "x-recent-mfa-seconds": 300,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Empty"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/invitations/accept": {
+      "post": {
+        "operationId": "acceptInvitation",
+        "summary": "Consume an invitation for the verified user",
+        "description": "Recent MFA required. The proof selects the destination tenant. Verified email must match; membership only, no implicit role. Consumed/expired/revoked proofs are invalid. Acceptance increments destination tenant authorization version.",
+        "tags": [
+          "Identity"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:write"
+            ]
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Consume an invitation for the verified user",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipCreated"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-recent-mfa-seconds": 300,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvitationProof"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tenants/{tenant}/audit-events": {
+      "get": {
+        "operationId": "listAuditEvents",
+        "summary": "List controlled space audit metadata",
+        "description": "Active tenant owner required.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/After"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List controlled space audit metadata",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditEventPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "active_owner"
+      }
+    },
+    "/v1/sessions": {
+      "get": {
+        "operationId": "listMySessions",
+        "summary": "List central sessions of the current user",
+        "description": "Requires current User, MFA session and tenant-bound grant.",
+        "tags": [
+          "Identity"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/After"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List central sessions of the current user",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/v1/sessions/{session}/revoke": {
+      "post": {
+        "operationId": "revokeMySession",
+        "summary": "Revoke one central session owned by the current user",
+        "description": "Recent MFA required. Revokes business authority before queued Hydra cleanup. Revoking the current session invalidates this access token. Session cookie digests, CSRF values, factor secrets and tokens are never returned.",
+        "tags": [
+          "Identity"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/sessionID"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Revoke one central session owned by the current user",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-recent-mfa-seconds": 300,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Empty"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/openapi.yaml": {
+      "get": {
+        "operationId": "getOpenapiyaml",
+        "summary": "Read public API documentation",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Public reference; no credentials",
+            "content": {
+              "application/yaml": {}
+            }
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "operationId": "getOpenapijson",
+        "summary": "Read public API documentation",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Public reference; no credentials",
+            "content": {
+              "application/json": {}
+            }
+          }
+        }
+      }
+    },
+    "/docs": {
+      "get": {
+        "operationId": "getDocs",
+        "summary": "Read public API documentation",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Public reference; no credentials",
+            "content": {
+              "text/html": {}
+            }
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "getReadiness",
+        "summary": "Check the business schema",
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "Business schema ready"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "OAuth2": {
+        "type": "oauth2",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "http://auth.localhost:4464/oauth2/auth",
+            "tokenUrl": "http://auth.localhost:4464/oauth2/token",
+            "refreshUrl": "http://auth.localhost:4464/oauth2/token",
+            "scopes": {
+              "platform:read": "Read identity and authorized space metadata",
+              "platform:write": "Modify owned spaces and own sessions; recent MFA required"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Problem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code",
+          "request_id"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "format": "uri"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 400,
+            "maximum": 599
+          },
+          "code": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string"
+          }
+        }
+      },
+      "Me": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "user_id",
+          "tenant_id",
+          "membership_id",
+          "session_id"
+        ],
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "tenant_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "membership_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "session_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      },
+      "Tenant": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "slug",
+          "membership_id",
+          "owner",
+          "authz_version",
+          "org_version",
+          "root_id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "slug": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
+          },
+          "membership_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "owner": {
+            "type": "boolean"
+          },
+          "authz_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "org_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "root_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      },
+      "TenantInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "slug",
+          "name"
+        ],
+        "properties": {
+          "slug": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Nonblank, trimmed, at most 128 UTF-8 bytes."
+          }
+        }
+      },
+      "TenantCreated": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "membership_id",
+          "root_id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "membership_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "root_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      },
+      "Member": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "user_id",
+          "status",
+          "owner"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "user_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "invited",
+              "suspended",
+              "left"
+            ]
+          },
+          "owner": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Organization": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "parent_id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "parent_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "OrganizationInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "parent_id",
+          "name"
+        ],
+        "properties": {
+          "parent_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Nonblank, trimmed, at most 128 UTF-8 bytes."
+          }
+        }
+      },
+      "OrganizationCreated": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "org_version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "org_version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "MoveInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "parent_id",
+          "dry_run"
+        ],
+        "properties": {
+          "parent_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "description": "Required; false executes the move and invalidates old tenant grants."
+          }
+        }
+      },
+      "MoveResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "subtree_nodes",
+          "resulting_depth",
+          "org_version",
+          "dry_run"
+        ],
+        "properties": {
+          "subtree_nodes": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "resulting_depth": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 16
+          },
+          "org_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "dry_run": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Invitation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "email",
+          "expires_at",
+          "state"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "expires_at": {
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "expired",
+              "closed"
+            ],
+            "description": "Closed covers accepted or revoked; audit events distinguish the transition."
+          }
+        }
+      },
+      "InvitationInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254
+          }
+        }
+      },
+      "InvitationCreated": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "token",
+          "expires_in"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "token": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "readOnly": true,
+            "description": "One-time bearer invitation returned only here; keep out of logs. No automatic email transport."
+          },
+          "expires_in": {
+            "type": "integer",
+            "const": 86400
+          }
+        }
+      },
+      "InvitationProof": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "token"
+        ],
+        "properties": {
+          "token": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "writeOnly": true
+          }
+        }
+      },
+      "MembershipCreated": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "membership_id"
+        ],
+        "properties": {
+          "membership_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      },
+      "AuditEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "actor_membership_id",
+          "action",
+          "target_id",
+          "occurred_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "actor_membership_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "action": {
+            "type": "string"
+          },
+          "target_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Session": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "current",
+          "active",
+          "authenticated_at",
+          "second_factor",
+          "idle_expires_at",
+          "absolute_expires_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "current": {
+            "type": "boolean"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "authenticated_at": {
+            "type": "integer"
+          },
+          "second_factor": {
+            "enum": [
+              "otp",
+              "recovery"
+            ]
+          },
+          "idle_expires_at": {
+            "type": "integer"
+          },
+          "absolute_expires_at": {
+            "type": "integer"
+          }
+        }
+      },
+      "Empty": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {}
+      },
+      "TenantPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/Tenant"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      },
+      "MemberPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/Member"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      },
+      "OrganizationPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/Organization"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      },
+      "InvitationPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/Invitation"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      },
+      "AuditEventPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/AuditEvent"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      },
+      "SessionPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/Session"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      }
+    },
+    "parameters": {
+      "TenantID": {
+        "in": "path",
+        "name": "tenant",
+        "required": true,
+        "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{32}$"
+        }
+      },
+      "Limit": {
+        "in": "query",
+        "name": "limit",
+        "description": "Bounded keyset page size.",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 50
+        }
+      },
+      "After": {
+        "in": "query",
+        "name": "after",
+        "description": "Previous next_cursor; ascending UUID keyset, not a snapshot or timestamp ordering guarantee.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{32}$"
+        }
+      },
+      "AuthzMatch": {
+        "in": "header",
+        "name": "If-Match",
+        "required": true,
+        "description": "Latest tenant/members ETag. Missing: 428; stale: 412.",
+        "schema": {
+          "type": "string",
+          "pattern": "^\"authz-[1-9][0-9]*\"$"
+        }
+      },
+      "OrgMatch": {
+        "in": "header",
+        "name": "If-Match",
+        "required": true,
+        "description": "Latest organizations ETag. Missing: 428; stale: 412.",
+        "schema": {
+          "type": "string",
+          "pattern": "^\"org-[1-9][0-9]*\"$"
+        }
+      },
+      "memberID": {
+        "in": "path",
+        "name": "member",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{32}$"
+        }
+      },
+      "orgID": {
+        "in": "path",
+        "name": "org",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{32}$"
+        }
+      },
+      "invitationID": {
+        "in": "path",
+        "name": "invitation",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{32}$"
+        }
+      },
+      "sessionID": {
+        "in": "path",
+        "name": "session",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{32}$"
+        }
+      }
+    },
+    "responses": {
+      "Problem": {
+        "description": "RFC 9457 problem. Fixed code only; no input, token or SQL echoed. Codes include invalid_token, forbidden, insufficient_scope, recent_mfa_required, tenant_mismatch, invalid_request, not_found, already_exists, last_active_owner, root_cannot_move, organization_cycle, version_conflict, precondition_required, invalid_precondition, rate_limited, temporarily_unavailable.",
+        "headers": {
+          "X-Request-ID": {
+            "$ref": "#/components/headers/RequestID"
+          },
+          "WWW-Authenticate": {
+            "$ref": "#/components/headers/Authenticate"
+          },
+          "Retry-After": {
+            "$ref": "#/components/headers/RetryAfter"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      }
+    },
+    "headers": {
+      "RequestID": {
+        "description": "Server-generated request correlation ID.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "ETag": {
+        "description": "Quoted collection version for If-Match.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "Authenticate": {
+        "description": "Bearer challenge, including invalid_token or insufficient_scope.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "RetryAfter": {
+        "description": "Seconds before retrying.",
+        "schema": {
+          "type": "integer"
+        }
+      }
+    }
+  }
+}

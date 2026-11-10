@@ -28,7 +28,7 @@ scripts/m0 test
 
 ## M1 数据与租户骨架
 
-新增事务性租户引导、组合外键隔离、组织创建/移动/预览、并发版本控制、最后 owner 保护、邀请一次性接受、组织成员关联、audit/outbox。见 [M1 手册](docs/runbooks/m1.md) 和 [ADR 0003](docs/adr/0003-transaction-bindings-and-m1.md)。管理能力当前仅内部仓储，没有公开管理 API；真实 SSO 使用业务主库资格，M0 合成身份实验独立保留。
+新增事务性租户引导、组合外键隔离、组织创建/移动/预览、并发版本控制、最后 owner 保护、邀请一次性接受、组织成员关联、audit/outbox。见 [M1 手册](docs/runbooks/m1.md) 和 [ADR 0003](docs/adr/0003-transaction-bindings-and-m1.md)。M1 仓储现由下述公共 API 提供受权管理入口；真实 SSO 使用业务主库资格，M0 合成身份实验独立保留。
 
 ```sh
 scripts/m1 prepare
@@ -66,3 +66,17 @@ node tests/sso/browser.cjs
 见 [SSO 运行手册](docs/runbooks/local-sso.md)、[ADR 0005](docs/adr/0005-trusted-login-mfa-bff.md)、[SSO OpenAPI](api/sso.openapi.yaml) 和 [本地验收记录](docs/validation.md)。浏览器测试自动创建和清理自己的合成账户，通过真实 Hydra code+PKCE、双应用/双租户、MFA/恢复/续期/撤销，并验证 BFF 数据库与网络权限。
 
 当前是本地 HTTP 参考实现。两个 client 共用一个示范 Application；正式 React 控制台、完整 scoped RBAC、MFA 管理、正式邮件和生产 TLS/KMS 等仍待开发。GCP 部署及云端运维继续由 SRE 负责。
+
+
+## 公共业务 API 与 OpenAPI
+
+新增 18 个面向外部服务端/原生客户端的业务操作：身份/空间、成员停用恢复、组织创建移动/归属、一次性邀请、审计分页和用户会话撤销。采用独立平台 audience、OAuth code+PKCE、Bearer scope、owner 权限和最近 MFA；在业务事务内复查权威资格。公网部署仍由 SRE 负责。
+
+```sh
+scripts/api prepare
+scripts/api up
+scripts/api test
+node tests/api/docs.cjs
+```
+
+公共合同：[OpenAPI 3.1 YAML](api/openapi.yaml)、[JSON](api/openapi.json)。服务提供 `/docs`、`/openapi.yaml` 和 `/openapi.json`；参考页从合同生成全部操作列表。接入、分页/ETag、错误和授权行为见 [公共 API 手册](docs/runbooks/public-api.md) 及 [ADR 0006](docs/adr/0006-public-platform-api.md)。此前同名 M0 内部合同保留为 [m0-internal.openapi.yaml](api/m0-internal.openapi.yaml)。

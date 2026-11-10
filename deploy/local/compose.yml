@@ -54,6 +54,37 @@ x-demo: &demo
   cap_drop: [ALL]
   security_opt: [no-new-privileges:true]
 services:
+  api-tests:
+    networks: [core]
+    profiles: [testing]
+    image: ${COMPOSE_PROJECT_NAME:-sso-m0}-platform-api
+    pull_policy: never
+    entrypoint: [/api-tests]
+    command: [-test.v, -test.run, TestAPIRevocationBetweenAuthenticationAndWrite]
+    environment:
+      SSO_API_TEST: 'true'
+      M1_DB_PASSWORD: ${M1_DB_PASSWORD:-}
+    volumes:
+      - ../../.local/api-tests:/api-tests:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+  platform-api:
+    networks: [core]
+    profiles: [sso]
+    image: ${COMPOSE_PROJECT_NAME:-sso-m0}-platform-api
+    pull_policy: never
+    build:
+      context: ../..
+      dockerfile: deploy/local/Dockerfile.api
+    environment:
+      SSO_MODE: local-accounts
+      M1_DB_PASSWORD: ${M1_DB_PASSWORD:-}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    ports:
+      - 127.0.0.1:8083:8083
   protocol-public:
     <<: *demo
     networks: [core,app_a,app_b]

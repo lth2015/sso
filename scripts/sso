@@ -12,8 +12,11 @@ case "${1:-}" in
   CGO_ENABLED=0 go build -trimpath -o .local/demo-admin ./cmd/demo-admin
   CGO_ENABLED=0 go test -c -o .local/demo-tests ./internal/demo
   chmod 555 .local/demo-tests
+  CGO_ENABLED=0 go test -c -o .local/api-tests ./internal/platformapi
+  chmod 555 .local/api-tests
+  CGO_ENABLED=0 go build -trimpath -o .local/platform-api ./cmd/platform-api
   CGO_ENABLED=0 go build -trimpath -o .local/protocol-public ./cmd/protocol-public
-  compose build demo-a
+  compose build demo-a platform-api
   ;;
  up)
   python3 scripts/prepare_sso.py
@@ -33,11 +36,11 @@ for i in range(90):
 PY
   python3 scripts/seed_sso.py
   compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot' < .local/bff-init.sql
-  compose build demo-a
-  compose up -d protocol-public demo-a demo-b
+  compose build demo-a platform-api
+  compose up -d protocol-public demo-a demo-b platform-api
   python3 - <<'READY'
 import time,urllib.request
-for port,host,path,status in [(8080,'auth.localhost:8080','/sso/health/ready',204),(3001,'app-a.localhost:3001','/',200),(3002,'app-b.localhost:3002','/',200)]:
+for port,host,path,status in [(8080,'auth.localhost:8080','/sso/health/ready',204),(3001,'app-a.localhost:3001','/',200),(3002,'app-b.localhost:3002','/',200),(8083,'api.localhost:8083','/health/ready',204)]:
  for attempt in range(30):
   try:
    request=urllib.request.Request(f'http://127.0.0.1:{port}{path}',headers={'Host':host})
