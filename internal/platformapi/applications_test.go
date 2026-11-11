@@ -66,6 +66,21 @@ func verifyApplicationPrimaryChecks(t *testing.T, db *sql.DB, repo store.Store, 
 			t.Error("application MFA fixture restoration failed")
 		}
 	}()
+	// The new organization writers must enforce MFA in their own transaction,
+	// even when a trusted internal caller did not request Recent checks.
+	var root store.ID
+	if err = db.QueryRow(`SELECT org_id FROM tenant_roots WHERE tenant_id=?`, a.Tenant).Scan(&root); err != nil {
+		t.Fatal("organization root fixture unavailable")
+	}
+	if _, err = repo.ForAuthorization(a).RenameOrganization(ctx, root, "Forbidden rename", 1); !errors.Is(err, store.ErrStepUp) {
+		t.Fatal("rename trusted caller Recent flag")
+	}
+	if _, err = repo.ForAuthorization(a).DeleteOrganization(ctx, root, 1); !errors.Is(err, store.ErrStepUp) {
+		t.Fatal("deletion trusted caller Recent flag")
+	}
+	if err = repo.ForAuthorization(a).UnassignOrganization(ctx, a.Member, root, 1); !errors.Is(err, store.ErrStepUp) {
+		t.Fatal("unassign trusted caller Recent flag")
+	}
 	if _, err = repo.ForAuthorization(a).APIApplication(ctx, app); err != nil {
 		t.Fatal("application read incorrectly required recent MFA")
 	}

@@ -546,6 +546,28 @@ td > .pill:first-child {
   color: #a14139;
   font-size: 13px;
 }
+button.danger-link {
+  background: #fff6f5;
+  border-color: #e6c4bf;
+  color: #963b32;
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+button.danger-link:hover {
+  background: #fbe9e6;
+}
+.confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.confirmation input[type="checkbox"] {
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  margin: 3px 0;
+}
+
 .skip-link {
   position: fixed;
   top: -100px;
@@ -895,6 +917,13 @@ dialog .secret {
   margin: 18px 0;
 }
 
-.event-code { display: block; color: #526079; overflow-wrap: anywhere; }
+.event-code {
+  display: block;
+  color: #526079;
+  overflow-wrap: anywhere;
+}
 
-.integration-value { margin-left: 0; overflow-wrap: anywhere; }
+.integration-value {
+  margin-left: 0;
+  overflow-wrap: anywhere;
+}

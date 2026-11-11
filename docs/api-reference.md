@@ -1,6 +1,6 @@
 # 完整 API 参考
 
-OpenAPI 0.11.0；公共 Bearer API 共 34 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
+OpenAPI 0.12.0；公共 Bearer API 共 38 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
 
 真实交互入口见 [Playground 手册](playground.md)；外部接入见 [公共 API 手册](runbooks/public-api.md)。JSON/YAML 合同见 [OpenAPI](../api/openapi.yaml)。
 
@@ -37,8 +37,12 @@ OpenAPI 0.11.0；公共 Bearer API 共 34 个业务操作。此文件由 OpenAPI
 | POST | `/v1/tenants/{tenant}/members/{member}/suspend` | `suspendMember` |
 | GET | `/v1/tenants/{tenant}/organizations` | `listOrganizations` |
 | POST | `/v1/tenants/{tenant}/organizations` | `createOrganization` |
+| DELETE | `/v1/tenants/{tenant}/organizations/{org}` | `deleteOrganization` |
+| GET | `/v1/tenants/{tenant}/organizations/{org}/members` | `listOrganizationMembers` |
 | PUT | `/v1/tenants/{tenant}/organizations/{org}/members/{member}` | `assignOrganization` |
+| DELETE | `/v1/tenants/{tenant}/organizations/{org}/members/{member}` | `unassignOrganization` |
 | POST | `/v1/tenants/{tenant}/organizations/{org}/move` | `moveOrganization` |
+| POST | `/v1/tenants/{tenant}/organizations/{org}/rename` | `renameOrganization` |
 | GET | `/v1/tenants/{tenant}/permissions` | `getMyPermissions` |
 | GET | `/v1/tenants/{tenant}/roles` | `listRoles` |
 | POST | `/v1/tenants/{tenant}/roles` | `createRole` |
@@ -2944,6 +2948,264 @@ HTTP 201
 错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
 
 
+## DELETE /v1/tenants/{tenant}/organizations/{org}
+
+Delete an empty non-root organization
+
+Requires organizations.write on the token tenant. Explicit deny overrides other allows, including owner operational privileges. Recent MFA required. No cascade. Root is 409 protected_organization. Any direct child or direct member association, including suspended/left members, is 409 organization_not_empty. Tenant lock serializes with create/move/assign. Removes closure references, increments org_version and tenant authz_version with audit/outbox atomically; old tenant grants must reauthorize. Missing/already deleted returns 404. Network result unknown: read before deciding to retry.
+
+OAuth scope：`platform:write`。权限：`permission:organizations.write`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "org",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Latest organizations ETag. Missing: 428; stale: 412.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"org-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+### 请求示例
+
+```json
+{}
+```
+
+### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
+```
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Delete an empty non-root organization",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "org_version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "org_version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## GET /v1/tenants/{tenant}/organizations/{org}/members
+
+List direct organization member associations
+
+Requires organizations.read+members.read on the token tenant. Explicit deny overrides other allows, including owner operational privileges. Requires BOTH organizations.read and members.read, explicit deny wins. Includes inactive memberships so stale associations can be removed. Direct associations only, not descendants or effective permissions. Verified email has the same members.read protection as the space member directory. Returns authz ETag for removal. UUID keyset pagination, no snapshot.
+
+OAuth scope：`platform:read`。权限：`permission:organizations.read+members.read`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "org",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "query",
+    "name": "limit",
+    "description": "Bounded keyset page size.",
+    "schema": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 50
+    }
+  },
+  {
+    "in": "query",
+    "name": "after",
+    "description": "Previous next_cursor; ascending UUID keyset, not a snapshot or timestamp ordering guarantee.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "List direct organization member associations",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "user_id",
+                "email",
+                "status",
+                "owner"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "user_id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "email": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "email",
+                  "description": "Verified alias requires members.read on the token tenant."
+                },
+                "status": {
+                  "enum": [
+                    "active",
+                    "invited",
+                    "suspended",
+                    "left"
+                  ]
+                },
+                "owner": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
 ## PUT /v1/tenants/{tenant}/organizations/{org}/members/{member}
 
 Associate a membership with an organization
@@ -3021,6 +3283,97 @@ HTTP 204
 ```json
 {
   "description": "Associate a membership with an organization",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## DELETE /v1/tenants/{tenant}/organizations/{org}/members/{member}
+
+Remove one direct organization member association
+
+Requires organizations.write on the token tenant. Explicit deny overrides other allows, including owner operational privileges. Recent MFA and organizations.write required. Both objects must belong to this tenant. Inactive members can be unassigned. Leaves membership status, owner/role bindings and other organization associations intact. A real removal increments tenant authz_version and records audit/outbox; old tenant grants must reauthorize. Already absent association with current ETag is a no-op; missing/foreign objects return 404. Organization assignment does not itself grant access.
+
+OAuth scope：`platform:write`。权限：`permission:organizations.write`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "member",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "org",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Latest tenant/members ETag. Missing: 428; stale: 412.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"authz-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+### 请求示例
+
+```json
+{}
+```
+
+### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
+```
+
+### 成功响应
+
+HTTP 204
+
+```json
+{
+  "description": "Remove one direct organization member association",
   "headers": {
     "X-Request-ID": {
       "description": "Server-generated request correlation ID.",
@@ -3153,6 +3506,127 @@ HTTP 200
           },
           "dry_run": {
             "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## POST /v1/tenants/{tenant}/organizations/{org}/rename
+
+Rename a non-root organization
+
+Requires organizations.write on the token tenant. Explicit deny overrides other allows, including owner operational privileges. Recent MFA required. Nonblank trimmed name, at most 128 UTF-8 bytes. Increments only org_version: names do not confer authority. Identical normalized name with current ETag is a no-op. Root is 409 protected_organization; changing the space name is outside organization delegation.
+
+OAuth scope：`platform:write`。权限：`permission:organizations.write`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "org",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Latest organizations ETag. Missing: 428; stale: 412.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"org-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+### 请求示例
+
+```json
+{
+  "name": "新的组织名称"
+}
+```
+
+### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "name"
+  ],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Nonblank trimmed name, at most 128 UTF-8 bytes."
+    }
+  }
+}
+```
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Rename a non-root organization",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "org_version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "org_version": {
+            "type": "integer",
+            "minimum": 1
           }
         }
       }

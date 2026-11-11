@@ -6,6 +6,7 @@ import RoleManagement from "./RoleManagement.jsx";
 import Playground from "./Playground.jsx";
 import AccountSecurity from "./AccountSecurity.jsx";
 import ApplicationManagement from "./ApplicationManagement.jsx";
+import OrganizationActions from "./OrganizationActions.jsx";
 
 const tabs = [
   ["overview", "空间概览", "◈"],
@@ -48,6 +49,9 @@ const actionNames = {
   "member.joined": "成员加入",
   "member.suspended": "停用成员",
   "member.restored": "恢复成员",
+  "org.renamed": "重命名组织",
+  "org.deleted": "删除空组织",
+  "org.member_unassigned": "移除组织归属",
   "org.member_assigned": "关联组织成员",
   "invitation.revoked": "撤销邀请",
   "authorization.consented": "确认访问授权",
@@ -101,6 +105,7 @@ function App() {
     [tab, setTab] = useState("overview");
   const [permissions, setPermissions] = useState(null),
     [roleMember, setRoleMember] = useState(null);
+  const [orgAction, setOrgAction] = useState(null);
   const can = (permission) =>
     permissions?.permissions?.includes(permission) || false;
   const [session, setSession] = useState(null),
@@ -151,6 +156,7 @@ function App() {
     setTenant(null);
     setPermissions(null);
     setRoleMember(null);
+    setOrgAction(null);
     setData(null);
     setError(null);
     setAuthNeeded(false);
@@ -320,6 +326,7 @@ function App() {
     }
   }
   function navigate(target) {
+    setOrgAction(null);
     setTab(target);
     setError(null);
     setNotice("");
@@ -760,23 +767,86 @@ function App() {
                             : "空间根组织"}
                         </td>
                         <td>
-                          {row.parent_id && can("organizations.write") ? (
-                            <button
-                              className="text-button"
-                              onClick={() => open({ kind: "move", row })}
-                            >
-                              移动组织
-                            </button>
-                          ) : (
-                            <span className="muted">
-                              {row.parent_id ? "只读" : "根组织"}
-                            </span>
-                          )}
+                          <div className="actions">
+                            {can("members.read") && (
+                              <button
+                                className="text-button"
+                                onClick={() =>
+                                  setOrgAction({
+                                    kind: "members",
+                                    org: row,
+                                    etag: visible.etag,
+                                  })
+                                }
+                              >
+                                查看直属成员
+                              </button>
+                            )}
+                            {row.parent_id && can("organizations.write") ? (
+                              <>
+                                <button
+                                  className="text-button"
+                                  onClick={() => open({ kind: "move", row })}
+                                >
+                                  移动组织
+                                </button>
+                                <button
+                                  className="text-button"
+                                  onClick={() =>
+                                    setOrgAction({
+                                      kind: "rename",
+                                      org: row,
+                                      etag: visible.etag,
+                                    })
+                                  }
+                                >
+                                  重命名
+                                </button>
+                                <button
+                                  className="danger-link"
+                                  onClick={() =>
+                                    setOrgAction({
+                                      kind: "delete",
+                                      org: row,
+                                      etag: visible.etag,
+                                    })
+                                  }
+                                >
+                                  删除空组织
+                                </button>
+                              </>
+                            ) : (
+                              <span className="muted">
+                                {row.parent_id ? "只读" : "根组织"}
+                              </span>
+                            )}
+                          </div>
                         </td>
                       </>
                     )}
                   />
                 </section>
+              )}
+              {tab === "organizations" && orgAction && (
+                <OrganizationActions
+                  key={context + orgAction.kind + orgAction.org.id}
+                  action={orgAction}
+                  context={context}
+                  tenant={me.tenant_id}
+                  csrf={csrf.current}
+                  etag={orgAction.etag}
+                  canWrite={can("organizations.write")}
+                  onClose={() => setOrgAction(null)}
+                  onFailure={fail}
+                  onChanged={({ invalidates, message }) => {
+                    setOrgAction(null);
+                    setNotice(message);
+                    if (invalidates) {
+                      setAuthNeeded(true);
+                      setData(null);
+                    } else setRevision((n) => n + 1);
+                  }}
+                />
               )}
               {tab === "invitations" && (
                 <section className="panel">

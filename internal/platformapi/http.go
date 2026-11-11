@@ -33,6 +33,7 @@ func Handler(auth *Authenticator) http.Handler {
 	mountRBAC(mux, repo)
 	mountSecurity(mux, repo)
 	mountApplications(mux, repo)
+	mountOrganizationLifecycle(mux, repo)
 	limit := identity.NewLimiter()
 	capacity := make(chan struct{}, 32)
 	mux.HandleFunc("GET /openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
@@ -480,6 +481,10 @@ func failure(w http.ResponseWriter, err error) {
 		problem(w, 404, "not_found")
 	case errors.Is(err, store.ErrConflict):
 		problem(w, 412, "version_conflict")
+	case errors.Is(err, store.ErrProtectedOrganization):
+		problem(w, 409, "protected_organization")
+	case errors.Is(err, store.ErrOrganizationNotEmpty):
+		problem(w, 409, "organization_not_empty")
 	case errors.Is(err, store.ErrProtectedApplication):
 		problem(w, 409, "protected_application")
 	case errors.Is(err, store.ErrApplicationUnavailable):

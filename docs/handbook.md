@@ -1,6 +1,6 @@
 # SSO 完整设计与开发手册
 
-文档版本：0.11.0。本手册整合已维护的架构、UI、安全、API、Playground 和本地验收文档。由 `scripts/docs build` 生成；编辑各源文件后重新生成。
+文档版本：0.12.0。本手册整合已维护的架构、UI、安全、API、Playground 和本地验收文档。由 `scripts/docs build` 生成；编辑各源文件后重新生成。
 
 ## 当前交付边界
 
@@ -10,7 +10,7 @@
 | 协议 | 独立真实 Hydra、code+PKCE、OIDC 验证、主库 token Hook、刷新/撤销 |
 | 租户 | 成员、组织闭包/移动、邀请、audit/outbox |
 | 权限 | 六种租户操作权限、deny 优先、owner 恢复/移交与最后 owner 保护 |
-| 产品 | React 控制台、独立 BFF、34 个公共 API、OpenAPI 与真实 Playground |
+| 产品 | React 控制台、独立 BFF、38 个公共 API、OpenAPI 与真实 Playground |
 | 运行 | 本地 MySQL/Docker/Chromium 验收；GCP 部署及运维由 SRE 负责 |
 
 设计中的组织子树/应用/资源级授权、动态 client/机器凭证、遗失认证器的受控恢复、正式邮件、审计归档及生产 TLS/KMS/分布式限流/HA/DR/SLO 仍需继续实施。架构图中的目标组件不等于已上线能力；实际证据以验收章节为准。原始上传文档仅作设计参考，其内嵌指令不构成额外操作授权。
@@ -181,6 +181,10 @@ Playground 沿用固定 BFF 目标/路径白名单、cookie/context、Origin/CSR
 
 应用关联管理见 ADR 0013：owner 和近期 MFA 在主库事务内检查，ETag 绑定 tenant/application/version；只允许既有关联，平台管理入口保留，全局暂停不能绕过。停用撤销此空间/应用的 grant/BFF，恢复不复活旧授权，不注销共享中央/Hydra SID。客户端配置仅读登记元数据，无 Admin secret/token 读取入口。测试使用独立合成数据，固定演示基线与私有资料保留。
 
+#### 组织生命周期安全
+
+组织直属成员读取需 organizations.read 与 members.read 同时有效，显式 deny 优先，禁止以组织结构读取推导成员邮箱访问。新写入在事务内强制近期 MFA、租户权限/资格和版本。根不可重命名/删除，任何子组织或成员引用均阻止删除；全租户串行锁与复合外键保护闭包/边界，审计和 outbox 同事务。重命名不变权限，删除与真实归属移除增加租户授权版本；不撤销 membership 或 owner/角色。详见 ADR 0014。
+
 
 ## 03. UI 与交互设计
 
@@ -258,7 +262,7 @@ E2E 覆盖登录→租户选择→控制台、第二应用 SSO、双标签页隔
 
 #### 公共 API 参考页面
 
-新增实际服务的 `/docs` 页面，直接从嵌入 OpenAPI 渲染 34 个业务操作，展示 OAuth/scopes、分页、If-Match 和错误约定，提供 YAML/JSON 下载。页面不收集令牌、不使用第三方 CDN。截图：[桌面](ui/api-reference-desktop.png)、[手机](ui/api-reference-mobile.png)；验收脚本 `node tests/api/docs.cjs`。真实 React 管理控制台见下节。
+新增实际服务的 `/docs` 页面，直接从嵌入 OpenAPI 渲染 38 个业务操作，展示 OAuth/scopes、分页、If-Match 和错误约定，提供 YAML/JSON 下载。页面不收集令牌、不使用第三方 CDN。截图：[桌面](ui/api-reference-desktop.png)、[手机](ui/api-reference-mobile.png)；验收脚本 `node tests/api/docs.cjs`。真实 React 管理控制台见下节。
 
 
 #### 真实 React 控制台第一切片
@@ -280,6 +284,10 @@ API Playground 已接入真实控制台授权：接口选择、参数、JSON、I
 “安全会话”增加“个人安全记录”：中文事件说明/受控代码/时间，20 条分页、刷新到最新页、加载/错误/空态和手机布局；明确收到密码重置请求不代表本人发起。读取按 context/cursor/generation 绑定并可取消，离开页面不接收迟到内容。见 [手册](security-events.md) 与 [桌面](ui/security-events-desktop.png)/[手机](ui/security-events-mobile.png)截图。
 
 “应用接入”仅 owner 可见，展示本空间关联状态与客户端数量；登记配置对话框显示 issuer/回调/scope/audience。停用/恢复前读取目标版本、勾选影响确认；平台管理入口保持启用。加载/失败/空态、客户端分页、对话框取消、导航取消和手机布局均纳入验收。截图：[桌面](ui/application-access-desktop.png)、[手机](ui/application-access-mobile.png)。
+
+#### 组织管理操作
+
+组织行增加直属成员、非根重命名和删除空节点。直属成员入口同时检查两种读取权限；成员弹窗显示直接关联及停用状态、分页和显式移除。写入要求目标/影响确认，版本或网络错误后禁用旧表单，关闭刷新再决定，不自动重发；关闭/切换空间取消在途读取。见 [组织管理](organization-management.md)。
 
 
 ## 04. 租户权限与恢复边界
@@ -390,14 +398,14 @@ curl http://127.0.0.1:8083/v1/me \
 
 `api test` 注册两个独立合成账户，通过真实原生 OAuth code+PKCE、密码/MFA 后访问 API；实际成功请求和响应由 OpenAPI JSON Schema 校验，原有 18 个业务操作均须覆盖；另运行 `scripts/console rbac-test` 覆盖新增 8 个操作及真实角色 UI。反例包含 ID token/非法 token/cookie 旁路、scope、错租户、非 owner、非法 JSON/媒体类型/body、最近 MFA、并发 If-Match、邀请重放/错误邮箱/撤销、成员恢复旧授权拒绝、会话归属和审计。专用 Go 检查在验签后递增 fixture User 版本，证明写事务阻止旧证明；也检查事务内 token 到期。
 
-浏览器测试仅把 token/proof 保存在测试进程内，失败只打印阶段/类别；不会录制秘密页面。共享 fixture 清理要求租户全部成员都属于本轮合成账户，按叶到根删除组织，并清理自己的私有通知；拒绝清理包含其他账户的租户。`docs.cjs` 检查实际参考页的 34 项操作、桌面/手机布局、无凭证存储并生成截图。
+浏览器测试仅把 token/proof 保存在测试进程内，失败只打印阶段/类别；不会录制秘密页面。共享 fixture 清理要求租户全部成员都属于本轮合成账户，按叶到根删除组织，并清理自己的私有通知；拒绝清理包含其他账户的租户。`docs.cjs` 检查实际参考页的 38 项操作、桌面/手机布局、无凭证存储并生成截图。
 
 既有回归依次运行 `scripts/m0 test`、`scripts/m1 test`、`scripts/m2 test`、`scripts/sso test`、`scripts/sso network-test`、两个账户/SSO 浏览器脚本。普通 Go 测试明确跳过真实 fixture 案例，不能替代 API 浏览器集成测试。命令会短暂停止自己的通知 worker，不能与浏览器通知流程并发执行。
 
 用 `scripts/sso down` 停止全部本地服务，保留 volume/私有 key。不要修改既有迁移校验和、输出完整 env/Compose/容器 inspect、token/proof、MFA 材料或 SQL 输入。详见 [ADR 0006](adr/0006-public-platform-api.md)。
 
 
-公共 API 0.11.0 共 34 项业务操作，成员 email 由 members.read 授权（无 verified alias 时 null）。新增真实 React 控制台见 [控制台手册](runbooks/console.md)，浏览器边界合同为 `api/console.openapi.yaml`；该合同要求对应 cookie/context/CSRF，不替代公共 Bearer 接入合同。
+公共 API 0.12.0 共 38 项业务操作，成员 email 由 members.read 授权（无 verified alias 时 null）。新增真实 React 控制台见 [控制台手册](runbooks/console.md)，浏览器边界合同为 `api/console.openapi.yaml`；该合同要求对应 cookie/context/CSRF，不替代公共 Bearer 接入合同。
 
 
 #### 角色 API
@@ -407,9 +415,11 @@ curl http://127.0.0.1:8083/v1/me \
 创建使用 `{"code":"auditor","policies":[{"permission":"audit.read","effect":"allow"}]}`；更新使用完整 policies 数组，删除/绑定/解绑提交 `{}`。均需 JSON、最近 MFA 和 authz If-Match。角色 code 不可更名，owner 不可修改/删除；带绑定角色返回 409 role_in_use。解绑最后 active owner 返回 409 last_active_owner。真实变更后旧授权失效，重复绑定/解绑及相同策略替换不改变版本。权限目录、恢复边界、并发与历史审计详见 [ADR 0008](adr/0008-tenant-roles-and-deny.md)。
 
 
-完整字段和示例见 [API 参考](api-reference.md)；运行中 `/docs` 展示同一份合同的参数、请求/响应 schema。控制台 [Playground](playground.md) 使用现有 BFF 发起真实调用，支持写入确认、ETag、MFA/权限错误与凭证脱敏。OpenAPI 0.11.0 仍为 34 个业务操作，补全角色/权限读取 ETag 和所有写入 JSON 示例；新增同源只读 `/platform-openapi.json` 记录在 BFF 合同。
+完整字段和示例见 [API 参考](api-reference.md)；运行中 `/docs` 展示同一份合同的参数、请求/响应 schema。控制台 [Playground](playground.md) 使用现有 BFF 发起真实调用，支持写入确认、ETag、MFA/权限错误与凭证脱敏。OpenAPI 0.12.0 提供 38 个业务操作，包括组织生命周期、角色/权限读取 ETag 和写入 JSON 示例；新增同源只读 `/platform-openapi.json` 记录在 BFF 合同。
 
 新增 `GET /v1/me/security-events`：platform:read、有效当前租户 grant，仅本人记录；无需 audit.read。支持 limit/after，按时间与 ID 降序，其他用户/隐藏/未知游标统一 404。仅返回 id/action/occurred_at，完整语义见 [个人安全事件](security-events.md)。
+
+组织完整管理新增重命名、空节点删除、直属成员分页及移除关联，权限、版本及撤销边界见 [组织管理](organization-management.md)。
 
 
 ## 06. 完整 API 参考
@@ -418,7 +428,7 @@ curl http://127.0.0.1:8083/v1/me \
 
 ### 完整 API 参考
 
-OpenAPI 0.11.0；公共 Bearer API 共 34 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
+OpenAPI 0.12.0；公共 Bearer API 共 38 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
 
 真实交互入口见 [Playground 手册](playground.md)；外部接入见 [公共 API 手册](runbooks/public-api.md)。JSON/YAML 合同见 [OpenAPI](../api/openapi.yaml)。
 
@@ -455,8 +465,12 @@ OpenAPI 0.11.0；公共 Bearer API 共 34 个业务操作。此文件由 OpenAPI
 | POST | `/v1/tenants/{tenant}/members/{member}/suspend` | `suspendMember` |
 | GET | `/v1/tenants/{tenant}/organizations` | `listOrganizations` |
 | POST | `/v1/tenants/{tenant}/organizations` | `createOrganization` |
+| DELETE | `/v1/tenants/{tenant}/organizations/{org}` | `deleteOrganization` |
+| GET | `/v1/tenants/{tenant}/organizations/{org}/members` | `listOrganizationMembers` |
 | PUT | `/v1/tenants/{tenant}/organizations/{org}/members/{member}` | `assignOrganization` |
+| DELETE | `/v1/tenants/{tenant}/organizations/{org}/members/{member}` | `unassignOrganization` |
 | POST | `/v1/tenants/{tenant}/organizations/{org}/move` | `moveOrganization` |
+| POST | `/v1/tenants/{tenant}/organizations/{org}/rename` | `renameOrganization` |
 | GET | `/v1/tenants/{tenant}/permissions` | `getMyPermissions` |
 | GET | `/v1/tenants/{tenant}/roles` | `listRoles` |
 | POST | `/v1/tenants/{tenant}/roles` | `createRole` |
@@ -3362,6 +3376,264 @@ HTTP 201
 错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
 
 
+#### DELETE /v1/tenants/{tenant}/organizations/{org}
+
+Delete an empty non-root organization
+
+Requires organizations.write on the token tenant. Explicit deny overrides other allows, including owner operational privileges. Recent MFA required. No cascade. Root is 409 protected_organization. Any direct child or direct member association, including suspended/left members, is 409 organization_not_empty. Tenant lock serializes with create/move/assign. Removes closure references, increments org_version and tenant authz_version with audit/outbox atomically; old tenant grants must reauthorize. Missing/already deleted returns 404. Network result unknown: read before deciding to retry.
+
+OAuth scope：`platform:write`。权限：`permission:organizations.write`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "org",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Latest organizations ETag. Missing: 428; stale: 412.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"org-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+##### 请求示例
+
+```json
+{}
+```
+
+##### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
+```
+
+##### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Delete an empty non-root organization",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "org_version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "org_version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+#### GET /v1/tenants/{tenant}/organizations/{org}/members
+
+List direct organization member associations
+
+Requires organizations.read+members.read on the token tenant. Explicit deny overrides other allows, including owner operational privileges. Requires BOTH organizations.read and members.read, explicit deny wins. Includes inactive memberships so stale associations can be removed. Direct associations only, not descendants or effective permissions. Verified email has the same members.read protection as the space member directory. Returns authz ETag for removal. UUID keyset pagination, no snapshot.
+
+OAuth scope：`platform:read`。权限：`permission:organizations.read+members.read`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "org",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "query",
+    "name": "limit",
+    "description": "Bounded keyset page size.",
+    "schema": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 50
+    }
+  },
+  {
+    "in": "query",
+    "name": "after",
+    "description": "Previous next_cursor; ascending UUID keyset, not a snapshot or timestamp ordering guarantee.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+##### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "List direct organization member associations",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "user_id",
+                "email",
+                "status",
+                "owner"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "user_id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "email": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "email",
+                  "description": "Verified alias requires members.read on the token tenant."
+                },
+                "status": {
+                  "enum": [
+                    "active",
+                    "invited",
+                    "suspended",
+                    "left"
+                  ]
+                },
+                "owner": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
 #### PUT /v1/tenants/{tenant}/organizations/{org}/members/{member}
 
 Associate a membership with an organization
@@ -3439,6 +3711,97 @@ HTTP 204
 ```json
 {
   "description": "Associate a membership with an organization",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+#### DELETE /v1/tenants/{tenant}/organizations/{org}/members/{member}
+
+Remove one direct organization member association
+
+Requires organizations.write on the token tenant. Explicit deny overrides other allows, including owner operational privileges. Recent MFA and organizations.write required. Both objects must belong to this tenant. Inactive members can be unassigned. Leaves membership status, owner/role bindings and other organization associations intact. A real removal increments tenant authz_version and records audit/outbox; old tenant grants must reauthorize. Already absent association with current ETag is a no-op; missing/foreign objects return 404. Organization assignment does not itself grant access.
+
+OAuth scope：`platform:write`。权限：`permission:organizations.write`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "member",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "org",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Latest tenant/members ETag. Missing: 428; stale: 412.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"authz-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+##### 请求示例
+
+```json
+{}
+```
+
+##### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
+```
+
+##### 成功响应
+
+HTTP 204
+
+```json
+{
+  "description": "Remove one direct organization member association",
   "headers": {
     "X-Request-ID": {
       "description": "Server-generated request correlation ID.",
@@ -3571,6 +3934,127 @@ HTTP 200
           },
           "dry_run": {
             "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+#### POST /v1/tenants/{tenant}/organizations/{org}/rename
+
+Rename a non-root organization
+
+Requires organizations.write on the token tenant. Explicit deny overrides other allows, including owner operational privileges. Recent MFA required. Nonblank trimmed name, at most 128 UTF-8 bytes. Increments only org_version: names do not confer authority. Identical normalized name with current ETag is a no-op. Root is 409 protected_organization; changing the space name is outside organization delegation.
+
+OAuth scope：`platform:write`。权限：`permission:organizations.write`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "org",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Latest organizations ETag. Missing: 428; stale: 412.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"org-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+##### 请求示例
+
+```json
+{
+  "name": "新的组织名称"
+}
+```
+
+##### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "name"
+  ],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Nonblank trimmed name, at most 128 UTF-8 bytes."
+    }
+  }
+}
+```
+
+##### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Rename a non-root organization",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "org_version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "org_version": {
+            "type": "integer",
+            "minimum": 1
           }
         }
       }
@@ -4270,7 +4754,7 @@ If-Match 使用带双引号的 authz-N / org-N。权限版本变更使旧 grant 
 
 ### API Playground
 
-Playground 是登录后的真实 API 客户端。它读取与公共服务相同的 OpenAPI 0.11.0，通过控制台 BFF 调用现有 34 个业务操作。它使用真实 Hydra/主库授权，不创建演示身份或伪造 token。
+Playground 是登录后的真实 API 客户端。它读取与公共服务相同的 OpenAPI 0.12.0，通过控制台 BFF 调用现有 38 个业务操作。它使用真实 Hydra/主库授权，不创建演示身份或伪造 token。
 
 #### 启动与使用
 
@@ -4310,6 +4794,8 @@ scripts/console enable --email YOUR_LOCAL_ADDRESS
 完整接口字段、schema、示例及错误见 [完整 API 参考](api-reference.md)；设计与限制见 [完整手册](handbook.md)。`scripts/console playground-test` 通过真实注册/登录/调用检查读、写确认、ETag、权限拒绝、MFA、响应脱敏、导航清理与手机布局；`node --test tests/playground/model.test.mjs` 检查请求构造、凭证脱敏和单次转发边界。
 
 GCP、公网域名、TLS 和部署由 SRE 负责。本地验收不代表生产发布。
+
+应用停用/恢复的“读取最新 ETag”先校验 application ID，再读取目标应用详情；完整 app ETag 可超过 64 字符。组织重命名/删除使用组织列表版本，归属移除使用 authz 版本。写入确认仍只发送一次，不自动重新取版本后重放。
 
 
 ## 08. 个人账户安全
@@ -4582,8 +5068,52 @@ reset 使用封闭账户集合检查：如果演示空间中出现了清单之�
 
 周五基线已固定在标签 `demo-friday-2026-11-13`，对应提交 5d8b46b；源码与原文档单独备份，后续 0.11.0 文档包与 0.10.0 基线分开。当前功能不会声明 Marketstars 已接通。设计与实际证据分别见 ADR 0013 和 validation.md。
 
+后续 OpenAPI 0.12.0 保留上述应用合同并增加组织管理，现共 38 个业务操作。Playground 的“读取最新 ETag”对应用操作须先填目标 application ID，读取该应用的详情版本，支持完整对象绑定 ETag；不会误用空间 authz 版本。
 
-## 13. React 控制台
+
+## 13. 组织生命周期
+
+来源：[organization-management.md](organization-management.md)。
+
+### 组织生命周期管理
+
+控制台“组织”现支持创建/移动之外的重命名、直属成员分页、移除直接归属和删除空节点。它沿用租户角色权限、真实 BFF 与主库事务，不引入组织子树授权。组织归属本身不授予任何角色或业务权限。
+
+#### 操作与权限
+
+| 操作 | API | 权限 / If-Match |
+| --- | --- | --- |
+| 重命名 | POST `/v1/tenants/{tenant}/organizations/{org}/rename` | organizations.write / `"org-N"` |
+| 直属成员 | GET `/v1/tenants/{tenant}/organizations/{org}/members` | organizations.read **且** members.read |
+| 移除归属 | DELETE `/v1/tenants/{tenant}/organizations/{org}/members/{member}` | organizations.write / `"authz-N"` |
+| 删除空节点 | DELETE `/v1/tenants/{tenant}/organizations/{org}` | organizations.write / `"org-N"` |
+
+公共与 BFF OpenAPI 0.12.0 共 38 个业务操作，Playground 与运行时 API 参考同步。写入需要 platform:write 和最近 300 秒 MFA；读取需要 platform:read。所有有效权限均在主库事务内检查，显式 deny 优先。直属成员沿用 Member schema，包括受 members.read 保护的已验证邮箱；不能仅凭结构读取权限枚举成员资料。
+
+重命名 body 为 `{"name":"平台工程组"}`，服务端 trim 后要求非空、有效 UTF-8、最多 128 字节。其余两个写入 body 为 `{}`，包括 DELETE。使用 Node http 等底层客户端时，DELETE 也须正确设置 Content-Length 或传输分块，确保 `{}` 实际发送；服务端不会把空 body 当成有效 JSON。所有资源只能属于 token 指定的空间，另一空间路径或对象不允许借用。对象缺失返回 404；列表 limit 1–100，默认 50，按 membership ID 升序，以 next_cursor 作 after，不承诺快照。
+
+#### 删除与授权边界
+
+根组织名称同时用作空间名称；组织操作委托不允许更改它。根节点重命名/删除返回 409 protected_organization；原移动接口仍使用 root_cannot_move。普通重命名只增加 org_version，不撤销权限；相同 trim 后名称和最新版本是 no-op，不增加审计/版本。
+
+删除仅限没有直接子组织、没有任何直接成员关联的非根节点。已停用/已离开成员的关联也会阻止删除，返回 409 organization_not_empty。必须先显式移除关联或移动子组织，服务端不级联清理。删除以同一租户行锁与创建、移动、关联操作串行化，原子删除节点/闭包引用，增加 org_version 和 authz_version，写 audit/outbox。不会删除用户、空间成员资格、角色或邻接节点。删除不可恢复；同 ID 再删返回 404。
+
+移除直接归属可针对已停用成员，保留其空间成员资格、owner/其他角色、其他组织归属。真实变更增加 authz_version；已无关联且最新版本时 no-op。为保守维护未来组织授权边界，删除和真实移除都会使该空间旧 grant/BFF 失效，包括操作者，必须重新确认授权；其他空间不受此版本变更影响。移除 owner 的组织归属不等于撤销 owner，不触发最后 owner 移交。
+
+直属列表只列直接关联，不包含后代节点，不表示有效权限。通过成员列表刚读取的 authz ETag 可移除该关联；结构版本从组织列表读取。缺失前置条件 428、格式不正确 400、过时版本 412。前置版本校验先于资源检查，旧版本请求可能先收到 412。客户端不自动重放写入；网络结果不明须先重新登录/读取确认结果，不能靠旧 UI 判断是否已提交。
+
+审计事件：org.renamed / org.deleted 的 target 为组织 ID，org.member_unassigned 的 target 为成员 ID，沿用既有 org.member_assigned 事件边界；不保存名称/邮箱/任意请求内容，暂未提供完整历史组织归属对照。事务 outbox 复用同一事件 ID；独立长期归档和消费者仍待实现。
+
+#### 控制台与验证
+
+行操作隐藏根节点重命名/删除入口，直属成员入口同时要求两种读取权限。重命名/删除/移除均显示目标与影响并要求确认；陈旧版本/网络错误后禁用原表单，关闭、刷新后由用户重新决定。直属成员有分页，关闭或切换空间会取消读取，晚到响应不会重新打开弹窗。按钮可见性不代替 API 权限。
+
+界面截图：[桌面直属成员](ui/organization-members-desktop.png)、[手机直属成员](ui/organization-members-mobile.png)。
+
+运行 `scripts/console organizations-test` 验证真实登录、BFF→API→MySQL、合同响应、MFA、根/非空保护、跨空间、成员分页及桌面/手机操作。`scripts/m1 test` 包含闭包完整性、停用成员清理、委托读取双权限和并发创建/删除测试；原演示账号和数据不作这些测试的 fixture。周五基线标签 demo-friday-2026-11-13 保持原提交，开发后另跑 scripts/demo check。
+
+
+## 14. React 控制台
 
 来源：[runbooks/console.md](runbooks/console.md)。
 
@@ -4644,7 +5174,7 @@ scripts/console enable --email YOUR_LOCAL_ADDRESS --second-tenant
 `rbac-test` 使用三个合成账户，通过真实登录/API/BFF 验收默认拒绝、委托读写、deny 优先、撤销、跨租户对象拒绝、owner 恢复/移交及真实 React 角色管理。新增截图：[角色](ui/rbac-roles.png)、[受委托审计员](ui/rbac-auditor.png)。设计和 API 细节见 [ADR 0008](adr/0008-tenant-roles-and-deny.md)。
 
 
-新增 API Playground 导航，可读取同源 OpenAPI 并调用固定的 34 个业务操作。GET 直接发送，写入预览/确认后发送一次，支持 ETag 读取、HTTP 状态/错误、cURL 模板和凭证字段脱敏；离开页面清空内存并取消在途读取，不自动重发写入。使用及限制见 [Playground 手册](playground.md)。
+新增 API Playground 导航，可读取同源 OpenAPI 并调用固定的 38 个业务操作。GET 直接发送，写入预览/确认后发送一次，支持 ETag 读取、HTTP 状态/错误、cURL 模板和凭证字段脱敏；离开页面清空内存并取消在途读取，不自动重发写入。使用及限制见 [Playground 手册](playground.md)。
 
 
 安全会话页面已增加个人 MFA/恢复码/会话概览及“撤销其他会话”确认流程；同一中央会话的多个标签页保留。恢复码管理和认证器更换跳转可信认证域，不在 BFF/Playground 输入密码或验证码。认证器更换的两阶段/取消/结果不明处理见 [专门手册](authenticator-management.md)，验收 `scripts/console authenticator-test`。见 [个人安全](account-security.md)。
@@ -4652,7 +5182,7 @@ scripts/console enable --email YOUR_LOCAL_ADDRESS --second-tenant
 个人安全记录位于安全会话页，20 条分页与刷新，使用当前 User 的公开只读接口；跨空间仍只读本人记录，未公开内部目标标识。验收 `scripts/console events-test`；语义及限制见 [手册](security-events.md)。
 
 
-## 14. 可信登录与双应用
+## 15. 可信登录与双应用
 
 来源：[runbooks/local-sso.md](runbooks/local-sso.md)。
 
@@ -4711,7 +5241,7 @@ scripts/sso enable --email YOUR_LOCAL_ADDRESS --second-tenant
 生产边界见 [ADR 0005](adr/0005-trusted-login-mfa-bff.md)。这些示范应用使用同一 Application，完整权限控制台、MFA 管理、正式邮件与生产 TLS/KMS 等仍待后续开发。
 
 
-## 15. 账户生命周期
+## 16. 账户生命周期
 
 来源：[runbooks/m2-accounts.md](runbooks/m2-accounts.md)。
 
@@ -4749,7 +5279,7 @@ m2 test 暂停本项目 mail-worker，防止真实 worker 与集成 fixture 争�
 已实现注册邮箱证明、原子个人空间引导、Argon2id 密码、恢复挑战、安全版本递增、通知加密/本地可靠落盘、四个 HTTP API 和真实账户页面。账户接口不提供 token 旁路；可信登录、中央会话、MFA 与 BFF 现由 [本地 SSO 手册](runbooks/local-sso.md) 说明。管理接口仍未公开；M0 合成身份实验继续独立。GCP 部署交由 SRE，对应生产邮箱、密钥托管和分布式限流留作正式集成。
 
 
-## 16. 数据库与组织
+## 17. 数据库与组织
 
 来源：[runbooks/m1.md](runbooks/m1.md)。
 
@@ -4767,7 +5297,7 @@ scripts/m1 test
 
 prepare 复用 M0 依赖和镜像，新增私有 M1_DB_PASSWORD（保留既有值），编译 Go MySQL 集成测试二进制。up 启动 M0 服务，以本地初始化路径创建独立 sso_business 库和开发测试账号，再执行带互斥锁与 SHA256 记录的迁移。重复运行保留数据和凭证。迁移目前只支持本切片的幂等 DDL；修改已有 SQL 的 checksum 会失败，未来非幂等升级需专门 migration runner，不能修改历史 checksum 绕过。
 
-测试以非 root、只读文件系统容器执行，真实连接 MySQL；未设置 SSO_M1_TEST 时，普通 go test 中的数据集成测试会明确跳过，不能据此宣称已验证数据库。必须执行 scripts/m1 test；当前 16 项均须运行并通过。
+测试以非 root、只读文件系统容器执行，真实连接 MySQL；未设置 SSO_M1_TEST 时，普通 go test 中的数据集成测试会明确跳过，不能据此宣称已验证数据库。必须执行 scripts/m1 test；当前 23 项均须运行并通过。
 
 验证：原子租户引导/根唯一、跨租户 actor 与组合外键拒绝、组织移动 dry-run/闭包/环/root/版本、并发移动串行化、最后 owner 与并发暂停、审计 FK 失败时事务回滚、深度边界与停用 actor；邀请验证邮箱、一次性/过期/并发接受、不隐式提权，以及组织关联的跨租户拒绝。测试只清理自身新建的 tenant/user 数据，不删除既有开发数据。
 
@@ -4783,8 +5313,10 @@ GCP 部署和云端运维由 SRE 专门负责，不作为后续本地开发前�
 
 新增 RBAC 数据检查：allow/deny 与撤销、委托边界、邀请创建者权限复查、非法/跨租户/内置角色拒绝、owner 操作 deny 的恢复能力、角色删除后的绑定审计和并发 owner 移除。迁移 005 增加策略/绑定事件表；勿修改已应用迁移的校验和。
 
+组织生命周期测试新增普通命名/no-op、根保护、非空引用（含停用成员）阻止删除、直属成员双权限/显式 deny/分页、归属移除保留角色、闭包完整性以及并发创建/删除单一赢家。新增应用接入测试同时纳入此数据库检查集合。
 
-## 17. 协议实验
+
+## 18. 协议实验
 
 来源：[runbooks/m0.md](runbooks/m0.md)。
 
@@ -4840,7 +5372,7 @@ Go 的 GOPATH/GOMODCACHE/GOCACHE 全部位于 .local，避免受限 HOME 路径�
 M1 数据仓储的运行方式见 [M1 手册](runbooks/m1.md)。Cloud SQL 按用户要求本轮不验证，不把该项写成通过。
 
 
-## 18. 实施计划与剩余功能
+## 19. 实施计划与剩余功能
 
 来源：[implementation-plan.md](implementation-plan.md)。
 
@@ -4865,11 +5397,11 @@ M0 不通过不扩写业务功能。选择版本需记录源码引用、许可�
 
 M0 已通过 28 项真实协议检查；本地证明每交易/授权链绑定、刷新/撤销与签名轮换。云端 HA 按用户要求不验证，不记为通过。
 
-M1 已提供组合外键隔离、组织闭包/移动、成员停用恢复、邀请、audit/outbox；M4 第一切片增加租户角色、六种操作权限、deny 优先及 owner 恢复边界。16 项业务数据库检查包含并发最后 owner 保护、邀请创建者权限复查及角色删除后的绑定审计。
+M1 已提供组合外键隔离、组织闭包/移动、成员停用恢复、邀请、audit/outbox；M4 第一切片增加租户角色、六种操作权限、deny 优先及 owner 恢复边界。23 项业务数据库检查包含并发最后 owner 保护、邀请创建者权限复查及角色删除后的绑定审计。
 
 M2 已实现邮箱验证设密/恢复、个人空间原子创建、加密通知队列/本地私有邮箱、真实 Hydra 密码/TOTP/一次性恢复码、中央会话、按租户授权、主库 Hook、两个独立 BFF、串行刷新、单应用及全设备退出。BFF 各自使用独立 key、受限 SQL 视图和网桥；Admin/私有 Hook 不可从 BFF 网络访问。当前 Go 验证适配尚未作为多语言 SDK 发布。
 
-公共 API 0.11.0 已提供 34 个业务操作和 OpenAPI 3.1 YAML/JSON，覆盖身份/空间、成员、组织、邀请、审计、自己的会话及角色/绑定管理。外部客户端使用 OAuth code+PKCE、Bearer scope 和平台 audience；写入需最近 MFA，资格/权限在业务事务内复查。普通成员默认拒绝，操作权限可分别委托；角色管理仅 owner。见 ADR 0006/0008。
+公共 API 0.12.0 已提供 38 个业务操作和 OpenAPI 3.1 YAML/JSON，覆盖身份/空间、成员、组织、邀请、审计、自己的会话及角色/绑定管理。外部客户端使用 OAuth code+PKCE、Bearer scope 和平台 audience；写入需最近 MFA，资格/权限在业务事务内复查。普通成员默认拒绝，操作权限可分别委托；角色管理仅 owner。见 ADR 0006/0008。
 
 M3 控制台第一切片已接入真实 React→BFF→公共 API，含多标签页空间隔离、上述管理页面及角色 UI。OAuth token 留在服务端，控件可见性不代替授权。真实浏览器的合同、权限、撤销和 UI 证据见 [验证记录](validation.md)；构建及运行见控制台手册。
 
@@ -4891,8 +5423,10 @@ API/文档切片已增加真实 Playground、逐操作运行时参考页、完�
 
 应用接入第一切片已提供本空间已接入应用、只读客户端登记元数据、owner/近期 MFA/对象绑定 ETag 下的停用与恢复，旧 grant/BFF 依据关联版本原子失去权威并保留其他空间/应用。公共合同 0.11.0 为 34 操作；客户端创建/secret 发布轮换和机器身份仍待实施，见 ADR 0013。周五基线固定标签 demo-friday-2026-11-13，对应 5d8b46b，当前演示数据保留并另行复验。
 
+组织生命周期已提供重命名、直属成员分页（organizations.read 与 members.read 同时成立）、移除归属、删除空叶子，公共合同 0.12.0 增至 38 操作。根组织受保护，非空节点不级联，结构删除/真实移除需重新授权；普通重命名仅改显示与 org_version。详见 ADR 0014。
 
-## 19. 架构决策 0001
+
+## 20. 架构决策 0001
 
 来源：[adr/0001-platform-boundaries.md](adr/0001-platform-boundaries.md)。
 
@@ -4909,7 +5443,7 @@ API/文档切片已增加真实 Playground、逐操作运行时参考页、完�
 实施：先完成可运行 M0 和测试报告，再依次开展 M1–M5。UI 规格先完成，生产控制台后续交付。此次 Git push 是源码/文档交付，不是云部署或生产发布。上传原文保持不变供追溯。
 
 
-## 20. 架构决策 0002
+## 21. 架构决策 0002
 
 来源：[adr/0002-hydra-m0-findings.md](adr/0002-hydra-m0-findings.md)。
 
@@ -4945,7 +5479,7 @@ Hydra Admin 在本地为测试绑定 loopback，HTTP/--dev 仅此实验允许。
 每交易/refresh chain 绑定、logout/remembered consent/prompt=none/max_age、签名 key 轮换的本地真实引擎验证已补充。用户随后明确 Cloud SQL 由其准备且本轮无需验证，因此云端 HA/DR 不作为本轮本地代码推进阻塞项，也不记为通过。镜像漏洞/维护确认及生产部署前的云端验收仍需另行完成。M1 已开始内部数据与仓储切片，未开放生产功能。
 
 
-## 21. 架构决策 0003
+## 22. 架构决策 0003
 
 来源：[adr/0003-transaction-bindings-and-m1.md](adr/0003-transaction-bindings-and-m1.md)。
 
@@ -4988,7 +5522,7 @@ M0 实验资格表与 M1 业务表尚未连通；不把两个独立测试库的�
 用户进一步明确：本轮尽可能完成本地开发和验收，GCP 部署/云端运维由专门 SRE 负责。后续开发不等待 GCP 项目、实例或云凭证；本地迁移、接口合同和运行说明作为交接材料。云端 HA/DR、KMS 与上线 SLO 属于 SRE/联合生产验收，不由本轮代理执行，也不记为本地测试通过。
 
 
-## 22. 架构决策 0004
+## 23. 架构决策 0004
 
 来源：[adr/0004-account-proof-lifecycle.md](adr/0004-account-proof-lifecycle.md)。
 
@@ -5025,7 +5559,7 @@ worker 用 SELECT FOR UPDATE SKIP LOCKED 获取一条待投递记录，仅向私
 尚无 Hydra 可信登录交互、中央会话、MFA、BFF、真实邮件供应商、生产账号恢复审批与通知。M0 合成授权仍与此业务 User 权威状态分离；不能据 security_version 递增宣称现有 M0 JWT/refresh 已全部撤销。下一步必须把账户因素接入受 CSRF/Origin/交易状态保护的 Hydra 登录，再实施 MFA 与会话版本检查，而非新增 password-to-token 路由。
 
 
-## 23. 架构决策 0005
+## 24. 架构决策 0005
 
 来源：[adr/0005-trusted-login-mfa-bff.md](adr/0005-trusted-login-mfa-bff.md)。
 
@@ -5068,7 +5602,7 @@ BFF 会话绝对 8 小时、空闲 30 分钟。refresh 在会话行锁内串行�
 未实现正式 React 控制台、完整 scoped RBAC、MFA 撤销/更换及受控恢复、30 天 refresh 策略、产品级邮件供应商和全部业务事件消费者。GCP 部署、Cloud SQL HA/DR 验证由 SRE 负责；本地通过不代表生产验收。
 
 
-## 24. 架构决策 0006
+## 25. 架构决策 0006
 
 来源：[adr/0006-public-platform-api.md](adr/0006-public-platform-api.md)。
 
@@ -5115,7 +5649,7 @@ Owner 可列出成员、停用/恢复成员，创建组织、预览/执行移动
 本地固定域名/明文/loopback、开发 SQL 账号和单进程限流不得直接当作生产配置。正式域名、TLS、issuer/JWKS 接线、ingress、专用最小权限数据库账号、分布式限流、监控与容量由后续实施和 SRE 验收。没有部署公网、动态第三方 client 注册、通用机器身份凭证或完整控制台；已有 M0 机器 grant 仍是独立实验，不能调用此用户管理 API。
 
 
-## 25. 架构决策 0007
+## 26. 架构决策 0007
 
 来源：[adr/0007-console-bff-contexts.md](adr/0007-console-bff-contexts.md)。
 
@@ -5160,7 +5694,7 @@ BFF SQL 账号不能读取密码、MFA 密文、中央 cookie 摘要、login_ali
 后续实现更新：租户角色/委托见 ADR 0008，个人安全见 ADR 0010，认证器更换见 ADR 0011；本 ADR 的第一切片边界不代表后续能力仍未实现。
 
 
-## 26. 架构决策 0009
+## 27. 架构决策 0009
 
 来源：[adr/0009-api-playground-and-handbook.md](adr/0009-api-playground-and-handbook.md)。
 
@@ -5189,7 +5723,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 验收覆盖真实注册/密码/MFA/Hydra/BFF/API、写入确认/单次发送、ETag/412、普通成员 403、MFA 过期、凭证脱敏、输出转义、导航清理与桌面/手机；离线 HTML 检查目录锚点、无外部请求、无脚本/表单及布局，导出包校验每个摘要。受管 Chromium 禁止 file:// 导航，HTML 测试通过临时 loopback 只读服务加载同一文件，不将该测试描述为云端部署。GCP 部署与运维仍由 SRE 负责。
 
 
-## 27. 架构决策 0010
+## 28. 架构决策 0010
 
 来源：[adr/0010-self-service-account-security.md](adr/0010-self-service-account-security.md)。
 
@@ -5210,7 +5744,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 测试同时验证主库绑定/尝试次数/过期、密码重置竞态、并发仅一次成功，以及真实密码/TOTP/恢复码登录、旧授权失效、当前/其他用户会话隔离。未把普通 Go 中跳过的 fixture 用例当作数据库通过；SSO profile 明确运行新增 TestSSO 用例。生产 TLS/Secure cookie、分布式限流和 KMS 仍须后续由 SRE 实施验收。
 
 
-## 28. 架构决策 0011
+## 29. 架构决策 0011
 
 来源：[adr/0011-staged-authenticator-replacement.md](adr/0011-staged-authenticator-replacement.md)。
 
@@ -5231,7 +5765,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 公共/BFF/security 合同版本统一 0.9.0，公共操作数仍为 28；仅可信合同增加管理页和 start/confirm/cancel。生产 TLS、分布式限流和 KMS 仍按既有边界后续实施。此次不修改 SRE 的 CI 或部署配置。
 
 
-## 29. 架构决策 0012
+## 30. 架构决策 0012
 
 来源：[adr/0012-personal-security-events.md](adr/0012-personal-security-events.md)。
 
@@ -5250,7 +5784,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 本轮不改 CI、部署、既有迁移及 GCP；不可变归档、登录失败/设备监控、正式通知及事件消费者仍需继续实施。
 
 
-## 30. 架构决策 0013
+## 31. 架构决策 0013
 
 来源：[adr/0013-tenant-application-access.md](adr/0013-tenant-application-access.md)。
 
@@ -5269,7 +5803,26 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 无迁移或 CI/GCP 配置变更。演示基线固定为 demo-friday-2026-11-13 / 5d8b46b，源码/文档已分别备份；变更使用独立合成测试数据，演示账户保留并最后复验。公共/BFF/可信安全合同统一 0.11.0，公共业务 34 操作。
 
 
-## 31. 验收证据
+## 32. 架构决策 0014
+
+来源：[adr/0014-organization-lifecycle.md](adr/0014-organization-lifecycle.md)。
+
+### ADR 0014：组织生命周期与直接归属清理
+
+状态：接受为本地开发实现。基于 ADR 0003/0008，保持周五演示标签及既有权限恢复边界。
+
+组织控制台已有创建、移动和成员关联，但不能完成日常的命名调整、查询实际归属或清理空节点。本切片补四个公共 API 和同源 BFF/UI/Playground；不增加迁移，不改变组织归属仅为关联的语义。
+
+组织读取权限不隐含成员隐私权限。直属成员列表要求 organizations.read 与 members.read 同时成立，显式 deny 优先；包括非 active 成员以支持清理，使用现有 Member schema 与 UUID 分页。只列直接关联，不把树结构、成员归属当作授权策略。
+
+根节点 name 当前承载空间名称，委托 organizations.write 不可重命名/删除 root。非根重命名 trim 后限制 128 UTF-8 字节，只增加结构版本；名称不影响 authority。删除必须是空叶子，所有成员引用（包括 suspended/left）均阻止，永不级联。主库租户行锁复用既有创建/移动/关联序列；闭包清理、节点删除、版本、audit/outbox 同事务。未来增加 scoped role/resource 引用时，删除检查必须一并扩展，不能仅依赖当前空判断。
+
+移除关联不改变 membership/角色；最近 MFA 和 authz ETag 防止撤销基于旧状态。真实移除与结构删除增加 tenant authz_version，保守使全部该空间旧 grant 失效；普通重命名保留会话。操作结果不明不自动重发，客户端重新读取/授权。确认删除不可恢复；不存在对象 404，同状态无关联的移除可 no-op。
+
+本地 DB 和真实浏览器验证隔离、双读取权限、权限委托/显式拒绝、根/非空保护、陈旧/缺失 ETag、近期 MFA、闭包删除、并发创建/删除、其他空间保留、旧授权失效及 UI 晚响应。实际结果写 validation.md。GCP/CI/部署仍由 SRE 负责，本切片不改动。
+
+
+## 33. 验收证据
 
 来源：[validation.md](validation.md)。
 
@@ -5460,3 +6013,23 @@ M0/M1 既有证据仍包括跨租户/授权链隔离、会话/退出与签名轮
 并发验收定位到批量更新授权行与主库资格检查之间的锁顺序冲突。最终实现使用关联 active/单调版本使旧 grant/BFF 权威失效，不在空间锁内批量锁授权行；加密会话行按既有到期清理。恢复再次递增版本，旧 grant 不能复活；签发和资源检查继续读主库。只在 MySQL 1213 明确整笔事务回滚时重新检查并重开一次事务，不重试网络结果不明的提交。修正后的主库、原生令牌及浏览器回归均已重新通过。
 
 身份、角色和应用测试夹具已清理；演示数据有意保留且复验成功。CI、部署、GCP、原始上传参考和既有迁移未改动。版本回退可使用固定标签及原私有环境配置，不能重新生成持久密钥。
+
+#### 2026-11-11：组织生命周期与 OpenAPI 0.12.0
+
+补齐非根组织重命名、直属成员分页、直接归属移除、空叶子删除，公共/BFF 合同增至 38 个业务操作。现有业务表/复合外键/租户锁继续使用，无迁移变更；组织子树授权、动态客户端/机器凭证和受控恢复不因此记为完成。设计及安全/交互边界见 ADR 0014 和 organization-management.md。
+
+| 检查 | 实际结果 | 边界 |
+| --- | --- | --- |
+| 真实主库 | 新增 4 项组织用例通过，M1 共 23 项实际运行通过；15 项 SSO 数据库用例回归通过 | 名称 trim/UTF-8 字节限制/no-op、根及非空保护、停用成员清理、闭包删除、保留成员/owner 角色、双读取权限/deny、分页/隔离、并发创建与删除单一赢家；未将普通 Go 跳过的 fixture 计入 |
+| 原生公开 API | 132 个真实 HTTP 响应通过 OpenAPI 校验，包含四个新操作和真实 OAuth code+PKCE | 删除/真实移除后旧令牌拒绝，重命名保留当前授权；延续跨租户、scope、MFA、组织并发、邀请、应用撤销、会话/审计回归；专用主库探针确认新写入不信任调用者 Recent=false，并在身份版本变化后拒绝旧 authority |
+| 组织浏览器 | 43 个合同校验响应及 React/BFF 操作通过 | 普通成员拒绝、org 只读不能读成员、双读取权限可看、显式 deny 再次拒绝；根/非空/跨空间/ETag/MFA，直属分页，重命名/移除/删除、其他空间保留、no-op、审计、Playground，关闭弹窗后丢弃实际迟到响应；手机无页面横溢，操作按钮保持单行 |
+| 既有产品回归 | 控制台完整验收、应用接入 27 响应、RBAC 96 响应、38 操作 Playground、账户安全 13 响应、个人安全事件 16 响应均通过 | 真实登录与主库；套件间重启本地 identity 隔离限流，未改动策略；恢复码测试只针对独立合成账户 |
+| 构建与合同 | Go test/vet、6 项 Playground 边界模型测试、BFF 固定方法/路径白名单、格式/差异检查、YAML/JSON/引用/38 个唯一 operationId 检查通过 | 构建实际 React 嵌入包及本地容器，不改变 CI 或生产部署；动态创建客户端仍不开放 |
+| 文档与导出 | 38 操作在线 API 参考桌面/手机通过，完整手册同步，离线 HTML 和 ZIP 完整性/秘密排除检查通过 | 0.12.0 文档单独导出；只更新实际变化的界面截图，保留原演示与其他页面示例 |
+| 演示保护 | 最后 scripts/demo check 通过真实密码/TOTP、双应用、数据、角色及隔离空间；基线源码/原文档 SHA-256 验证通过 | 固定标签仍指向 5d8b46b；原开发用户与两名演示用户保留，私有文件权限保留，两组恢复码均未消费；没有重置/轮换演示凭证 |
+
+原生测试客户端现在对有 body 的请求显式设置 Content-Length：已用独立回环服务验证 Node http 的 DELETE 默认可能发送 0 字节，而 `{}` 的正确长度为 2。服务端继续严格拒绝空 JSON body，不以兼容测试为由放宽请求合同。Playground 已修正应用操作的版本读取：先校验目标 application ID、再读其详情 ETag，输入支持完整超过 64 字符的资源版本；实际浏览器确认拿到正确 app ETag 并可进入写入预览。
+
+新写入继续在主库事务内强制近期 MFA/权限/版本；根不可通过组织委托改名，空节点删除不级联，直接归属移除不改变成员资格/角色，结构删除及真实移除增加租户授权版本。租户锁与既有创建/移动/关联串行化，审计和 outbox 同事务。尚无组织归属历史对照/长期审计归档或组织范围授权，不能从界面归属推导权限。
+
+全部合成夹具已清理：主库用户保留 3 名，测试空间、fixture 应用、临时 OAuth 客户端和私有 mailbox 均为零。CI、部署、GCP、既有迁移和原始上传参考均未改动；未重新运行的 M0 全协议/云端检查不计入本轮结果。当前代码建立在 99e02f1 上，具体交付 SHA 以本节提交的 Git 历史为准。

@@ -419,6 +419,32 @@ async function resource(p) {
       .getByRole("region", { name: "API 响应", exact: true })
       .getByRole("heading", { name: "HTTP 200", exact: true })
       .waitFor();
+    phase = "playground-resource-bound-version-read";
+    await p
+      .getByLabel("选择 API", { exact: true })
+      .selectOption("disableTenantApplication");
+    await p.getByRole("button", { name: "读取最新 ETag", exact: true }).click();
+    await p
+      .getByRole("alert")
+      .filter({ hasText: "请先填写目标 application ID" })
+      .waitFor();
+    await p.getByLabel("application", { exact: true }).fill(demo.id);
+    await p.getByRole("button", { name: "读取最新 ETag", exact: true }).click();
+    await p
+      .getByRole("region", { name: "API 响应", exact: true })
+      .getByRole("heading", { name: "HTTP 200", exact: true })
+      .waitFor();
+    const latest = await s.bff(p, target);
+    assert.equal(
+      await p.getByLabel("If-Match", { exact: true }).inputValue(),
+      latest.etag,
+    );
+    assert.equal(
+      await p.getByLabel("If-Match", { exact: true }).getAttribute("maxlength"),
+      "128",
+    );
+    await p.getByRole("button", { name: "检查写入请求", exact: true }).click();
+    await p.getByLabel("我确认向当前空间发送这项写入请求").waitFor();
     assert.deepEqual(s.pageErrors, []);
     assert.deepEqual(s.leaks, []);
     console.log(

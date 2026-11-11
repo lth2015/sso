@@ -53,6 +53,9 @@ export const errorText = (error) =>
       "连接中断，操作结果可能已保存。请刷新核对后再决定是否重试。",
     recent_mfa_required: "请重新验证身份，再发起这项操作。",
     reserved_role: "内置所有者角色不能编辑或删除。",
+    protected_organization: "空间根组织不能重命名或删除。",
+    organization_not_empty:
+      "请先移动子组织并移除所有直接成员归属，再删除空组织。",
     protected_application: "平台管理入口必须保持启用。",
     application_unavailable: "应用已被平台暂停，当前空间无法恢复。",
     role_in_use: "请先移除该角色的所有成员绑定。",

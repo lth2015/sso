@@ -167,7 +167,7 @@ export default function Playground({
                 <input
                   aria-label={p.name}
                   required={p.required}
-                  maxLength={64}
+                  maxLength={128}
                   readOnly={p.name === "tenant"}
                   value={
                     p.name === "tenant" ? me.tenant_id : values[p.name] || ""
@@ -193,7 +193,7 @@ export default function Playground({
                 <input
                   aria-label="If-Match"
                   value={etag}
-                  maxLength={64}
+                  maxLength={128}
                   placeholder={'例如 "authz-2" 或 "org-3"'}
                   onChange={(e) => {
                     clear();
@@ -206,15 +206,28 @@ export default function Playground({
                 type="button"
                 onClick={() => {
                   clear();
+                  const applicationVersion =
+                    match.schema.pattern.includes("app-");
+                  if (
+                    applicationVersion &&
+                    !/^[a-f0-9]{32}$/.test(values.application || "")
+                  ) {
+                    setError(
+                      "请先填写目标 application ID，再读取它的最新版本。",
+                    );
+                    return;
+                  }
                   send(
                     {
                       method: "GET",
                       path:
                         "/v1/tenants/" +
                         me.tenant_id +
-                        (match.schema.pattern.includes("org-")
-                          ? "/organizations?limit=1"
-                          : ""),
+                        (applicationVersion
+                          ? "/applications/" + values.application
+                          : match.schema.pattern.includes("org-")
+                            ? "/organizations?limit=1"
+                            : ""),
                     },
                     true,
                   );

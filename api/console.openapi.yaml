@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Identity Console Same-Origin BFF
-  version: 0.11.0
+  version: 0.12.0
   description: Browser cookie+context+CSRF boundary. Proxy paths are restricted to
     the public platform contract and one fixed API destination; caller Authorization
     is rejected. OAuth tokens and verifier remain encrypted server-side. Every tab
@@ -765,6 +765,310 @@ paths:
             example:
               parent_id: '00000000000000000000000000000000'
               name: 示例组织
+  /bff/v1/tenants/{tenant}/organizations/{org}/rename:
+    post:
+      operationId: consoleRenameOrganization
+      summary: Rename a non-root organization
+      description: 'Requires organizations.write on the token tenant. Explicit deny
+        overrides other allows, including owner operational privileges. Recent MFA
+        required. Nonblank trimmed name, at most 128 UTF-8 bytes. Increments only
+        org_version: names do not confer authority. Identical normalized name with
+        current ETag is a no-op. Root is 409 protected_organization; changing the
+        space name is outside organization delegation.'
+      tags:
+      - Tenant management
+      security:
+      - ConsoleCookie: []
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/orgID'
+      - $ref: '#/components/parameters/OrgMatch'
+      - $ref: '#/components/parameters/Context'
+      - $ref: '#/components/parameters/CSRF'
+      - $ref: '#/components/parameters/Origin'
+      responses:
+        '200':
+          description: Rename a non-root organization
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationCreated'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: permission:organizations.write
+      x-recent-mfa-seconds: 300
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganizationRename'
+            example:
+              name: 新的组织名称
+  /bff/v1/tenants/{tenant}/organizations/{org}:
+    delete:
+      operationId: consoleDeleteOrganization
+      summary: Delete an empty non-root organization
+      description: 'Requires organizations.write on the token tenant. Explicit deny
+        overrides other allows, including owner operational privileges. Recent MFA
+        required. No cascade. Root is 409 protected_organization. Any direct child
+        or direct member association, including suspended/left members, is 409 organization_not_empty.
+        Tenant lock serializes with create/move/assign. Removes closure references,
+        increments org_version and tenant authz_version with audit/outbox atomically;
+        old tenant grants must reauthorize. Missing/already deleted returns 404. Network
+        result unknown: read before deciding to retry.'
+      tags:
+      - Tenant management
+      security:
+      - ConsoleCookie: []
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/orgID'
+      - $ref: '#/components/parameters/OrgMatch'
+      - $ref: '#/components/parameters/Context'
+      - $ref: '#/components/parameters/CSRF'
+      - $ref: '#/components/parameters/Origin'
+      responses:
+        '200':
+          description: Delete an empty non-root organization
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationCreated'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: permission:organizations.write
+      x-recent-mfa-seconds: 300
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Empty'
+            example: {}
+  /bff/v1/tenants/{tenant}/organizations/{org}/members:
+    get:
+      operationId: consoleListOrganizationMembers
+      summary: List direct organization member associations
+      description: Requires organizations.read+members.read on the token tenant. Explicit
+        deny overrides other allows, including owner operational privileges. Requires
+        BOTH organizations.read and members.read, explicit deny wins. Includes inactive
+        memberships so stale associations can be removed. Direct associations only,
+        not descendants or effective permissions. Verified email has the same members.read
+        protection as the space member directory. Returns authz ETag for removal.
+        UUID keyset pagination, no snapshot.
+      tags:
+      - Tenant management
+      security:
+      - ConsoleCookie: []
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/orgID'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/After'
+      - $ref: '#/components/parameters/Context'
+      responses:
+        '200':
+          description: List direct organization member associations
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberPage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: permission:organizations.read+members.read
+  /bff/v1/tenants/{tenant}/organizations/{org}/members/{member}:
+    delete:
+      operationId: consoleUnassignOrganization
+      summary: Remove one direct organization member association
+      description: Requires organizations.write on the token tenant. Explicit deny
+        overrides other allows, including owner operational privileges. Recent MFA
+        and organizations.write required. Both objects must belong to this tenant.
+        Inactive members can be unassigned. Leaves membership status, owner/role bindings
+        and other organization associations intact. A real removal increments tenant
+        authz_version and records audit/outbox; old tenant grants must reauthorize.
+        Already absent association with current ETag is a no-op; missing/foreign objects
+        return 404. Organization assignment does not itself grant access.
+      tags:
+      - Tenant management
+      security:
+      - ConsoleCookie: []
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/memberID'
+      - $ref: '#/components/parameters/orgID'
+      - $ref: '#/components/parameters/AuthzMatch'
+      - $ref: '#/components/parameters/Context'
+      - $ref: '#/components/parameters/CSRF'
+      - $ref: '#/components/parameters/Origin'
+      responses:
+        '204':
+          description: Remove one direct organization member association
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: permission:organizations.write
+      x-recent-mfa-seconds: 300
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Empty'
+            example: {}
+    put:
+      operationId: consoleAssignOrganization
+      summary: Associate a membership with an organization
+      description: Requires organizations.write on the token tenant. Explicit deny
+        overrides other allows, including owner operational privileges. Association
+        does not grant owner or other roles. Changes tenant authorization version;
+        obtain a new authorization afterwards.
+      tags:
+      - Tenant management
+      security:
+      - ConsoleCookie: []
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/memberID'
+      - $ref: '#/components/parameters/orgID'
+      - $ref: '#/components/parameters/AuthzMatch'
+      - $ref: '#/components/parameters/Context'
+      - $ref: '#/components/parameters/CSRF'
+      - $ref: '#/components/parameters/Origin'
+      responses:
+        '204':
+          description: Associate a membership with an organization
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: permission:organizations.write
+      x-recent-mfa-seconds: 300
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Empty'
+            example: {}
   /bff/v1/tenants/{tenant}/organizations/{org}/move:
     post:
       operationId: consoleMoveOrganization
@@ -828,63 +1132,6 @@ paths:
             example:
               parent_id: '00000000000000000000000000000000'
               dry_run: true
-  /bff/v1/tenants/{tenant}/organizations/{org}/members/{member}:
-    put:
-      operationId: consoleAssignOrganization
-      summary: Associate a membership with an organization
-      description: Requires organizations.write on the token tenant. Explicit deny
-        overrides other allows, including owner operational privileges. Association
-        does not grant owner or other roles. Changes tenant authorization version;
-        obtain a new authorization afterwards.
-      tags:
-      - Tenant management
-      security:
-      - ConsoleCookie: []
-      parameters:
-      - $ref: '#/components/parameters/TenantID'
-      - $ref: '#/components/parameters/memberID'
-      - $ref: '#/components/parameters/orgID'
-      - $ref: '#/components/parameters/AuthzMatch'
-      - $ref: '#/components/parameters/Context'
-      - $ref: '#/components/parameters/CSRF'
-      - $ref: '#/components/parameters/Origin'
-      responses:
-        '204':
-          description: Associate a membership with an organization
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestID'
-        '400':
-          $ref: '#/components/responses/Problem'
-        '401':
-          $ref: '#/components/responses/Problem'
-        '403':
-          $ref: '#/components/responses/Problem'
-        '404':
-          $ref: '#/components/responses/Problem'
-        '409':
-          $ref: '#/components/responses/Problem'
-        '412':
-          $ref: '#/components/responses/Problem'
-        '413':
-          $ref: '#/components/responses/Problem'
-        '415':
-          $ref: '#/components/responses/Problem'
-        '428':
-          $ref: '#/components/responses/Problem'
-        '429':
-          $ref: '#/components/responses/Problem'
-        '503':
-          $ref: '#/components/responses/Problem'
-      x-authorization: permission:organizations.write
-      x-recent-mfa-seconds: 300
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Empty'
-            example: {}
   /bff/v1/tenants/{tenant}/invitations:
     get:
       operationId: consoleListInvitations
@@ -2191,6 +2438,17 @@ components:
           minLength: 1
           maxLength: 128
           description: Nonblank, trimmed, at most 128 UTF-8 bytes.
+    OrganizationRename:
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Nonblank trimmed name, at most 128 UTF-8 bytes.
     OrganizationCreated:
       type: object
       additionalProperties: false
@@ -2960,11 +3218,11 @@ components:
   responses:
     Problem:
       description: RFC 9457 problem. Fixed code only; no input, token or SQL echoed.
-        Codes include protected_application, application_unavailable, invalid_token,
-        forbidden, insufficient_scope, recent_mfa_required, tenant_mismatch, invalid_request,
-        not_found, already_exists, reserved_role, role_in_use, last_active_owner,
-        root_cannot_move, organization_cycle, version_conflict, precondition_required,
-        invalid_precondition, rate_limited, temporarily_unavailable.
+        Codes include protected_organization, organization_not_empty, protected_application,
+        application_unavailable, invalid_token, forbidden, insufficient_scope, recent_mfa_required,
+        tenant_mismatch, invalid_request, not_found, already_exists, reserved_role,
+        role_in_use, last_active_owner, root_cannot_move, organization_cycle, version_conflict,
+        precondition_required, invalid_precondition, rate_limited, temporarily_unavailable.
       headers:
         X-Request-ID:
           $ref: '#/components/headers/RequestID'

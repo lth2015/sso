@@ -1,6 +1,6 @@
 # API Playground
 
-Playground 是登录后的真实 API 客户端。它读取与公共服务相同的 OpenAPI 0.11.0，通过控制台 BFF 调用现有 34 个业务操作。它使用真实 Hydra/主库授权，不创建演示身份或伪造 token。
+Playground 是登录后的真实 API 客户端。它读取与公共服务相同的 OpenAPI 0.12.0，通过控制台 BFF 调用现有 38 个业务操作。它使用真实 Hydra/主库授权，不创建演示身份或伪造 token。
 
 ## 启动与使用
 
@@ -40,3 +40,5 @@ scripts/console enable --email YOUR_LOCAL_ADDRESS
 完整接口字段、schema、示例及错误见 [完整 API 参考](api-reference.md)；设计与限制见 [完整手册](handbook.md)。`scripts/console playground-test` 通过真实注册/登录/调用检查读、写确认、ETag、权限拒绝、MFA、响应脱敏、导航清理与手机布局；`node --test tests/playground/model.test.mjs` 检查请求构造、凭证脱敏和单次转发边界。
 
 GCP、公网域名、TLS 和部署由 SRE 负责。本地验收不代表生产发布。
+
+应用停用/恢复的“读取最新 ETag”先校验 application ID，再读取目标应用详情；完整 app ETag 可超过 64 字符。组织重命名/删除使用组织列表版本，归属移除使用 authz 版本。写入确认仍只发送一次，不自动重新取版本后重放。

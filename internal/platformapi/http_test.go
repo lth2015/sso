@@ -77,6 +77,18 @@ func TestAPIRevocationBetweenAuthenticationAndWrite(t *testing.T) {
 	if err = db.QueryRow(`SELECT COUNT(*) FROM org_nodes WHERE tenant_id=? AND name='must-not-exist'`, a.Tenant).Scan(&count); err != nil || count != 0 {
 		t.Fatal("unauthorized mutation escaped rollback")
 	}
+	if _, err = repo.ForAuthorization(a).RenameOrganization(context.Background(), root, "revoked", tenant.OrgVersion); !errors.Is(err, store.ErrDenied) {
+		t.Fatal("rename accepted revoked authority")
+	}
+	if _, err = repo.ForAuthorization(a).DeleteOrganization(context.Background(), root, tenant.OrgVersion); !errors.Is(err, store.ErrDenied) {
+		t.Fatal("delete accepted revoked authority")
+	}
+	if err = repo.ForAuthorization(a).UnassignOrganization(context.Background(), a.Member, root, tenant.AuthzVersion); !errors.Is(err, store.ErrDenied) {
+		t.Fatal("unassign accepted revoked authority")
+	}
+	if _, _, err = repo.ForAuthorization(a).APIOrganizationMembers(context.Background(), root, 2, store.ID{}); !errors.Is(err, store.ErrDenied) {
+		t.Fatal("direct members accepted revoked authority")
+	}
 	// Global writes must also recheck authority, not just owner-scoped methods.
 	if _, err = repo.APIBootstrap(context.Background(), a, "not-created", "must-not-exist"); !errors.Is(err, store.ErrDenied) {
 		t.Fatal("global mutation accepted revoked authority")
