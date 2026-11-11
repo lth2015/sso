@@ -1045,3 +1045,20 @@ dialog .secret {
 .invitation-reissue strong {
   overflow-wrap: anywhere;
 }
+
+.protocol-observation {
+  border-top: 1px solid #e0e7f2;
+  margin-top: 18px;
+  padding-top: 14px;
+}
+.protocol-observation h4 {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+.protocol-observation p {
+  overflow-wrap: anywhere;
+}
+.protocol-observation ul {
+  padding-left: 20px;
+  font-size: 13px;
+}

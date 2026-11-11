@@ -36,6 +36,7 @@ func Handler(auth *Authenticator) http.Handler {
 	mountSecurity(mux, repo)
 	mountAuditExports(mux, repo)
 	mountInvitationLifecycle(mux, repo)
+	mountProtocolObservations(mux, repo, hydra.New())
 	mountApplications(mux, repo)
 	mountManagedClients(mux, repo, hydra.New())
 	mountMachineManagement(mux, repo, hydra.New())
@@ -522,6 +523,8 @@ func failure(w http.ResponseWriter, err error) {
 		problem(w, 409, "invalid_credential_state")
 	case errors.Is(err, store.ErrApplicationUnmanaged):
 		problem(w, 409, "application_unmanaged")
+	case errors.Is(err, store.ErrObservationChanged):
+		problem(w, 409, "observation_changed")
 	case errors.Is(err, store.ErrInvitationClosed):
 		problem(w, 409, "invalid_invitation_state")
 	case errors.Is(err, store.ErrClientState):

@@ -817,8 +817,9 @@ function privateAbsent(value) {
     const spec = require("../../api/openapi.json");
     for (const [route, operations] of Object.entries(spec.paths))
       if (
-        route.includes("/service-principals") ||
-        route.endsWith("/machine-events")
+        (route.includes("/service-principals") ||
+          route.endsWith("/machine-events")) &&
+        !route.endsWith("/protocol-status")
       )
         for (const method of Object.keys(operations))
           assert(covered.has(method + " " + route));

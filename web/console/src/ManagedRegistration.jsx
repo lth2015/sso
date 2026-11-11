@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { request, errorText } from "./api.js";
+import ProtocolProfile from "./ProtocolProfile.jsx";
 const stateText = {
   pending: "待完成登记",
   active: "已生效",
@@ -179,6 +180,18 @@ export default function ManagedRegistration({
             公开客户端使用 code + S256
             PKCE，无需客户端密钥。待完成登记时不能登录；撤销会使此客户端旧授权失效，其他客户端与中央登录保持可用。撤销不可恢复。
           </p>
+          <ProtocolProfile
+            key={value.data.client_id + ":" + value.data.version}
+            context={context.context}
+            csrf={csrf}
+            tenant={context.tenant_id}
+            application={value.data.application_id}
+            resource={value.data.client_id}
+            revision={value.data.version}
+            kind="public_client"
+            disabled={busy}
+            onFailure={onFailure}
+          />
           <label className="confirmation">
             <input
               type="checkbox"

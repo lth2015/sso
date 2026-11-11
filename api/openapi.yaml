@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SSO Public Platform API
-  version: 0.17.0
+  version: 0.18.0
   description: External server/native-client contract. Local reference server only;
     production requires TLS and configured public origins. OAuth code+S256 PKCE, platform
     audience https://api.sso.local. No cookie authentication or wildcard CORS; browser
@@ -26,6 +26,125 @@ tags:
 - name: Identity
 - name: Tenant management
 paths:
+  /v1/tenants/{tenant}/applications/{application}/clients/{client}/protocol-status:
+    get:
+      operationId: inspectManagedClientProtocol
+      summary: Observe reviewed protocol fields for an owned public client
+      description: Active owner/User platform:read only. Current primary authority
+        and resource ownership are checked before and after a fixed private Admin
+        GET; no tenant lock spans the RPC. Local revision changes return 409 observation_changed;
+        lost authority/expiry refuses the response. Bounded four-second total context
+        and three-second Admin timeout, no redirects or caller destination. matching
+        means only the nine reviewed non-secret fields agree, not login readiness
+        or a complete engine health proof. absent/conflict do not create, activate,
+        revoke, delete or adopt anything. Pending stays pending. Only controlled difference
+        field names, local revision/state, namespace and distinct observation/authority-check
+        times and resource_etag (the local resource write precondition, not an observation
+        HTTP validator) are returned; no actual differing values, Admin body, secret/hash/registration
+        token. No GET body/query, audit/outbox/authority mutation or automatic retry;
+        dependency failure 503. Existing explicit reconcile/revoke retain MFA/ETag
+        requirements.
+      tags:
+      - Tenant management
+      security:
+      - OAuth2:
+        - platform:read
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/applicationID'
+      - $ref: '#/components/parameters/clientID'
+      responses:
+        '200':
+          description: Observe reviewed protocol fields for an owned public client
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicClientProtocolObservation'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: reserved_owner:roles.manage
+  /v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/credentials/{credential}/protocol-status:
+    get:
+      operationId: inspectMachineCredentialProtocol
+      summary: Observe reviewed protocol fields for an owned machine credential
+      description: 'Active owner/User platform:read only, including disabled app/SP
+        and revoked/expired credential metadata. Private GET only, primary authority/resource
+        rechecked afterward; RPC does not hold a tenant lock. Revision/profile changes
+        return 409 observation_changed. Matching covers reviewed non-secret fields,
+        never verifies or recovers SK or proves JWT/consumer readiness. Pending/unknown/lost
+        SK cannot be activated or recovered here; revoke/cleanup/recreate remains
+        explicit. Absent remote registration does not itself change local active state
+        or revoke an issued JWT: use local revoke for authority changes. Returns only
+        fixed namespace/revision/state/time and enumerated difference names; no AK/secret/hash/Admin
+        values. Bounded deadlines, no request body/query, protocol/local writes, audit/outbox
+        mutation, caller destination or automatic repair. Dependency failure 503;
+        same User/tenant/owner bounds as credential metadata.'
+      tags:
+      - Tenant management
+      security:
+      - OAuth2:
+        - platform:read
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/applicationID'
+      - $ref: '#/components/parameters/principalID'
+      - $ref: '#/components/parameters/credentialID'
+      responses:
+        '200':
+          description: Observe reviewed protocol fields for an owned machine credential
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MachineCredentialProtocolObservation'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: reserved_owner:roles.manage
   /v1/tenants/{tenant}/applications/{application}/service-principals:
     get:
       operationId: listServicePrincipals
@@ -4339,6 +4458,145 @@ components:
       oneOf:
       - $ref: '#/components/schemas/ManagementAuditBatch'
       - $ref: '#/components/schemas/MachineAuditBatch'
+    PublicClientProtocolObservation:
+      type: object
+      additionalProperties: false
+      required:
+      - resource_kind
+      - tenant_id
+      - application_id
+      - service_principal_id
+      - resource_id
+      - revision
+      - resource_etag
+      - local_state
+      - profile_state
+      - differences
+      - observed_at
+      - authority_checked_at
+      properties:
+        resource_kind:
+          const: public_client
+        tenant_id: *id003
+        application_id: *id003
+        service_principal_id:
+          type: 'null'
+        resource_id: *id003
+        revision: *id004
+        resource_etag:
+          type: string
+          pattern: ^"client-[a-f0-9]{32}-[a-f0-9]{32}-[1-9][0-9]*"$
+          description: Current local resource write precondition, not an HTTP validator
+            for this time-varying observation.
+        local_state:
+          enum:
+          - pending
+          - active
+          - revoked
+        profile_state:
+          enum:
+          - matching
+          - absent
+          - conflict
+        differences:
+          type: array
+          maxItems: 9
+          uniqueItems: true
+          items:
+            enum: &id009
+            - client_id
+            - client_name
+            - token_endpoint_auth_method
+            - redirect_uris
+            - grant_types
+            - response_types
+            - scope
+            - audience
+            - metadata
+        observed_at:
+          type: string
+          format: date-time
+        authority_checked_at:
+          type: string
+          format: date-time
+      allOf:
+      - if:
+          properties:
+            profile_state:
+              const: conflict
+        then:
+          properties:
+            differences:
+              minItems: 1
+        else:
+          properties:
+            differences:
+              maxItems: 0
+    MachineCredentialProtocolObservation:
+      type: object
+      additionalProperties: false
+      required:
+      - resource_kind
+      - tenant_id
+      - application_id
+      - service_principal_id
+      - resource_id
+      - revision
+      - resource_etag
+      - local_state
+      - profile_state
+      - differences
+      - observed_at
+      - authority_checked_at
+      properties:
+        resource_kind:
+          const: machine_credential
+        tenant_id: *id003
+        application_id: *id003
+        service_principal_id: *id003
+        resource_id: *id003
+        revision: *id004
+        resource_etag:
+          type: string
+          pattern: ^"cred-[a-f0-9]{32}-[a-f0-9]{32}-[1-9][0-9]*"$
+          description: Current local resource write precondition, not an HTTP validator
+            for this time-varying observation.
+        local_state:
+          enum:
+          - pending
+          - active
+          - revoked
+          - expired
+        profile_state:
+          enum:
+          - matching
+          - absent
+          - conflict
+        differences:
+          type: array
+          maxItems: 9
+          uniqueItems: true
+          items:
+            enum: *id009
+        observed_at:
+          type: string
+          format: date-time
+        authority_checked_at:
+          type: string
+          format: date-time
+      allOf:
+      - if:
+          properties:
+            profile_state:
+              const: conflict
+        then:
+          properties:
+            differences:
+              minItems: 1
+        else:
+          properties:
+            differences:
+              maxItems: 0
   parameters:
     PrincipalMatch:
       in: header
@@ -4482,10 +4740,11 @@ components:
     Problem:
       description: RFC 9457 problem. Fixed code only; no input, token or SQL echoed.
         Codes include credential_limit, invalid_credential_state, service_principal_disabled,
-        application_unmanaged, invalid_client_state, invalid_invitation_state, protocol_client_conflict,
-        protected_organization, organization_not_empty, protected_application, application_unavailable,
-        invalid_token, forbidden, insufficient_scope, recent_mfa_required, tenant_mismatch,
-        invalid_request, not_found, already_exists, reserved_role, role_in_use, last_active_owner,
+        application_unmanaged, observation_changed, invalid_client_state, invalid_invitation_state,
+        protocol_client_conflict, protected_organization, organization_not_empty,
+        protected_application, application_unavailable, invalid_token, forbidden,
+        insufficient_scope, recent_mfa_required, tenant_mismatch, invalid_request,
+        not_found, already_exists, reserved_role, role_in_use, last_active_owner,
         root_cannot_move, organization_cycle, version_conflict, precondition_required,
         invalid_precondition, rate_limited, temporarily_unavailable.
       headers:

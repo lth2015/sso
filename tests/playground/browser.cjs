@@ -54,7 +54,7 @@ async function read(page, operation, code = 200) {
     await p.getByLabel("选择 API", { exact: true }).waitFor();
     assert.equal(
       await p.getByLabel("选择 API", { exact: true }).locator("option").count(),
-      57,
+      59,
     );
     await choose(p, "createMachineCredential");
     await p
@@ -177,6 +177,35 @@ async function read(page, operation, code = 200) {
     );
     assert.equal(renewedInvitation.token, "[已隐藏]");
     assert.equal(renewedInvitation.revision, 2);
+    phase = "readonly-protocol-observation-through-playground";
+    const protocolApp = (
+      await s.bff(p, base + "/applications", {
+        method: "POST",
+        body: { name: "Playground protocol observation" },
+      })
+    ).body;
+    const protocolClient = (
+      await s.bff(p, base + "/applications/" + protocolApp.id + "/clients", {
+        method: "POST",
+        body: {
+          name: "Playground public client",
+          redirect_uri: "http://127.0.0.1:9876/callback",
+        },
+      })
+    ).body;
+    await choose(p, "inspectManagedClientProtocol");
+    await p.getByLabel("application", { exact: true }).fill(protocolApp.id);
+    await p
+      .getByLabel("client", { exact: true })
+      .fill(protocolClient.client_id);
+    await p.getByRole("button", { name: "发送读取请求", exact: true }).click();
+    await status(p, 200);
+    const observedProtocol = JSON.parse(
+      await p.getByTestId("playground-response").textContent(),
+    );
+    assert.equal(observedProtocol.profile_state, "absent");
+    assert.equal(observedProtocol.local_state, "pending");
+    assert.equal(observedProtocol.resource_id, protocolClient.client_id);
     phase = "actual-permission-denial";
     await s.nav(guest.page, "API Playground");
     await read(guest.page, "listMembers", 403);
@@ -242,7 +271,7 @@ async function read(page, operation, code = 200) {
   }
   if (success)
     console.log(
-      "Playground acceptance passed: 57 management contracts (56 executable; one-time SK uses dedicated UI), real reads/writes, explicit confirmation, one send per action, ETag/412, member denial, MFA, redaction, escaping, navigation reset and desktop/mobile",
+      "Playground acceptance passed: 59 management contracts (58 executable; one-time SK uses dedicated UI), real reads/writes, explicit confirmation, one send per action, ETag/412, member denial, MFA, redaction, escaping, navigation reset and desktop/mobile",
     );
 })().catch((e) => {
   console.error(

@@ -1,6 +1,7 @@
 package hydra
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -51,8 +52,14 @@ func (c *Client) ReadPublicClient(ctx context.Context, id string) (PublicClientP
 	if r.StatusCode != 200 {
 		return v, false, errors.New("protocol request rejected")
 	}
-	if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&v) != nil {
-		return v, false, errors.New("protocol response invalid")
+	body, err := io.ReadAll(io.LimitReader(r.Body, (1<<20)+1))
+	if err != nil || len(body) > 1<<20 {
+		return PublicClientProfile{}, false, errors.New("protocol response invalid")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	var extra any
+	if decoder.Decode(&v) != nil || decoder.Decode(&extra) != io.EOF {
+		return PublicClientProfile{}, false, errors.New("protocol response invalid")
 	}
 	return v, true, nil
 }

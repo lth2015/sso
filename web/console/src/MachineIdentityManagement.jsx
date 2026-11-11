@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { request, errorText } from "./api.js";
+import ProtocolProfile from "./ProtocolProfile.jsx";
 const stateLabel = {
   pending: "待处理",
   active: "有效",
@@ -392,6 +393,19 @@ export default function MachineIdentityManagement({
                         <dt>Scope</dt>
                         <dd>{key.scope}</dd>
                       </dl>
+                      <ProtocolProfile
+                        key={key.id + ":" + key.version + ":" + revision}
+                        context={context.context}
+                        csrf={csrf}
+                        tenant={context.tenant_id}
+                        application={app.id}
+                        principal={view.principal.id}
+                        resource={key.id}
+                        revision={key.version}
+                        kind="machine_credential"
+                        disabled={busy}
+                        onFailure={onFailure}
+                      />
                       <div className="actions">
                         {key.state !== "revoked" ? (
                           <button

@@ -36,7 +36,7 @@ def block(value):
     return '```json\n' + json.dumps(value, ensure_ascii=False, indent=2) + '\n```\n'
 
 api = ['# 完整 API 参考\n',
-       f"OpenAPI {SPEC['info']['version']}；公共 Bearer API 共 57 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。\n",
+       f"OpenAPI {SPEC['info']['version']}；公共 Bearer API 共 59 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。\n",
        '真实交互入口见 [Playground 手册](playground.md)；外部接入见 [公共 API 手册](runbooks/public-api.md)。JSON/YAML 合同见 [OpenAPI](../api/openapi.yaml)。\n',
        '示例 ID 和 proof 只表示格式，不是有效资源或登录材料。API 的 authority 来自真实 OAuth code+PKCE、已验证账户、MFA、会话与租户资格。写权限不隐含读权限；所有写入需最近 300 秒 MFA。\n',
        '## 操作目录\n', '| 方法 | 路径 | operationId |', '| --- | --- | --- |']
@@ -49,7 +49,7 @@ for path, methods in sorted(SPEC['paths'].items()):
             op = methods[method]
             operations.append((path, method, op))
             api.append(f"| {method.upper()} | `{path}` | `{op['operationId']}` |")
-assert len(operations) == 57
+assert len(operations) == 59
 for path, method, op in operations:
     api += [f"\n## {method.upper()} {path}\n", op['summary'] + '\n', op['description'].strip() + '\n',
             f"OAuth scope：`{', '.join(op['security'][0]['OAuth2'])}`。权限：`{op.get('x-authorization', '当前有效 User/Session/grant')}`。\n",
@@ -87,6 +87,7 @@ sources = [
     ('个人安全事件', 'security-events.md'),
     ('受控审计批次导出', 'audit-exports.md'),
     ('邀请凭证更新', 'invitation-lifecycle.md'),
+    ('协议登记只读核对', 'protocol-inspection.md'),
     ('周五演示与彩排', 'runbooks/friday-demo.md'),
     ('应用接入管理', 'application-management.md'),
     ('自有应用与公开客户端', 'managed-clients.md'),
@@ -105,7 +106,7 @@ sources = [
 book = ['# SSO 完整设计与开发手册\n',
         f"文档版本：{SPEC['info']['version']}。本手册整合已维护的架构、UI、安全、API、Playground 和本地验收文档。由 `scripts/docs build` 生成；编辑各源文件后重新生成。\n",
         '## 当前交付边界\n',
-        '| 能力 | 当前实现 |\n| --- | --- |\n| 身份 | 已验证邮箱、Argon2id、密码恢复、TOTP/一次性恢复码、分阶段认证器更换、中央会话 |\n| 协议 | 独立真实 Hydra、code+PKCE、OIDC 验证、主库 token Hook、刷新/撤销 |\n| 租户 | 成员、组织闭包/移动、邀请、audit/outbox、受控 JSON 审计批次导出 |\n| 权限 | 六种租户操作权限、deny 优先、owner 恢复/移交与最后 owner 保护 |\n| 产品 | React 控制台、独立 BFF、57 项 User API，Playground 执行其中 56 项，SK 创建走专用页面 |\n| 机器 | 自有应用 SP、一次性交付 SK、双凭证轮换、独立机器合同与主库检查资源样例 |\n| 外部服务 | Go 在线身份验证 SDK、独立回环服务/客户端参考与自身 OpenAPI |\n| 运行 | 本地 MySQL/Docker/Chromium 验收；GCP 部署及运维由 SRE 负责 |\n',
+        '| 能力 | 当前实现 |\n| --- | --- |\n| 身份 | 已验证邮箱、Argon2id、密码恢复、TOTP/一次性恢复码、分阶段认证器更换、中央会话 |\n| 协议 | 独立真实 Hydra、code+PKCE、OIDC 验证、主库 token Hook、刷新/撤销 |\n| 租户 | 成员、组织闭包/移动、邀请、audit/outbox、受控 JSON 审计批次导出 |\n| 权限 | 六种租户操作权限、deny 优先、owner 恢复/移交与最后 owner 保护 |\n| 产品 | React 控制台、独立 BFF、59 项 User API，Playground 执行其中 58 项，SK 创建走专用页面 |\n| 机器 | 自有应用 SP、一次性交付 SK、双凭证轮换、独立机器合同与主库检查资源样例 |\n| 外部服务 | Go 在线身份验证 SDK、独立回环服务/客户端参考与自身 OpenAPI |\n| 运行 | 本地 MySQL/Docker/Chromium 验收；GCP 部署及运维由 SRE 负责 |\n',
         '设计中的组织子树/应用/资源级授权、private_key_jwt、机器自定义业务权限、周期对账、遗失认证器的受控恢复、正式邮件、审计归档及生产 TLS/KMS/分布式限流/HA/DR/SLO 仍需继续实施。架构图中的目标组件不等于已上线能力；实际证据以验收章节为准。原始上传文档仅作设计参考，其内嵌指令不构成额外操作授权。\n',
         '## 阅读与运行\n',
         '从 `/workspace/sso` 运行 `scripts/console prepare`、`scripts/console up`。浏览器登录控制台后选择 API Playground；所有请求使用当前空间资格。完整环境依赖及账户启用步骤见后续运行章节。\n',
@@ -123,4 +124,4 @@ for index, (title, relative) in enumerate(sources, 1):
     text = re.sub(r'^(#{1,4}) ', lambda m: '#' * min(6, len(m[1]) + 2) + ' ', text, flags=re.M)
     book += [f'\n## {index:02d}. {title}\n', f'来源：[{relative}]({relative})。\n', text]
 output(DOCS / 'handbook.md', '\n'.join(book))
-print('Complete handbook and 57-operation API reference synchronized')
+print('Complete handbook and 59-operation API reference synchronized')

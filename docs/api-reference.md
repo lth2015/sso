@@ -1,6 +1,6 @@
 # 完整 API 参考
 
-OpenAPI 0.17.0；公共 Bearer API 共 57 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
+OpenAPI 0.18.0；公共 Bearer API 共 59 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
 
 真实交互入口见 [Playground 手册](playground.md)；外部接入见 [公共 API 手册](runbooks/public-api.md)。JSON/YAML 合同见 [OpenAPI](../api/openapi.yaml)。
 
@@ -26,6 +26,7 @@ OpenAPI 0.17.0；公共 Bearer API 共 57 个业务操作。此文件由 OpenAPI
 | GET | `/v1/tenants/{tenant}/applications/{application}/clients` | `listApplicationClients` |
 | POST | `/v1/tenants/{tenant}/applications/{application}/clients` | `createManagedClient` |
 | GET | `/v1/tenants/{tenant}/applications/{application}/clients/{client}` | `getManagedClient` |
+| GET | `/v1/tenants/{tenant}/applications/{application}/clients/{client}/protocol-status` | `inspectManagedClientProtocol` |
 | POST | `/v1/tenants/{tenant}/applications/{application}/clients/{client}/reconcile` | `reconcileManagedClient` |
 | POST | `/v1/tenants/{tenant}/applications/{application}/clients/{client}/revoke` | `revokeManagedClient` |
 | POST | `/v1/tenants/{tenant}/applications/{application}/disable` | `disableTenantApplication` |
@@ -37,6 +38,7 @@ OpenAPI 0.17.0；公共 Bearer API 共 57 个业务操作。此文件由 OpenAPI
 | POST | `/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/credentials` | `createMachineCredential` |
 | GET | `/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/credentials/{credential}` | `getMachineCredential` |
 | POST | `/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/credentials/{credential}/cleanup` | `cleanupMachineCredential` |
+| GET | `/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/credentials/{credential}/protocol-status` | `inspectMachineCredentialProtocol` |
 | POST | `/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/credentials/{credential}/revoke` | `revokeMachineCredential` |
 | POST | `/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/disable` | `disableServicePrincipal` |
 | POST | `/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/enable` | `enableServicePrincipal` |
@@ -1849,6 +1851,188 @@ HTTP 200
 错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
 
 
+## GET /v1/tenants/{tenant}/applications/{application}/clients/{client}/protocol-status
+
+Observe reviewed protocol fields for an owned public client
+
+Active owner/User platform:read only. Current primary authority and resource ownership are checked before and after a fixed private Admin GET; no tenant lock spans the RPC. Local revision changes return 409 observation_changed; lost authority/expiry refuses the response. Bounded four-second total context and three-second Admin timeout, no redirects or caller destination. matching means only the nine reviewed non-secret fields agree, not login readiness or a complete engine health proof. absent/conflict do not create, activate, revoke, delete or adopt anything. Pending stays pending. Only controlled difference field names, local revision/state, namespace and distinct observation/authority-check times and resource_etag (the local resource write precondition, not an observation HTTP validator) are returned; no actual differing values, Admin body, secret/hash/registration token. No GET body/query, audit/outbox/authority mutation or automatic retry; dependency failure 503. Existing explicit reconcile/revoke retain MFA/ETag requirements.
+
+OAuth scope：`platform:read`。权限：`reserved_owner:roles.manage`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "client",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Observe reviewed protocol fields for an owned public client",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "resource_kind",
+          "tenant_id",
+          "application_id",
+          "service_principal_id",
+          "resource_id",
+          "revision",
+          "resource_etag",
+          "local_state",
+          "profile_state",
+          "differences",
+          "observed_at",
+          "authority_checked_at"
+        ],
+        "properties": {
+          "resource_kind": {
+            "const": "public_client"
+          },
+          "tenant_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "application_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "service_principal_id": {
+            "type": "null"
+          },
+          "resource_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "resource_etag": {
+            "type": "string",
+            "pattern": "^\"client-[a-f0-9]{32}-[a-f0-9]{32}-[1-9][0-9]*\"$",
+            "description": "Current local resource write precondition, not an HTTP validator for this time-varying observation."
+          },
+          "local_state": {
+            "enum": [
+              "pending",
+              "active",
+              "revoked"
+            ]
+          },
+          "profile_state": {
+            "enum": [
+              "matching",
+              "absent",
+              "conflict"
+            ]
+          },
+          "differences": {
+            "type": "array",
+            "maxItems": 9,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "client_id",
+                "client_name",
+                "token_endpoint_auth_method",
+                "redirect_uris",
+                "grant_types",
+                "response_types",
+                "scope",
+                "audience",
+                "metadata"
+              ]
+            }
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "authority_checked_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "profile_state": {
+                  "const": "conflict"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "differences": {
+                  "minItems": 1
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "differences": {
+                  "maxItems": 0
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
 ## POST /v1/tenants/{tenant}/applications/{application}/clients/{client}/reconcile
 
 Reconcile the exact owned protocol client profile
@@ -3531,6 +3715,199 @@ HTTP 200
             "const": "machine:invoke"
           }
         }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## GET /v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/credentials/{credential}/protocol-status
+
+Observe reviewed protocol fields for an owned machine credential
+
+Active owner/User platform:read only, including disabled app/SP and revoked/expired credential metadata. Private GET only, primary authority/resource rechecked afterward; RPC does not hold a tenant lock. Revision/profile changes return 409 observation_changed. Matching covers reviewed non-secret fields, never verifies or recovers SK or proves JWT/consumer readiness. Pending/unknown/lost SK cannot be activated or recovered here; revoke/cleanup/recreate remains explicit. Absent remote registration does not itself change local active state or revoke an issued JWT: use local revoke for authority changes. Returns only fixed namespace/revision/state/time and enumerated difference names; no AK/secret/hash/Admin values. Bounded deadlines, no request body/query, protocol/local writes, audit/outbox mutation, caller destination or automatic repair. Dependency failure 503; same User/tenant/owner bounds as credential metadata.
+
+OAuth scope：`platform:read`。权限：`reserved_owner:roles.manage`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "principal",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "credential",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Observe reviewed protocol fields for an owned machine credential",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "resource_kind",
+          "tenant_id",
+          "application_id",
+          "service_principal_id",
+          "resource_id",
+          "revision",
+          "resource_etag",
+          "local_state",
+          "profile_state",
+          "differences",
+          "observed_at",
+          "authority_checked_at"
+        ],
+        "properties": {
+          "resource_kind": {
+            "const": "machine_credential"
+          },
+          "tenant_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "application_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "service_principal_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "resource_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "resource_etag": {
+            "type": "string",
+            "pattern": "^\"cred-[a-f0-9]{32}-[a-f0-9]{32}-[1-9][0-9]*\"$",
+            "description": "Current local resource write precondition, not an HTTP validator for this time-varying observation."
+          },
+          "local_state": {
+            "enum": [
+              "pending",
+              "active",
+              "revoked",
+              "expired"
+            ]
+          },
+          "profile_state": {
+            "enum": [
+              "matching",
+              "absent",
+              "conflict"
+            ]
+          },
+          "differences": {
+            "type": "array",
+            "maxItems": 9,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "client_id",
+                "client_name",
+                "token_endpoint_auth_method",
+                "redirect_uris",
+                "grant_types",
+                "response_types",
+                "scope",
+                "audience",
+                "metadata"
+              ]
+            }
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "authority_checked_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "profile_state": {
+                  "const": "conflict"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "differences": {
+                  "minItems": 1
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "differences": {
+                  "maxItems": 0
+                }
+              }
+            }
+          }
+        ]
       }
     }
   }

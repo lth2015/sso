@@ -2,6 +2,8 @@
 import json,re,subprocess,sys,urllib.request,urllib.error
 from pathlib import Path
 root=Path(__file__).resolve().parents[2]
+sys.path.insert(0,str(root/'tests/support'))
+from fixture_protection import protect_demo
 action,app,principal,credential=sys.argv[1:]
 if action not in {'expire','pending','orphan-create','orphan-delete'} or any(not re.fullmatch('[a-f0-9]{32}',v) for v in [app,principal,credential]):raise SystemExit('Invalid machine fixture')
 command=['docker','compose','--env-file',str(root/'.local/m0.env'),'-f',str(root/'deploy/local/compose.yml'),'exec','-T','mysql','sh','-c','MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql --default-character-set=utf8mb4 -uroot -N -B sso_business']
@@ -9,8 +11,12 @@ def sql(query):
  p=subprocess.run(command,input=query,text=True,capture_output=True)
  if p.returncode:raise SystemExit('Machine fixture query failed (details withheld)')
  return p.stdout.strip()
-tenant=sql(f"SELECT LOWER(HEX(sp.tenant_id)) FROM service_principals sp JOIN memberships m ON m.tenant_id=sp.tenant_id AND m.id=sp.creator_membership_id JOIN login_aliases la ON la.user_id=m.user_id WHERE sp.application_id=UNHEX('{app}') AND sp.id=UNHEX('{principal}') AND la.normalized_email REGEXP '^browser-[a-f0-9]{{32}}@example[.]invalid$';")
-if not re.fullmatch('[a-f0-9]{32}',tenant):raise SystemExit('Refusing non-fixture machine mutation')
+try:
+ row=json.loads(sql(f"SELECT JSON_OBJECT('tenant',LOWER(HEX(sp.tenant_id)),'email',la.normalized_email) FROM service_principals sp JOIN memberships m ON m.tenant_id=sp.tenant_id AND m.id=sp.creator_membership_id JOIN login_aliases la ON la.user_id=m.user_id WHERE sp.application_id=UNHEX('{app}') AND sp.id=UNHEX('{principal}') AND la.normalized_email REGEXP '^browser-[a-f0-9]{{32}}@example[.]invalid$';"))
+except (ValueError,TypeError):raise SystemExit('Refusing non-fixture machine mutation')
+tenant=row.get('tenant','')
+if not re.fullmatch('[a-f0-9]{32}',tenant) or not isinstance(row.get('email'),str):raise SystemExit('Refusing non-fixture machine mutation')
+protect_demo(root,[row['email']],[tenant])
 where=f"tenant_id=UNHEX('{tenant}') AND application_id=UNHEX('{app}') AND service_principal_id=UNHEX('{principal}') AND id=UNHEX('{credential}')"
 if action in {'expire','pending'}:
  if sql('SELECT COUNT(*) FROM machine_credentials WHERE '+where+" AND state='active';")!='1':raise SystemExit('Refusing unexpected machine fixture state')
