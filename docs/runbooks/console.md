@@ -58,4 +58,4 @@ scripts/console enable --email YOUR_LOCAL_ADDRESS --second-tenant
 新增 API Playground 导航，可读取同源 OpenAPI 并调用固定的 28 个业务操作。GET 直接发送，写入预览/确认后发送一次，支持 ETag 读取、HTTP 状态/错误、cURL 模板和凭证字段脱敏；离开页面清空内存并取消在途读取，不自动重发写入。使用及限制见 [Playground 手册](../playground.md)。
 
 
-安全会话页面已增加个人 MFA/恢复码/会话概览及“撤销其他会话”确认流程；同一中央会话的多个标签页保留。恢复码管理跳转可信认证域，不在 BFF/Playground 输入密码或验证码。见 [个人安全](../account-security.md)。
+安全会话页面已增加个人 MFA/恢复码/会话概览及“撤销其他会话”确认流程；同一中央会话的多个标签页保留。恢复码管理和认证器更换跳转可信认证域，不在 BFF/Playground 输入密码或验证码。认证器更换的两阶段/取消/结果不明处理见 [专门手册](../authenticator-management.md)，验收 `scripts/console authenticator-test`。见 [个人安全](../account-security.md)。

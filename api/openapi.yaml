@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SSO Public Platform API
-  version: 0.8.0
+  version: 0.9.0
   description: External server/native-client contract. Local reference server only;
     production requires TLS and configured public origins. OAuth code+S256 PKCE, platform
     audience https://api.sso.local. No cookie authentication or wildcard CORS; browser

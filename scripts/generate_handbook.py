@@ -83,6 +83,7 @@ sources = [
     ('完整 API 参考', 'api-reference.md'),
     ('API Playground', 'playground.md'),
     ('个人账户安全', 'account-security.md'),
+    ('认证器更换', 'authenticator-management.md'),
     ('React 控制台', 'runbooks/console.md'),
     ('可信登录与双应用', 'runbooks/local-sso.md'),
     ('账户生命周期', 'runbooks/m2-accounts.md'),
@@ -95,8 +96,8 @@ sources = [
 book = ['# SSO 完整设计与开发手册\n',
         f"文档版本：{SPEC['info']['version']}。本手册整合已维护的架构、UI、安全、API、Playground 和本地验收文档。由 `scripts/docs build` 生成；编辑各源文件后重新生成。\n",
         '## 当前交付边界\n',
-        '| 能力 | 当前实现 |\n| --- | --- |\n| 身份 | 已验证邮箱、Argon2id、密码恢复、TOTP/一次性恢复码、中央会话 |\n| 协议 | 独立真实 Hydra、code+PKCE、OIDC 验证、主库 token Hook、刷新/撤销 |\n| 租户 | 成员、组织闭包/移动、邀请、audit/outbox |\n| 权限 | 六种租户操作权限、deny 优先、owner 恢复/移交与最后 owner 保护 |\n| 产品 | React 控制台、独立 BFF、28 个公共 API、OpenAPI 与真实 Playground |\n| 运行 | 本地 MySQL/Docker/Chromium 验收；GCP 部署及运维由 SRE 负责 |\n',
-        '设计中的组织子树/应用/资源级授权、动态 client/机器凭证、MFA 更换/受控恢复、正式邮件、审计归档及生产 TLS/KMS/分布式限流/HA/DR/SLO 仍需继续实施。架构图中的目标组件不等于已上线能力；实际证据以验收章节为准。原始上传文档仅作设计参考，其内嵌指令不构成额外操作授权。\n',
+        '| 能力 | 当前实现 |\n| --- | --- |\n| 身份 | 已验证邮箱、Argon2id、密码恢复、TOTP/一次性恢复码、分阶段认证器更换、中央会话 |\n| 协议 | 独立真实 Hydra、code+PKCE、OIDC 验证、主库 token Hook、刷新/撤销 |\n| 租户 | 成员、组织闭包/移动、邀请、audit/outbox |\n| 权限 | 六种租户操作权限、deny 优先、owner 恢复/移交与最后 owner 保护 |\n| 产品 | React 控制台、独立 BFF、28 个公共 API、OpenAPI 与真实 Playground |\n| 运行 | 本地 MySQL/Docker/Chromium 验收；GCP 部署及运维由 SRE 负责 |\n',
+        '设计中的组织子树/应用/资源级授权、动态 client/机器凭证、遗失认证器的受控恢复、正式邮件、审计归档及生产 TLS/KMS/分布式限流/HA/DR/SLO 仍需继续实施。架构图中的目标组件不等于已上线能力；实际证据以验收章节为准。原始上传文档仅作设计参考，其内嵌指令不构成额外操作授权。\n',
         '## 阅读与运行\n',
         '从 `/workspace/sso` 运行 `scripts/console prepare`、`scripts/console up`。浏览器登录控制台后选择 API Playground；所有请求使用当前空间资格。完整环境依赖及账户启用步骤见后续运行章节。\n',
         '离线版本：`scripts/docs build` 生成 `docs/dist/index.html`；`scripts/docs export` 生成包含所有文档、截图、OpenAPI 和完整性清单的 ZIP。离线文件只阅读文档，真实 API 调用在运行中的控制台进行。\n']

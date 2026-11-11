@@ -8,11 +8,12 @@ case "${1:-}" in
  rbac-test) node tests/rbac/browser.cjs ;;
  playground-test) node tests/playground/browser.cjs ;;
  security-test) node tests/security/browser.cjs ;;
+ authenticator-test) node tests/authenticator/browser.cjs ;;
  verify-fixture)
   [[ "${2:-}" == '--user' && "${3:-}" =~ ^[a-f0-9]{32}$ ]] || exit 2
   docker compose --env-file .local/m0.env -f deploy/local/compose.yml run --rm --no-deps -e SSO_CONSOLE_TEST=true -e "CONSOLE_TEST_USER=$3" demo-tests -test.v -test.run 'TestConsoleRealTokenIsolationAndExpiryFixture|TestDemoDatabaseRoles'
   ;;
  enable) shift; scripts/api enable "$@" ;;
  down) scripts/sso down ;;
- *) echo 'Usage: scripts/console {prepare|up|test|rbac-test|playground-test|security-test|enable --email ADDRESS|down}' >&2; exit 2 ;;
+ *) echo 'Usage: scripts/console {prepare|up|test|rbac-test|playground-test|security-test|authenticator-test|enable --email ADDRESS|down}' >&2; exit 2 ;;
 esac

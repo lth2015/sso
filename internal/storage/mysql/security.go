@@ -215,19 +215,7 @@ func (s Store) RegenerateRecovery(ctx context.Context, id ID, browser, sessionDi
 	if _, err = tx.ExecContext(ctx, `UPDATE mfa_factors SET last_step=?,security_version=security_version+1 WHERE user_id=?`, step, f.User); err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE users SET security_version=security_version+1 WHERE id=?`, f.User); err != nil {
-		return err
-	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO protocol_logout_jobs(sid,user_id) SELECT DISTINCT hydra_sid,user_id FROM business_grants WHERE user_id=? AND hydra_sid<>'' ON DUPLICATE KEY UPDATE state='pending',attempts=0,next_attempt_at=0`, f.User); err != nil {
-		return err
-	}
-	if _, err = tx.ExecContext(ctx, `UPDATE sso_sessions SET active=FALSE WHERE user_id=?`, f.User); err != nil {
-		return err
-	}
-	if _, err = tx.ExecContext(ctx, `UPDATE bff_sessions SET active=FALSE WHERE user_id=?`, f.User); err != nil {
-		return err
-	}
-	if _, err = tx.ExecContext(ctx, `UPDATE business_grants SET active=FALSE WHERE user_id=?`, f.User); err != nil {
+	if err = revokeSecurityAuthority(ctx, tx, f.User); err != nil {
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE security_actions SET state='complete' WHERE id=?`, id); err != nil {
@@ -237,4 +225,23 @@ func (s Store) RegenerateRecovery(ctx context.Context, id ID, browser, sessionDi
 		return err
 	}
 	return tx.Commit()
+}
+
+func revokeSecurityAuthority(ctx context.Context, tx *sql.Tx, user ID) error {
+	if _, err := tx.ExecContext(ctx, `UPDATE users SET security_version=security_version+1 WHERE id=?`, user); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO protocol_logout_jobs(sid,user_id) SELECT DISTINCT hydra_sid,user_id FROM business_grants WHERE user_id=? AND hydra_sid<>'' ON DUPLICATE KEY UPDATE state='pending',attempts=0,next_attempt_at=0`, user); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE sso_sessions SET active=FALSE WHERE user_id=?`, user); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE bff_sessions SET active=FALSE WHERE user_id=?`, user); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE business_grants SET active=FALSE WHERE user_id=?`, user); err != nil {
+		return err
+	}
+	return nil
 }

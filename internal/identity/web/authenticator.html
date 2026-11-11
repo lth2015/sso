@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="change-state" content="{{.State}}" />
+    <meta name="change-id" content="{{.ID}}" />
+    <meta name="change-csrf" content="{{.CSRF}}" />
+    <title>Identity · 更换认证器</title>
+    <link rel="stylesheet" href="/sso/security.css" />
+    <script src="/sso/authenticator.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <div class="brand">◈ Identity</div>
+      <section class="card">
+        <p class="eyebrow">账户安全 · 统一认证域</p>
+        <h1>更换认证器</h1>
+        {{if eq .State "ready"}}
+        <p>
+          先验证当前密码和旧认证器，再配置并验证新认证器。最终确认前，原认证器与恢复码保持有效。
+        </p>
+        <form id="old-factor-form">
+          <label for="password">当前密码</label
+          ><input
+            id="password"
+            type="password"
+            autocomplete="current-password"
+            maxlength="128"
+            required
+          /><label for="old-code">旧认证器动态验证码</label
+          ><input
+            id="old-code"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            pattern="[0-9]{6}"
+            maxlength="6"
+            required
+          /><button type="submit">验证旧认证器并继续</button>
+        </form>
+        <form id="new-factor-form" hidden>
+          <h2>配置新的认证器</h2>
+          <p>
+            在新认证器中手动添加以下密钥，使用六位 TOTP、SHA-1、30
+            秒周期。密钥仅在此步骤显示一次；不要分享。
+          </p>
+          <pre id="new-secret"></pre>
+          <label for="new-code">新认证器动态验证码</label
+          ><input
+            id="new-code"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            pattern="[0-9]{6}"
+            maxlength="6"
+            required
+          /><label class="confirm"
+            ><input
+              id="confirmed"
+              type="checkbox"
+              required
+            />我确认替换认证器，使旧密钥、恢复码和全部旧会话失效</label
+          ><button type="submit">确认启用新认证器</button>
+        </form>
+        <section id="completed" hidden>
+          <h2>保存新的恢复码</h2>
+          <p>
+            新认证器已启用；旧密钥、旧恢复码和全部旧会话已失效。请安全保存以下单次恢复码，离开后无法再次查看。
+          </p>
+          <pre id="codes"></pre>
+          <button id="done" type="button">我已安全保存，重新登录</button>
+        </section>
+        <button id="cancel" type="button">取消更换，保留原认证器</button
+        ><a
+          id="relogin"
+          href="http://console.localhost:3003/login?force=1"
+          hidden
+          >重新登录核对</a
+        >
+        <p id="status" role="status" aria-live="polite"></p>
+        <p id="error" role="alert"></p>
+        {{else}}
+        <p>当前统一登录已失效。请先完成登录，再进入此页面。</p>
+        <a href="http://console.localhost:3003/login?force=1">登录控制台</a
+        >{{end}}<a class="back" href="http://console.localhost:3003"
+          >返回控制台</a
+        >
+      </section>
+      <p class="footnote">
+        必须持有当前密码和旧认证器。遗失认证器的受控恢复不在此流程中。
+      </p>
+    </main>
+  </body>
+</html>

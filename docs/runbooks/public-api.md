@@ -18,6 +18,7 @@ node tests/api/docs.cjs
 - [OpenAPI 3.1 YAML](../../api/openapi.yaml)、[JSON](../../api/openapi.json)：公共 Bearer API。
 - [账户接口](../../api/accounts.openapi.yaml)：浏览器同源注册/恢复；不是 Bearer 管理 API。
 - [可信登录接口](../../api/sso.openapi.yaml)：Hydra 重定向交互；不是 password-to-token API。
+- [可信账户安全](../../api/security.openapi.yaml)：恢复码生成/分阶段认证器更换，需同源 cookie/浏览器/CSRF，不接受 Bearer。
 - [M0 Hook](../../api/m0-internal.openapi.yaml)：内部合成身份实验，禁止对公网路由。
 
 原生客户端使用 OIDC discovery，issuer 为 `http://auth.localhost:4464/`。本地预置 client `local-platform-cli`，token endpoint authentication 为 none，必须 S256 PKCE，redirect URI 严格为 `http://127.0.0.1:9876/callback`。scope 按需申请 `openid offline_access platform:read platform:write`，业务 audience 为 `https://api.sso.local`。客户端自行实现随机 state、nonce、verifier 和 loopback callback，核对 state 后交换 code；必须验证 OIDC ID token，不可用它代替 access token。测试 harness 实际启动 loopback callback，并经过真实 Hydra 换取访问令牌。
@@ -66,7 +67,7 @@ curl http://127.0.0.1:8083/v1/me \
 用 `scripts/sso down` 停止全部本地服务，保留 volume/私有 key。不要修改既有迁移校验和、输出完整 env/Compose/容器 inspect、token/proof、MFA 材料或 SQL 输入。详见 [ADR 0006](../adr/0006-public-platform-api.md)。
 
 
-公共 API 0.8.0 共 28 项业务操作，成员 email 由 members.read 授权（无 verified alias 时 null）。新增真实 React 控制台见 [控制台手册](console.md)，浏览器边界合同为 `api/console.openapi.yaml`；该合同要求对应 cookie/context/CSRF，不替代公共 Bearer 接入合同。
+公共 API 0.9.0 共 28 项业务操作，成员 email 由 members.read 授权（无 verified alias 时 null）。新增真实 React 控制台见 [控制台手册](console.md)，浏览器边界合同为 `api/console.openapi.yaml`；该合同要求对应 cookie/context/CSRF，不替代公共 Bearer 接入合同。
 
 
 ## 角色 API
@@ -76,4 +77,4 @@ curl http://127.0.0.1:8083/v1/me \
 创建使用 `{"code":"auditor","policies":[{"permission":"audit.read","effect":"allow"}]}`；更新使用完整 policies 数组，删除/绑定/解绑提交 `{}`。均需 JSON、最近 MFA 和 authz If-Match。角色 code 不可更名，owner 不可修改/删除；带绑定角色返回 409 role_in_use。解绑最后 active owner 返回 409 last_active_owner。真实变更后旧授权失效，重复绑定/解绑及相同策略替换不改变版本。权限目录、恢复边界、并发与历史审计详见 [ADR 0008](../adr/0008-tenant-roles-and-deny.md)。
 
 
-完整字段和示例见 [API 参考](../api-reference.md)；运行中 `/docs` 展示同一份合同的参数、请求/响应 schema。控制台 [Playground](../playground.md) 使用现有 BFF 发起真实调用，支持写入确认、ETag、MFA/权限错误与凭证脱敏。OpenAPI 0.8.0 仍为 28 个业务操作，补全角色/权限读取 ETag 和所有写入 JSON 示例；新增同源只读 `/platform-openapi.json` 记录在 BFF 合同。
+完整字段和示例见 [API 参考](../api-reference.md)；运行中 `/docs` 展示同一份合同的参数、请求/响应 schema。控制台 [Playground](../playground.md) 使用现有 BFF 发起真实调用，支持写入确认、ETag、MFA/权限错误与凭证脱敏。OpenAPI 0.9.0 仍为 28 个业务操作，补全角色/权限读取 ETag 和所有写入 JSON 示例；新增同源只读 `/platform-openapi.json` 记录在 BFF 合同。

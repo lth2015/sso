@@ -65,7 +65,7 @@ node tests/sso/browser.cjs
 
 见 [SSO 运行手册](docs/runbooks/local-sso.md)、[ADR 0005](docs/adr/0005-trusted-login-mfa-bff.md)、[SSO OpenAPI](api/sso.openapi.yaml) 和 [本地验收记录](docs/validation.md)。浏览器测试自动创建和清理自己的合成账户，通过真实 Hydra code+PKCE、双应用/双租户、MFA/恢复/续期/撤销，并验证 BFF 数据库与网络权限。
 
-当前是本地 HTTP 参考实现。两个 client 共用一个示范 Application；控制台的客户端/凭证管理、完整 scoped RBAC、MFA 管理、正式邮件和生产 TLS/KMS 等仍待开发。GCP 部署及云端运维继续由 SRE 负责。
+当前是本地 HTTP 参考实现。两个 client 共用一个示范 Application；控制台的客户端/凭证管理、完整 scoped RBAC、遗失认证器的受控恢复、正式邮件和生产 TLS/KMS 等仍待开发。GCP 部署及云端运维继续由 SRE 负责。
 
 
 ## 公共业务 API 与 OpenAPI
@@ -92,7 +92,7 @@ scripts/console up
 scripts/console test
 ```
 
-见 [控制台手册](docs/runbooks/console.md)、[ADR 0007](docs/adr/0007-console-bff-contexts.md)、[浏览器 BFF OpenAPI](api/console.openapi.yaml) 和 [界面截图](docs/ui/console-overview.png)。React/Vite 用精确 npm lockfile 构建并嵌入 Go 服务，实际运行不需要 Vite 开发服务器。公共 API 0.8.0 共 28 个业务操作，包含租户角色与成员绑定；成员邮箱读取需要 members.read。
+见 [控制台手册](docs/runbooks/console.md)、[ADR 0007](docs/adr/0007-console-bff-contexts.md)、[浏览器 BFF OpenAPI](api/console.openapi.yaml) 和 [界面截图](docs/ui/console-overview.png)。React/Vite 用精确 npm lockfile 构建并嵌入 Go 服务，实际运行不需要 Vite 开发服务器。公共 API 0.9.0 共 28 个业务操作，包含租户角色与成员绑定；成员邮箱读取需要 members.read。
 
 
 租户角色与权限已接入真实 API 和控制台：可分别委托成员、组织、邀请和审计能力，显式拒绝优先；owner 保留角色管理恢复能力。支持角色创建/编辑/删除、成员绑定/解绑和 owner 移交，最后 owner 受并发保护。角色变更使旧授权失效，需重新确认空间。见 [ADR 0008](docs/adr/0008-tenant-roles-and-deny.md)、[角色界面](docs/ui/rbac-roles.png)，验收运行 `scripts/console rbac-test`。当前范围为整个租户，组织子树、应用/资源范围授权仍待实现。
@@ -102,3 +102,5 @@ scripts/console test
 
 
 新增个人账户安全：MFA/恢复码/会话概览、撤销其他会话，以及统一认证域的密码+新 TOTP 恢复码重生成。旧码和全部旧会话在重生成后失效，新码只显示一次，认证器密钥保持不变。见 [账户安全手册](docs/account-security.md)；本地验收 `scripts/console security-test`。可信管理合同单列为 `api/security.openapi.yaml`。
+
+已增加两阶段认证器更换：验证密码与旧 TOTP，验证新 TOTP 后切换密钥并撤销旧恢复码/全部旧会话；取消保留原认证器。见 [认证器管理](docs/authenticator-management.md) 与 [ADR 0011](docs/adr/0011-staged-authenticator-replacement.md)，验收 `scripts/console authenticator-test`。

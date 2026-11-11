@@ -56,21 +56,9 @@ func (l *Login) regenerateRecovery(ctx context.Context, f store.SecurityAction, 
 	if !ok || !factor.Active {
 		return nil, l.Account.Store.FailSecurityAction(ctx, f.ID, browser, session, csrf)
 	}
-	codes := []string{}
-	digests := [][]byte{}
-	for range 10 {
-		raw := make([]byte, 16)
-		if _, err = rand.Read(raw); err != nil {
-			return nil, err
-		}
-		v := hex.EncodeToString(raw)
-		v = v[:8] + "-" + v[8:16] + "-" + v[16:24] + "-" + v[24:]
-		d, e := recoveryDigest(f.User, v)
-		if e != nil {
-			return nil, e
-		}
-		codes = append(codes, v)
-		digests = append(digests, d)
+	codes, digests, err := newRecoveryCodeSet(f.User)
+	if err != nil {
+		return nil, err
 	}
 	if err = l.Account.Store.RegenerateRecovery(ctx, f.ID, browser, session, csrf, proof, factor.Version, step, digests); err != nil {
 		return nil, err
@@ -78,6 +66,7 @@ func (l *Login) regenerateRecovery(ctx context.Context, f store.SecurityAction, 
 	return codes, nil
 }
 func (l *Login) mountSecurity(mux *http.ServeMux) {
+	l.mountAuthenticator(mux)
 	page, err := template.ParseFS(web, "web/security.html")
 	if err != nil {
 		panic("invalid security template")
@@ -161,4 +150,24 @@ func (l *Login) mountSecurity(mux *http.ServeMux) {
 		setLocalCookie(w, SessionCookie, "", -1)
 		jsonResponse(w, map[string]any{"recovery_codes": codes, "sessions_revoked": true})
 	})
+}
+
+func newRecoveryCodeSet(user store.ID) ([]string, [][]byte, error) {
+	codes := []string{}
+	digests := [][]byte{}
+	for range 10 {
+		raw := make([]byte, 16)
+		if _, err := rand.Read(raw); err != nil {
+			return nil, nil, err
+		}
+		v := hex.EncodeToString(raw)
+		v = v[:8] + "-" + v[8:16] + "-" + v[16:24] + "-" + v[24:]
+		d, e := recoveryDigest(user, v)
+		if e != nil {
+			return nil, nil, e
+		}
+		codes = append(codes, v)
+		digests = append(digests, d)
+	}
+	return codes, digests, nil
 }

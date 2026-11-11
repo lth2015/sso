@@ -55,6 +55,12 @@ export default function AccountSecurity({
         >
           重新生成恢复码
         </a>
+        <a
+          className="button secondary"
+          href="http://auth.localhost:8080/sso/security/authenticator"
+        >
+          更换认证器
+        </a>
         <button className="secondary" onClick={onRevoke}>
           撤销其他会话
         </button>

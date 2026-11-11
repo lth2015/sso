@@ -1,13 +1,17 @@
 openapi: 3.1.0
 info:
   title: Trusted Account Security
-  version: 0.8.0
-  description: Local HTTP reference. Recovery-code management on the trusted auth
+  version: 0.9.0
+  description: 'Local HTTP reference. Recovery-code management on the trusted auth
     origin only; existing central session/browser cookie, fresh password and unused
     TOTP required. No recovery-code or email-proof substitution, no OAuth Bearer access.
     Five-minute action, five failures and process-local five submissions/user/hour.
     New codes returned once after commit; all prior user sessions/grants/codes become
-    invalid. Production requires TLS/Secure cookies.
+    invalid. Production requires TLS/Secure cookies. Authenticator replacement is
+    a separate-purpose two-stage flow: current password+unused old TOTP, then confirm
+    a server-generated new secret. Old factor remains active until confirmation; cancel
+    preserves it. Start returns the pending key once; confirmation replaces factor/recovery
+    codes and revokes all old sessions. No lost-device recovery bypass.'
 servers:
 - url: http://auth.localhost:8080
 paths:
@@ -108,6 +112,217 @@ paths:
           description: Read-only trusted security interaction contract
           content:
             application/yaml: {}
+  /sso/security/authenticator:
+    get:
+      operationId: startAuthenticatorManagement
+      responses:
+        '200':
+          description: No-store trusted HTML with session/browser-bound action and
+            CSRF
+        '401':
+          description: Login required HTML
+        '400': &id002
+          $ref: '#/components/responses/Error'
+        '403': *id002
+        '409': *id002
+        '413': *id002
+        '415': *id002
+        '429': *id002
+        '503': *id002
+  /v1/sso/authenticator/{id}/start:
+    post:
+      operationId: startAuthenticatorReplacement
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+      - in: header
+        name: X-CSRF-Token
+        required: true
+        schema:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+      - in: header
+        name: Origin
+        required: true
+        schema:
+          const: http://auth.localhost:8080
+      responses:
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '413':
+          $ref: '#/components/responses/Error'
+        '415':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+        '200':
+          description: Pending secret returned only once after validating password
+            and unused old TOTP. Active factor, recovery set and session versions
+            are unchanged.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - state
+                - secret
+                properties:
+                  state:
+                    const: enrolling
+                  secret:
+                    type: string
+                    pattern: ^[A-Z2-7]{32}$
+                    readOnly: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+              - password
+              - code
+              properties:
+                password:
+                  type: string
+                  maxLength: 128
+                  writeOnly: true
+                code:
+                  type: string
+                  pattern: ^[0-9]{6}$
+                  writeOnly: true
+  /v1/sso/authenticator/{id}/confirm:
+    post:
+      operationId: confirmAuthenticatorReplacement
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+      - in: header
+        name: X-CSRF-Token
+        required: true
+        schema:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+      - in: header
+        name: Origin
+        required: true
+        schema:
+          const: http://auth.localhost:8080
+      responses:
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '413':
+          $ref: '#/components/responses/Error'
+        '415':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+        '200':
+          description: Codes returned once. Clears central session cookie; all old
+            sessions revoked before protocol cleanup. Ambiguous network failure must
+            be checked, never blindly retried.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - recovery_codes
+                - sessions_revoked
+                properties:
+                  recovery_codes:
+                    type: array
+                    minItems: 10
+                    maxItems: 10
+                    uniqueItems: true
+                    items:
+                      type: string
+                      pattern: ^[a-f0-9]{8}(-[a-f0-9]{8}){3}$
+                  sessions_revoked:
+                    const: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+              - code
+              properties:
+                code:
+                  type: string
+                  pattern: ^[0-9]{6}$
+                  writeOnly: true
+  /v1/sso/authenticator/{id}/cancel:
+    post:
+      operationId: cancelAuthenticatorReplacement
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+      - in: header
+        name: X-CSRF-Token
+        required: true
+        schema:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+      - in: header
+        name: Origin
+        required: true
+        schema:
+          const: http://auth.localhost:8080
+      responses:
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '413':
+          $ref: '#/components/responses/Error'
+        '415':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+        '204':
+          description: Cancelled and pending key erased; active factor and codes unchanged.
+            A committed replacement cannot be cancelled.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties: {}
 components:
   responses:
     Error:
