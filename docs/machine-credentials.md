@@ -14,7 +14,7 @@
 
 ## 管理 API 与 OpenAPI
 
-[公共 User OpenAPI](../api/openapi.yaml) 0.14.0 共 54 项业务操作，本次增加 11 项；[Console BFF 合同](../api/console.openapi.yaml) 为相同管理操作提供 cookie/context/CSRF 边界。
+[公共 User OpenAPI](../api/openapi.yaml) 0.15.0 共 54 项业务操作，本次增加 11 项；[Console BFF 合同](../api/console.openapi.yaml) 为相同管理操作提供 cookie/context/CSRF 边界。
 
 | 方法 | 路径（前缀 `/v1/tenants/{tenant}`） | 作用 |
 | --- | --- | --- |
@@ -62,7 +62,7 @@ API 元数据 revision 与 token security version 分开：轮换只缩短旧凭
 
 运行 `scripts/console machine-api-test` 与 `scripts/console machine-test`；测试使用真实账户/MFA、MySQL 和 Hydra，秘密仅在测试进程内，秘密页面不截图。主库专项 `scripts/m1 test` 还验证协议失败和并发，故障注入与真实协议证据分别记录在 [validation.md](validation.md)。
 
-本切片未提供 private_key_jwt、机器自定义 scope、任意业务权限策略、自动轮换代理、周期性对账/清理、外部资源 SDK 或生产 TLS/KMS/邮件/HA 验收。迁移 009 为新增表；已应用的 001–008 不修改。周五演示账户与恢复码、原始上传参考、固定基线备份不变。
+本切片未提供 private_key_jwt、机器自定义 scope、任意业务权限策略、自动轮换代理、周期性对账/清理、机器凭证交换/缓存 SDK 或生产 TLS/KMS/邮件/HA 验收。迁移 009 为新增表；已应用的 001–008 不修改。周五演示账户与恢复码、原始上传参考、固定基线备份不变。
 
 ## 元数据页面
 
@@ -71,3 +71,7 @@ API 元数据 revision 与 token security version 分开：轮换只缩短旧凭
 ![桌面机器凭证列表](ui/machine-credentials-desktop.png)
 
 ![手机机器凭证列表](ui/machine-credentials-mobile.png)
+
+## 外部业务服务接入
+
+0.15.0 已提供 [Go 在线身份验证 SDK 与独立服务/客户端参考](external-machine-integration.md)。服务每次在线验证机器身份，保留本页的主库撤销语义；业务权限由接入方定义。独立示例的自身 OpenAPI 不增加平台 User 操作或 BFF 白名单。

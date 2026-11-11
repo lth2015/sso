@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+export PATH="$PWD/.tools/go/bin:$PATH" GOPATH="$PWD/.local/go" GOCACHE="$PWD/.local/go-cache" GOMODCACHE="$PWD/.local/go-mod"
+CGO_ENABLED=0 go build -o .local/machine-sdk-probe ./tests/machine/sdk-probe
+CGO_ENABLED=0 go build -o .local/machine-resource-example ./examples/machine-resource
+chmod 700 .local/machine-sdk-probe .local/machine-resource-example
+SSO_MACHINE_VERIFIER_PROBE="$PWD/.local/machine-sdk-probe" SSO_MACHINE_RESOURCE_EXAMPLE="$PWD/.local/machine-resource-example" node tests/machine/native.cjs

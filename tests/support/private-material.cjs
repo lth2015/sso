@@ -50,5 +50,11 @@ module.exports = function privateMaterialAbsent(root, values, since) {
     },
   );
   scan(logs);
+  if (
+    /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/.test(
+      logs.toString("utf8"),
+    )
+  )
+    throw new Error("JWT detected in runtime log (details withheld)");
   return { files: checked, log_bytes: logs.length };
 };

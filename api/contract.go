@@ -20,3 +20,9 @@ var MachineSpec []byte
 
 //go:embed machine.openapi.json
 var MachineJSON []byte
+
+//go:embed machine-resource-example.openapi.yaml
+var MachineResourceExampleSpec []byte
+
+//go:embed machine-resource-example.openapi.json
+var MachineResourceExampleJSON []byte

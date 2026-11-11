@@ -249,3 +249,17 @@ Go test/vet、7 项前端边界模型、spec/YAML/JSON/BFF/手册同步、格式
 使用本地 MySQL FULL 行事件日志，从明确删除区间提取原两账号及其四个空间（包含原账户 home 空间）的 398 条原记录，一次事务恢复；每条原值相等性检查和 60 项全数据库外键检查通过。二进制字段按原固定长度补齐日志省略的尾零，密码散列、加密 TOTP、恢复码散列及数据 ID 均恢复原记录，未重新生成。随后 scripts/demo check 已以原密码/TOTP、双应用、角色及空间隔离通过，恢复码未消费。私有恢复日志/SQL/校验摘要只保留于忽略的 .local/recovery，不进入 Git 或文档包；这不是生产 HA/DR 验收。
 
 普通 API 与账户测试清理现在在任何数据库变更前检查保留演示清单，同时拒绝受保护邮箱和空间；显式 scripts/demo reset 传递匹配 runId/fingerprint 的受控上下文，完整账户集合校验保留。8 项独立无数据库保护测试通过，真实尝试普通清理固定账号已被拒绝。修正后重新执行完整回归和完整演示彩排，再计为交付。
+
+## 2026-11-11：外部 Go 验证 SDK 与独立业务服务（0.15.0）
+
+增加 pkg/machineidentity、独立回环业务服务及自己的 OpenAPI、stdin 私有输入的一次性客户端参考。主 User API 仍 54 项，机器主合同仍一项身份资源加引擎交换；示例另有一项 whoami 业务读取与两项匿名合同元数据。见 external-machine-integration.md / ADR 0017。
+
+| 检查 | 实际结果 | 边界 |
+| --- | --- | --- |
+| SDK/示例 Go | go test ./...、go vet ./... 及两个新包 go test -race 通过 | 默认 TLS 信任、受控原点/超时、禁止重定向/Cookie、每次在线检查、无成功权限缓存、错误体/网络错误不泄露、strict JSON/大小/namespace/scope/缓存标记、输入与 context；独立服务拒绝 query/错误方法/User Cookie，匿名合同可读。模拟 HTTP/TLS 边界与下项真实服务分开 |
+| 真实 SDK/独立进程 | scripts/console machine-sdk-test 通过 45 项集成检查，并保留 69 个真实响应 OpenAPI 校验 | 真实 MySQL/Hydra/User PKCE 管理；SDK 探针与常驻独立业务服务均在线验证同一批 Bearer，覆盖撤销/到期、SP/应用停用恢复、旧 JWT 不复活、错应用/预期租户/User realm。Go 服务先持有自己的监听端口才报就绪；示例客户端从 stdin 读取 SK，实际交换并调用，撤销后只输出受控 403 错误 |
+| 秘密排除 | 本轮实际 SK/JWT 对 299 项候选文件、SSO 运行日志和示例进程输出扫描通过；运行日志另拒绝任意完整 JWT | 凭证不经 argv，不输出上游正文；客户端只打印允许的身份字段，子进程输出也检查；SK 输入/私有恢复资料不在公开导出 |
+| 兼容与回归 | 既有 User/machine/BFF 合同除 info 版本外完全相同，SSO authority/internal、migration、浏览器逻辑与 fd8c594 相同；7 项前端模型、8 项清理保护测试通过 | 沿用 fd8c594 已完成的完整 User/SSO/网络回归，此切片未再次执行全部 16 套旧 UI/数据库测试。已实际复验 54 项在线文档的桌面/手机和 scripts/demo check，原凭证、未用恢复码与数据 ID 指纹一致 |
+| 完整资料 | OpenAPI/示例合同/手册同步，文档包包括 SDK/示例最小公开源码与模块文件 | 导出后检查 SHA-256 清单、已配置/演示秘密排除、离线 HTML 桌面/手机无外部请求，并在解压后的独立目录、空模块缓存、关闭模块网络下载下编译验证 SDK/示例。实际包摘要见同名 sha256 文件 |
+
+本切片不提供业务 ACL 引擎、凭证轮换/token 缓存 SDK 或生产部署/HA 验收。没有 marketstars 实际联调；CI/GCP/部署仍由 SRE 负责。固定周五源码/原文档与私有演示资料保留。交付 SHA 以包含本节的 Git 提交为准。

@@ -92,7 +92,7 @@ scripts/console up
 scripts/console test
 ```
 
-见 [控制台手册](docs/runbooks/console.md)、[ADR 0007](docs/adr/0007-console-bff-contexts.md)、[浏览器 BFF OpenAPI](api/console.openapi.yaml) 和 [界面截图](docs/ui/console-overview.png)。React/Vite 用精确 npm lockfile 构建并嵌入 Go 服务，实际运行不需要 Vite 开发服务器。公共 API 0.14.0 共 54 个业务操作，包含租户角色与成员绑定；成员邮箱读取需要 members.read。
+见 [控制台手册](docs/runbooks/console.md)、[ADR 0007](docs/adr/0007-console-bff-contexts.md)、[浏览器 BFF OpenAPI](api/console.openapi.yaml) 和 [界面截图](docs/ui/console-overview.png)。React/Vite 用精确 npm lockfile 构建并嵌入 Go 服务，实际运行不需要 Vite 开发服务器。公共 API 0.15.0 共 54 个业务操作，包含租户角色与成员绑定；成员邮箱读取需要 members.read。
 
 
 租户角色与权限已接入真实 API 和控制台：可分别委托成员、组织、邀请和审计能力，显式拒绝优先；owner 保留角色管理恢复能力。支持角色创建/编辑/删除、成员绑定/解绑和 owner 移交，最后 owner 受并发保护。角色变更使旧授权失效，需重新确认空间。见 [ADR 0008](docs/adr/0008-tenant-roles-and-deny.md)、[角色界面](docs/ui/rbac-roles.png)，验收运行 `scripts/console rbac-test`。当前范围为整个租户，组织子树、应用/资源范围授权仍待实现。
@@ -116,3 +116,5 @@ scripts/console test
 自有应用和公开 PKCE 客户端现提供登记、协议核对、不可逆撤销与清理：pending 不可登录，配置/所有权完全匹配后才激活，本地撤销先于远端清理。现有平台/演示客户端只读，公开客户端固定平台只读 scope，无 secret。见 [客户端登记](docs/managed-clients.md)，验收 `scripts/console clients-test`；SP 与机器 AK/SK 使用独立流程，见 [机器凭证手册](docs/machine-credentials.md)。
 
 机器身份新增 SP 创建/停用恢复、一次性 AK/SK、双凭证轮换、先本地撤销后协议清理、独立签发审计。机器令牌只访问对应应用的独立资源样例，每次查询主库资格；不进入平台管理/BFF。完整约束见 [机器凭证手册](docs/machine-credentials.md) 与 [机器协议 OpenAPI](api/machine.openapi.yaml)。本地验收运行 `scripts/console machine-api-test` / `scripts/console machine-test`；private_key_jwt、自定义机器业务授权与周期对账尚未提供。
+
+外部业务服务现有 Go 在线机器身份验证器与独立服务/客户端参考：每次通过 SSO 主库检查身份，固定 namespace、拒绝缓存/重定向/错误 realm；独立 whoami 与匿名 OpenAPI 不进入平台管理/BFF。见 [Go SDK 与完整本地示例](docs/external-machine-integration.md)，验收 `scripts/console machine-sdk-test`。

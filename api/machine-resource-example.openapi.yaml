@@ -1,0 +1,160 @@
+openapi: 3.1.0
+info:
+  title: Independent Machine Business Resource Example
+  version: 0.15.0
+  description: One reference business operation, plus anonymous contract metadata.
+    Go SDK integration example; no User BFF or platform-management authority.
+servers:
+- url: http://127.0.0.1:8092
+paths:
+  /whoami:
+    get:
+      operationId: getReferenceMachineBusinessIdentity
+      summary: Verify and read the inbound machine identity through the Go SDK
+      description: Independent reference business service on loopback, not a User
+        platform API or SSO deployment route. Expected tenant/application come only
+        from trusted service configuration; inbound Cookie and tenant hints grant
+        no identity. The SDK calls the SSO primary-bound identity resource on every
+        request and checks exact namespace/scope. This endpoint returns identity metadata
+        only; actual business permissions remain the business service responsibility.
+        No query or request body. No AK/SK, token cache or automatic business retry.
+      security:
+      - MachineBearer: []
+      responses:
+        '200':
+          description: Online verified identity metadata; never the inbound Bearer
+            or a secret.
+          headers: &id001
+            Cache-Control:
+              schema:
+                const: no-store
+              description: The example never caches authority or identity responses.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MachineIdentity'
+        '400':
+          description: Query/body is not accepted; tenant/application are trusted
+            service configuration.
+          headers: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExampleError'
+        '401':
+          description: Missing, malformed, User-realm, expired or revoked machine
+            Bearer.
+          headers: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExampleError'
+        '403':
+          description: Authority refused access.
+          headers: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExampleError'
+        '404':
+          description: Unknown reference route.
+          headers: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExampleError'
+        '405':
+          description: Only GET is accepted.
+          headers: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExampleError'
+        '503':
+          description: The online authority could not prove identity. No cached/offline
+            fallback or raw upstream detail.
+          headers: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExampleError'
+  /openapi.yaml:
+    get:
+      operationId: getReferenceMachineContractYAML
+      summary: Read the anonymous reference-service contract
+      security: []
+      responses:
+        '200':
+          description: Static contract; no live identity data.
+          headers: *id001
+          content:
+            application/yaml:
+              schema:
+                type: string
+  /openapi.json:
+    get:
+      operationId: getReferenceMachineContractJSON
+      summary: Read the anonymous reference-service contract
+      security: []
+      responses:
+        '200':
+          description: Static contract; no live identity data.
+          headers: *id001
+          content:
+            application/json:
+              schema:
+                type: object
+components:
+  schemas:
+    MachineIdentity:
+      type: object
+      additionalProperties: false
+      required:
+      - principal_type
+      - tenant_id
+      - application_id
+      - service_principal_id
+      - credential_id
+      - scope
+      - audience
+      properties:
+        principal_type:
+          const: service_principal
+        tenant_id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        application_id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        service_principal_id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        credential_id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        scope:
+          const: machine:invoke
+        audience:
+          type: string
+          pattern: ^urn:sso:application:[a-f0-9]{32}$
+    ExampleError:
+      type: object
+      additionalProperties: false
+      required:
+      - error
+      properties:
+        error:
+          enum:
+          - unauthenticated
+          - forbidden
+          - identity_unavailable
+          - invalid_request
+          - not_found
+          - method_not_allowed
+  securitySchemes:
+    MachineBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Obtain the application machine:invoke Bearer using the separate
+        machine credential protocol; this service does not handle AK/SK or User cookies.

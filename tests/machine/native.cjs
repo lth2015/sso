@@ -7,6 +7,211 @@ let phase = "startup",
   checks = 0;
 let orphanFixture;
 const started = new Date().toISOString();
+const sdkProbe = process.env.SSO_MACHINE_VERIFIER_PROBE;
+let sdkTenant,
+  sdkApplication,
+  sampleProcess,
+  sampleStopped = true,
+  sampleExit = Promise.resolve(),
+  sdkChecks = 0;
+const sampleLogs = [];
+async function startReferenceResource(tenant, application) {
+  sdkTenant = tenant;
+  sdkApplication = application;
+  if (!process.env.SSO_MACHINE_RESOURCE_EXAMPLE) return;
+  const { spawn } = require("node:child_process");
+  sampleProcess = spawn(process.env.SSO_MACHINE_RESOURCE_EXAMPLE, [], {
+    cwd: n.root,
+    env: {
+      ...process.env,
+      SSO_API_ORIGIN: "http://api.localhost:8083",
+      SSO_ALLOW_LOCAL_HTTP: "true",
+      SSO_EXPECTED_TENANT_ID: tenant,
+      SSO_EXPECTED_APPLICATION_ID: application,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  sampleStopped = false;
+  sampleExit = new Promise((resolve) => {
+    sampleProcess.once("exit", () => {
+      sampleStopped = true;
+      resolve();
+    });
+    sampleProcess.once("error", () => {
+      sampleStopped = true;
+      resolve();
+    });
+  });
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error("reference resource startup timed out")),
+      4000,
+    );
+    let ready = false;
+    sampleProcess.on("error", () => {
+      clearTimeout(timer);
+      reject(new Error("reference resource startup failed"));
+    });
+    sampleProcess.on("exit", () => {
+      if (!ready) {
+        clearTimeout(timer);
+        reject(
+          new Error("reference resource exited before listener ownership"),
+        );
+      }
+    });
+    const collect = (data) => {
+      sampleLogs.push(Buffer.from(data));
+      if (
+        Buffer.concat(sampleLogs).includes(
+          Buffer.from("reference machine resource ready on 127.0.0.1:8092"),
+        )
+      ) {
+        ready = true;
+        clearTimeout(timer);
+        resolve();
+      }
+    };
+    sampleProcess.stdout.on("data", collect);
+    sampleProcess.stderr.on("data", collect);
+  });
+  for (const [method, path, status] of [
+    ["GET", "/whoami", 401],
+    ["GET", "/whoami?tenant=untrusted", 400],
+    ["POST", "/whoami", 405],
+    ["GET", "/unknown", 404],
+  ]) {
+    const r = await n.request(8092, "127.0.0.1:8092", method, path, undefined, {
+      Cookie: "user-session=does-not-authorize",
+    });
+    assert.equal(r.status, status);
+    assert.equal(r.headers["cache-control"], "no-store");
+    if (method === "GET" && path.split("?")[0] === "/whoami")
+      validateReferenceResponse("/whoami", "GET", r);
+    sdkChecks++;
+  }
+  for (const suffix of ["json", "yaml"]) {
+    const path = "/openapi." + suffix;
+    const r = await n.request(8092, "127.0.0.1:8092", "GET", path);
+    assert.equal(r.status, 200);
+    assert.equal(r.headers["cache-control"], "no-store");
+    validateReferenceResponse(path, "GET", r);
+    sdkChecks++;
+  }
+}
+function validateReferenceResponse(path, method, r) {
+  execFileSync("python3", ["tests/api/validate_contract.py"], {
+    cwd: n.root,
+    input: JSON.stringify({
+      contract: "machine-example",
+      path,
+      method,
+      status: r.status,
+      body: r.body ?? r.text,
+      content_type: r.headers["content-type"],
+    }),
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+}
+function checkSDK(application, token, tenant = sdkTenant) {
+  const result = JSON.parse(
+    execFileSync(sdkProbe, [], {
+      cwd: n.root,
+      input: JSON.stringify({ tenant, application, token }),
+      stdio: ["pipe", "pipe", "pipe"],
+      timeout: 8000,
+    }),
+  );
+  sdkChecks++;
+  return result;
+}
+async function checkExternalResource(url, token, response) {
+  const match = /^\/v1\/machine\/applications\/([a-f0-9]{32})\/identity$/.exec(
+    url,
+  );
+  if (!sdkProbe || !match) return;
+  const verified = checkSDK(match[1], token);
+  assert.equal(verified.ok, response.status === 200);
+  if (response.status === 200) {
+    assert.deepEqual(verified.identity, response.body);
+    const other = checkSDK(match[1], token, "e".repeat(32));
+    assert.equal(other.ok, false);
+    assert.equal(other.category, "authority_response_invalid");
+  } else assert.equal(verified.category, "unauthenticated");
+  if (sampleProcess && match[1] === sdkApplication) {
+    assert.equal(sampleStopped, false);
+    assert.equal(sampleProcess.exitCode, null);
+    const mirrored = await n.request(
+      8092,
+      "127.0.0.1:8092",
+      "GET",
+      "/whoami",
+      undefined,
+      { Authorization: "Bearer " + token },
+    );
+    assert.equal(mirrored.status, response.status);
+    validateReferenceResponse("/whoami", "GET", mirrored);
+    assert.equal(mirrored.headers["cache-control"], "no-store");
+    if (response.status === 200) assert.deepEqual(mirrored.body, response.body);
+    sdkChecks++;
+  }
+}
+function checkReferenceClient(credential, secret, success) {
+  if (!sdkProbe) return;
+  const { spawnSync } = require("node:child_process");
+  const r = spawnSync(
+    process.execPath,
+    [n.root + "/examples/machine-client.cjs"],
+    {
+      cwd: n.root,
+      input: JSON.stringify({
+        access_key: credential.access_key,
+        secret_key: secret,
+        application_id: credential.application_id,
+      }),
+      stdio: ["pipe", "pipe", "pipe"],
+      timeout: 10000,
+    },
+  );
+  const output = Buffer.concat([
+    r.stdout || Buffer.alloc(0),
+    r.stderr || Buffer.alloc(0),
+  ]);
+  for (const value of secrets) assert(!output.includes(Buffer.from(value)));
+  if (success) {
+    assert.equal(r.status, 0);
+    const identity = JSON.parse(r.stdout);
+    assert.equal(identity.credential_id, credential.id);
+    assert.equal(identity.tenant_id, sdkTenant);
+    assert.equal(identity.principal_type, "service_principal");
+  } else {
+    assert.notEqual(r.status, 0);
+    assert.equal(r.stdout.length, 0);
+    assert.match(
+      r.stderr.toString(),
+      /^Machine client reference failed: token_exchange HTTP 403 \(private details withheld\)\s*$/,
+    );
+  }
+  sdkChecks++;
+}
+async function stopReferenceResource() {
+  if (sampleProcess && !sampleStopped) {
+    sampleProcess.kill("SIGTERM");
+    let timer;
+    await Promise.race([
+      sampleExit,
+      new Promise((resolve) => {
+        timer = setTimeout(() => {
+          if (!sampleStopped) sampleProcess.kill("SIGKILL");
+          resolve();
+        }, 2000);
+      }),
+    ]);
+    clearTimeout(timer);
+    await sampleExit;
+  }
+}
+
 const covered = new Set(),
   secrets = [];
 const progress = setInterval(
@@ -67,6 +272,7 @@ async function call(method, url, token, body, status = 200, etag, contract) {
     }),
     stdio: ["pipe", "pipe", "pipe"],
   });
+  await checkExternalResource(url, token, r);
   checks++;
   covered.add(method.toLowerCase() + " " + normalized(url));
   return r;
@@ -161,6 +367,7 @@ function privateAbsent(value) {
     ).body;
     const appPath = base + "/applications/" + app.id,
       spBase = appPath + "/service-principals";
+    if (sdkProbe) await startReferenceResource(tenant, app.id);
     let principal = await call(
       "POST",
       spBase,
@@ -187,6 +394,7 @@ function privateAbsent(value) {
     let firstMeta = await call("GET", firstPath, ownerToken);
     privateAbsent(firstMeta.body);
     privateAbsent((await call("GET", keys, ownerToken)).body);
+    checkReferenceClient(firstKey, first.body.secret_key, true);
     const resource = "/v1/machine/applications/" + app.id + "/identity";
     const audience = firstKey.audience;
     phase = "real-m2m-token-separate-audience-resource-and-hints";
@@ -329,6 +537,7 @@ function privateAbsent(value) {
       200,
       firstMeta.headers.etag,
     );
+    checkReferenceClient(firstKey, first.body.secret_key, false);
     await call(
       "GET",
       resource,
@@ -614,6 +823,19 @@ function privateAbsent(value) {
         for (const method of Object.keys(operations))
           assert(covered.has(method + " " + route));
     phase = "private-material-public-file-and-runtime-log-exclusion";
+    for (const secret of secrets)
+      assert(!Buffer.concat(sampleLogs).includes(Buffer.from(secret)));
+    assert(
+      !/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/.test(
+        Buffer.concat(sampleLogs).toString("utf8"),
+      ),
+    );
+    if (sdkProbe)
+      console.log(
+        "Machine external Go SDK acceptance passed: " +
+          sdkChecks +
+          " online verifier/reference resource checks; no cache, wrong tenant, User-cookie/realm refusal and live revocation/restoration/expiry",
+      );
     const privacy = require("../support/private-material.cjs")(
       n.root,
       secrets,
@@ -640,7 +862,11 @@ function privateAbsent(value) {
           orphanFixture.id,
         );
     } finally {
-      await n.close();
+      try {
+        await stopReferenceResource();
+      } finally {
+        await n.close();
+      }
     }
   }
 })().catch((e) => {
