@@ -72,7 +72,7 @@ var consoleRoutes = func() []consoleRoute {
 			continue
 		}
 		pattern := regexp.QuoteMeta(path)
-		for _, name := range []string{"tenant", "member", "org", "invitation", "session", "role", "application", "client"} {
+		for _, name := range []string{"tenant", "member", "org", "invitation", "session", "role", "application", "client", "principal", "credential"} {
 			pattern = strings.ReplaceAll(pattern, regexp.QuoteMeta("{"+name+"}"), "[a-f0-9]{32}")
 		}
 		for method := range methods {
@@ -190,7 +190,9 @@ func (a *App) mountConsole(mux *http.ServeMux, load func(http.ResponseWriter, *h
 				return
 			}
 		}
-		// Only a public-contract JSON response and non-secret metadata cross the BFF.
+		// Only reviewed public-contract JSON crosses the BFF. OAuth session secrets
+		// remain server-side; a separately authorized credential-create operation
+		// may deliberately deliver its new one-time SK to the dedicated console UI.
 		for _, name := range []string{"Content-Type", "ETag", "X-Request-ID", "Retry-After"} {
 			if value := response.Header.Get(name); value != "" {
 				w.Header().Set(name, value)

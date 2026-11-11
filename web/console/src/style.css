@@ -968,3 +968,47 @@ dialog .secret {
     gap: 8px;
   }
 }
+
+.machine-dialog {
+  max-width: 760px;
+}
+.machine-records {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+.machine-records .actions {
+  margin-top: 14px;
+}
+.machine-records .actions button {
+  white-space: nowrap;
+}
+.machine-dialog dd {
+  margin-left: 0;
+}
+.machine-records .summary-card {
+  display: block;
+  min-width: 0;
+}
+.machine-records h3 {
+  font-size: 15px;
+  margin: 0 0 14px;
+}
+.machine-records code {
+  overflow-wrap: anywhere;
+}
+.machine-records dl {
+  display: grid;
+  grid-template-columns: 65px minmax(0, 1fr);
+  gap: 8px 12px;
+  font-size: 13px;
+  line-height: 1.65;
+  margin: 0;
+}
+.machine-records dt {
+  color: #6a7891;
+}
+.machine-records dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

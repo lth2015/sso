@@ -14,3 +14,9 @@ var ConsoleSpec []byte
 
 //go:embed security.openapi.yaml
 var SecuritySpec []byte
+
+//go:embed machine.openapi.yaml
+var MachineSpec []byte
+
+//go:embed machine.openapi.json
+var MachineJSON []byte

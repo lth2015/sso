@@ -2,7 +2,15 @@
 import re,subprocess,sys,json,urllib.request,urllib.error
 from pathlib import Path
 root=Path(__file__).resolve().parents[2]
-emails=sys.argv[1:]
+sys.path.insert(0,str(root/'tests/support'))
+from fixture_protection import protect_demo
+arguments=sys.argv[1:]
+reset_run=None
+if arguments[:1]==['--demo-reset']:
+ if len(arguments)<3:raise SystemExit('Invalid demo reset context')
+ reset_run=arguments[1];arguments=arguments[2:]
+emails=arguments
+protect_demo(root,emails,reset_run=reset_run,complete=True)
 if not emails or any(not re.fullmatch(r'browser-[a-f0-9]{32}@example\.invalid',e) for e in emails):raise SystemExit('Refusing non-fixture cleanup')
 command=['docker','compose','--env-file',str(root/'.local/m0.env'),'-f',str(root/'deploy/local/compose.yml'),'exec','-T','mysql','sh','-c','MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -N -B sso_business']
 def sql(statement):
@@ -21,11 +29,31 @@ for email in emails:
 if users:
  ids=','.join("UNHEX('"+u+"')" for u in users)
  tenants=sql(f'SELECT DISTINCT HEX(tenant_id) FROM memberships WHERE user_id IN ({ids});').splitlines()
+ protect_demo(root,emails,tenants,reset_run=reset_run,complete=True)
  for tenant in tenants:
   if not re.fullmatch('[0-9A-F]{32}',tenant):raise SystemExit('Invalid fixture tenant')
   if sql(f"SELECT COUNT(*) FROM memberships WHERE tenant_id=UNHEX('{tenant}') AND user_id NOT IN ({ids});")!='0':raise SystemExit('Refusing cleanup of a tenant containing unrelated accounts')
  for table in ['authenticator_changes','security_actions','protocol_logout_jobs','bff_sessions','business_grants','login_interactions','sso_sessions','mfa_recovery_codes','mfa_factors']:
   sql(f'DELETE FROM {table} WHERE user_id IN ({ids});')
+ # Close machine authority before any remote cleanup, independently of human
+ # sessions. Only the already-validated closed tenant set may be affected.
+ for tenant in tenants:
+  sql(f"UPDATE machine_credentials SET state='revoked',version=version+1,security_version=security_version+1 WHERE tenant_id=UNHEX('{tenant}') AND state<>'revoked';")
+  for row in sql(f"SELECT LOWER(HEX(application_id)),LOWER(HEX(service_principal_id)),LOWER(HEX(id)),client_id FROM machine_credentials WHERE tenant_id=UNHEX('{tenant}');").splitlines():
+   app,principal,credential,client=row.split('\t')
+   if any(not re.fullmatch('[a-f0-9]{32}',v) for v in [app,principal,credential]) or client!='ak_'+credential:raise SystemExit('Invalid owned machine fixture')
+   url='http://127.0.0.1:4465/admin/clients/'+client
+   try:
+    with urllib.request.urlopen(url,timeout=5) as response:metadata=json.load(response).get('metadata')
+   except urllib.error.HTTPError as error:
+    if error.code==404:continue
+    raise SystemExit('Machine fixture protocol lookup failed')
+   expected={'managed_by':'sso-platform','kind':'machine-credential-v1','tenant_id':tenant.lower(),'application_id':app,'service_principal_id':principal,'credential_id':credential}
+   if metadata!=expected:raise SystemExit('Refusing foreign machine protocol cleanup')
+   try:
+    with urllib.request.urlopen(urllib.request.Request(url,method='DELETE'),timeout=5) as response:assert response.status==204
+   except (urllib.error.URLError,AssertionError):raise SystemExit('Machine fixture protocol cleanup failed (details withheld)')
+  for table in ['machine_outbox_events','machine_events','machine_credentials','service_principals']:sql(f"DELETE FROM {table} WHERE tenant_id=UNHEX('{tenant}');")
  # Protocol cleanup is limited to clients owned by this closed fixture set.
  managed_apps=[]
  for tenant in tenants:
@@ -62,7 +90,7 @@ if users:
   sql(f"DELETE FROM tenants WHERE id=UNHEX('{tenant}');")
  for app in managed_apps:sql(f"DELETE FROM applications WHERE id=UNHEX('{app}');")
 for email in emails:
- subprocess.run([sys.executable,str(root/'tests/accounts/cleanup.py'),email],check=True,capture_output=True)
+ subprocess.run([sys.executable,str(root/'tests/accounts/cleanup.py'),*(['--demo-reset',reset_run] if reset_run else []),email],check=True,capture_output=True)
 
 # Also remove only this closed set's private notification files, even after a
 # prior browser failure that lost its in-memory file list.

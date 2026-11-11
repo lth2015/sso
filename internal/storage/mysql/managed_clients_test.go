@@ -30,6 +30,11 @@ func cleanupManagedApplications(t *testing.T, s Store, tenant ID) {
 		apps = append(apps, id)
 	}
 	rows.Close()
+	for _, table := range []string{"machine_outbox_events", "machine_events", "machine_credentials", "service_principals"} {
+		if _, e = s.db.Exec("DELETE FROM "+table+" WHERE tenant_id=?", tenant); e != nil {
+			t.Error("machine fixture cleanup failed")
+		}
+	}
 	for _, app := range apps {
 		if _, e = s.db.Exec(`DELETE FROM managed_oauth_clients WHERE tenant_id=? AND application_id=?`, tenant, app); e != nil {
 			t.Error("managed client fixture cleanup failed")

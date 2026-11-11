@@ -36,6 +36,7 @@ func Handler(auth *Authenticator) http.Handler {
 	mountSecurity(mux, repo)
 	mountApplications(mux, repo)
 	mountManagedClients(mux, repo, hydra.New())
+	mountMachineManagement(mux, repo, hydra.New())
 	mountOrganizationLifecycle(mux, repo)
 	limit := identity.NewLimiter()
 	capacity := make(chan struct{}, 32)
@@ -46,6 +47,14 @@ func Handler(auth *Authenticator) http.Handler {
 	mux.HandleFunc("GET /openapi.json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(contract.PublicJSON)
+	})
+	mux.HandleFunc("GET /machine-openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/yaml")
+		w.Write(contract.MachineSpec)
+	})
+	mux.HandleFunc("GET /machine-openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(contract.MachineJSON)
 	})
 	mux.HandleFunc("GET /docs", docs)
 	mux.HandleFunc("GET /docs.css", docsCSS)
@@ -383,12 +392,21 @@ func Handler(auth *Authenticator) http.Handler {
 		ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 		defer cancel()
 		r = r.WithContext(ctx)
-		if r.URL.Path == "/openapi.yaml" || r.URL.Path == "/openapi.json" || r.URL.Path == "/docs" || r.URL.Path == "/docs.css" || r.URL.Path == "/health/ready" {
+		if r.URL.Path == "/machine-openapi.yaml" || r.URL.Path == "/machine-openapi.json" || r.URL.Path == "/openapi.yaml" || r.URL.Path == "/openapi.json" || r.URL.Path == "/docs" || r.URL.Path == "/docs.css" || r.URL.Path == "/health/ready" {
 			if r.Method != "GET" || r.URL.RawQuery != "" {
 				problem(w, 400, "invalid_request")
 				return
 			}
 			mux.ServeHTTP(w, r)
+			return
+		}
+		if match := machineResourcePath.FindStringSubmatch(r.URL.Path); match != nil {
+			app, e := store.ParseID(match[1])
+			if e != nil {
+				problem(w, 400, "invalid_request")
+				return
+			}
+			auth.machineResource(w, r, app)
 			return
 		}
 		raw, err := bearer(r)
@@ -458,7 +476,7 @@ func Handler(auth *Authenticator) http.Handler {
 	})
 }
 func isList(path string) bool {
-	return clientListPath.MatchString(path) || strings.HasSuffix(path, "/applications") || path == "/v1/me/security-events" || path == "/v1/tenants" || path == "/v1/sessions" || strings.HasSuffix(path, "/members") || strings.HasSuffix(path, "/organizations") || strings.HasSuffix(path, "/invitations") || strings.HasSuffix(path, "/audit-events") || (strings.HasSuffix(path, "/roles") && !strings.Contains(path, "/members/"))
+	return clientListPath.MatchString(path) || strings.HasSuffix(path, "/service-principals") || strings.HasSuffix(path, "/credentials") || strings.HasSuffix(path, "/machine-events") || strings.HasSuffix(path, "/applications") || path == "/v1/me/security-events" || path == "/v1/tenants" || path == "/v1/sessions" || strings.HasSuffix(path, "/members") || strings.HasSuffix(path, "/organizations") || strings.HasSuffix(path, "/invitations") || strings.HasSuffix(path, "/audit-events") || (strings.HasSuffix(path, "/roles") && !strings.Contains(path, "/members/"))
 }
 func respond(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -490,6 +508,12 @@ func failure(w http.ResponseWriter, err error) {
 		problem(w, 412, "version_conflict")
 	case errors.Is(err, hydra.ErrClientProfileConflict):
 		problem(w, 409, "protocol_client_conflict")
+	case errors.Is(err, store.ErrPrincipalDisabled):
+		problem(w, 409, "service_principal_disabled")
+	case errors.Is(err, store.ErrCredentialLimit):
+		problem(w, 409, "credential_limit")
+	case errors.Is(err, store.ErrCredentialState):
+		problem(w, 409, "invalid_credential_state")
 	case errors.Is(err, store.ErrApplicationUnmanaged):
 		problem(w, 409, "application_unmanaged")
 	case errors.Is(err, store.ErrClientState):

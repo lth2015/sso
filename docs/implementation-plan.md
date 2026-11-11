@@ -48,3 +48,7 @@ API/文档切片已增加真实 Playground、逐操作运行时参考页、完�
 组织生命周期已提供重命名、直属成员分页（organizations.read 与 members.read 同时成立）、移除归属、删除空叶子，公共合同 0.12.0 增至 38 操作。根组织受保护，非空节点不级联，结构删除/真实移除需重新授权；普通重命名仅改显示与 org_version。详见 ADR 0014。
 
 自有应用与公开客户端登记切片：migration 008 提供所有权、pending/active/revoked 管理表；公开 PKCE 固定只读平台范围，无 secret，owner/近期 MFA/客户端 ETag；协议核对匹配后才激活，本地撤销先于远端清理，真实证据见 validation.md。共享应用客户端不能被任意租户改写。confidential/M2M/SP/机器凭证、周期性补偿/对账仍未交付。
+
+## 2026-11-11：机器身份切片 0.14.0
+
+新增 SP、一次性交付 AK/SK、双凭证轮换、独立机器 JWT/resource realm 与机器签发审计。User 管理合同 54 项，机器协议另列。旧阶段文字表示当时进度；当前范围和限制以 machine-credentials.md 与 validation.md 为准。下一步优先完善所有权交接、受控机器对账和外部资源接入体验；private_key_jwt、自定义业务授权、生产运维与 HA 尚未交付。

@@ -1,6 +1,6 @@
-# 下一切片：机器身份与一次性凭证（未实现）
+# 机器身份切片的原始实施约束
 
-这是后续实现的工作记录，不是当前产品能力。0.13.0 只包含无 secret 的公开 PKCE 客户端。
+这是基于 0.13.0 的实施前记录，保留当时约束用于追溯。当前实现与实际验收分别见 ../machine-credentials.md 与 ../validation.md，未验收项不据此宣称完成。
 
 - ServicePrincipal 归租户所有，与自然人/会话分离；现阶段仅 active tenant owner 管理，不沿用创建者离职后自动销毁的模型。
 - 每 credential 独立 OAuth client，client_credentials 唯一 grant，无用户登录/refresh，无平台管理 audience。先固定受控业务 audience/scope，避免开放任意目标及自提权。

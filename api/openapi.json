@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "SSO Public Platform API",
-    "version": "0.13.0",
+    "version": "0.14.0",
     "description": "External server/native-client contract. Local reference server only; production requires TLS and configured public origins. OAuth code+S256 PKCE, platform audience https://api.sso.local. No cookie authentication or wildcard CORS; browser integrations use a BFF. All writes require MFA authenticated within 300 seconds; refresh does not update auth_time. Tenant-scoped roles grant separate member/organization/invitation/audit permissions; explicit deny wins. Only active owners manage roles and owner bindings; roles.manage cannot be delegated or denied via custom policies. Resource/subtree scopes are not implemented. Delegated member operators cannot suspend/restore owner bindings. Authorization is checked against the business primary inside each operation transaction. Tenant-version mutations invalidate prior tenant grants, requiring new authorization. JSON objects reject duplicate keys, unknown fields, invalid UTF-8 and extra documents. Only role policy requests admit typed nested rules, with depth/work and policy-count limits. Request body limit 4096 bytes. UUIDs are lowercase 32-hex strings. List limit 1–100, default 50; after is previous next_cursor. No pagination snapshot guarantee. Error format follows RFC 9457. All responses no-store. Invitation proofs never appear in lists/audit."
   },
   "servers": [
@@ -20,6 +20,1013 @@
     }
   ],
   "paths": {
+    "/v1/tenants/{tenant}/applications/{application}/service-principals": {
+      "get": {
+        "operationId": "listServicePrincipals",
+        "summary": "List this owned application machine principals",
+        "description": "Active tenant owner required.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/applicationID"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/After"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List this owned application machine principals",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServicePrincipalPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "reserved_owner:roles.manage"
+      },
+      "post": {
+        "operationId": "createServicePrincipal",
+        "summary": "Create a tenant-owned machine identity",
+        "description": "Active owner/recent MFA; app must be owned/enabled/available. Maximum 100 principals per app. SP belongs to the tenant owner collective, not the creator personal session. No machine key or User grant is created; current User authorization stays valid.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/applicationID"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Create a tenant-owned machine identity",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              },
+              "Location": {
+                "description": "Created resource path; read metadata here after a result is known.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServicePrincipal"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "reserved_owner:roles.manage",
+        "x-recent-mfa-seconds": 300,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServicePrincipalInput"
+              },
+              "example": {
+                "name": "本地自动化任务"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}": {
+      "get": {
+        "operationId": "getServicePrincipal",
+        "summary": "Read one machine principal and version",
+        "description": "Active tenant owner required.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/applicationID"
+          },
+          {
+            "$ref": "#/components/parameters/principalID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read one machine principal and version",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServicePrincipal"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "reserved_owner:roles.manage"
+      }
+    },
+    "/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/disable": {
+      "post": {
+        "operationId": "disableServicePrincipal",
+        "summary": "Disable a machine principal",
+        "description": "Active owner/recent MFA and exact principal ETag. Changes principal security version and User audit/outbox, retaining credentials. Old JWTs fail immediately at the reference resource and never revive after restoration. Restored valid credentials may obtain fresh tokens. Same-state/current ETag no-op; enabling requires app available/enabled. Does not change the User tenant authorization version.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/applicationID"
+          },
+          {
+            "$ref": "#/components/parameters/principalID"
+          },
+          {
+            "$ref": "#/components/parameters/PrincipalMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Disable a machine principal",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServicePrincipal"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "reserved_owner:roles.manage",
+        "x-recent-mfa-seconds": 300,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Empty"
+              },
+              "example": {}
+            }
+          }
+        }
+      }
+    },
+    "/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/enable": {
+      "post": {
+        "operationId": "enableServicePrincipal",
+        "summary": "Enable a machine principal",
+        "description": "Active owner/recent MFA and exact principal ETag. Changes principal security version and User audit/outbox, retaining credentials. Old JWTs fail immediately at the reference resource and never revive after restoration. Restored valid credentials may obtain fresh tokens. Same-state/current ETag no-op; enabling requires app available/enabled. Does not change the User tenant authorization version.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/applicationID"
+          },
+          {
+            "$ref": "#/components/parameters/principalID"
+          },
+          {
+            "$ref": "#/components/parameters/PrincipalMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Enable a machine principal",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServicePrincipal"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "reserved_owner:roles.manage",
+        "x-recent-mfa-seconds": 300,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Empty"
+              },
+              "example": {}
+            }
+          }
+        }
+      }
+    },
+    "/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/credentials": {
+      "get": {
+        "operationId": "listMachineCredentials",
+        "summary": "List credential metadata without SK",
+        "description": "Active tenant owner required.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/applicationID"
+          },
+          {
+            "$ref": "#/components/parameters/principalID"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/After"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List credential metadata without SK",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineCredentialPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "reserved_owner:roles.manage"
+      },
+      "post": {
+        "operationId": "createMachineCredential",
+        "summary": "Issue an independent one-time AK/SK credential",
+        "description": "Active owner/recent MFA and enabled owned app/principal. TTL 1–90 days, maximum two live active/pending credentials and 100 lifetime records per principal. Fixed client_credentials-only, machine:invoke and this app URN audience; no platform management/refresh/ID token. Commits pending, registers and verifies exact private engine profile, then rechecks User authority and principal/application versions before activation. SK returned only here and never stored recoverably in business DB. Unknown response/commit: GET/list, revoke and create a new credential; pending cannot be reconciled active or have SK recovered. On successful activation only, other active key expiry is shortened to at most 24h overlap; API revision changes, security version remains, so cached old JWT stays usable during overlap. Failed creation preserves prior key expiry. No automatic request replay.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/applicationID"
+          },
+          {
+            "$ref": "#/components/parameters/principalID"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Issue an independent one-time AK/SK credential",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              },
+              "Location": {
+                "description": "Created resource path; read metadata here after a result is known.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineCredentialCreated"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "reserved_owner:roles.manage",
+        "x-recent-mfa-seconds": 300,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MachineCredentialInput"
+              },
+              "example": {
+                "name": "初始凭证",
+                "expires_in_days": 90
+              }
+            }
+          }
+        },
+        "x-playground-execute": false,
+        "x-playground-reason": "Use the dedicated credential page to save the one-time SK. Generic Playground redacts secrets and therefore cannot deliver it safely."
+      }
+    },
+    "/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/credentials/{credential}": {
+      "get": {
+        "operationId": "getMachineCredential",
+        "summary": "Read credential metadata and API revision",
+        "description": "Active owner only. No secret/hash/recoverable private key in this response. Expired is derived from primary time. API revision may differ from internal JWT security version because overlap expiry metadata changes do not revive or invalidate a still-valid token.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/applicationID"
+          },
+          {
+            "$ref": "#/components/parameters/principalID"
+          },
+          {
+            "$ref": "#/components/parameters/credentialID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read credential metadata and API revision",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineCredential"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "reserved_owner:roles.manage"
+      }
+    },
+    "/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/credentials/{credential}/revoke": {
+      "post": {
+        "operationId": "revokeMachineCredential",
+        "summary": "Irreversibly revoke a machine credential",
+        "description": "Active owner/recent MFA. Pending/active/expired becomes revoked with higher API/security versions and transactional User audit/outbox; same-state/current revision no-op. Key and all old machine JWTs are refused by primary authority immediately. Other keys, SPs and User login remain valid; no shared SID logout. Revoke still works when SP/app is disabled.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/applicationID"
+          },
+          {
+            "$ref": "#/components/parameters/principalID"
+          },
+          {
+            "$ref": "#/components/parameters/credentialID"
+          },
+          {
+            "$ref": "#/components/parameters/CredentialMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Irreversibly revoke a machine credential",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineCredential"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "reserved_owner:roles.manage",
+        "x-recent-mfa-seconds": 300,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Empty"
+              },
+              "example": {}
+            }
+          }
+        }
+      }
+    },
+    "/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/credentials/{credential}/cleanup": {
+      "post": {
+        "operationId": "cleanupMachineCredential",
+        "summary": "Clean up a matching revoked credential protocol object",
+        "description": "Active owner/recent MFA. Only revoked credentials; never activates pending or reveals/recreates SK. Fixed private Admin profile/ownership check; foreign/drifted objects not deleted. Local revoked tombstone persists even when remote cleanup fails. Absence is observed, not a permanent assurance about old timed-out transactions. Works with disabled SP/app.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/applicationID"
+          },
+          {
+            "$ref": "#/components/parameters/principalID"
+          },
+          {
+            "$ref": "#/components/parameters/credentialID"
+          },
+          {
+            "$ref": "#/components/parameters/CredentialMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Clean up a matching revoked credential protocol object",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineCredential"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "reserved_owner:roles.manage",
+        "x-recent-mfa-seconds": 300,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Empty"
+              },
+              "example": {}
+            }
+          }
+        }
+      }
+    },
+    "/v1/tenants/{tenant}/machine-events": {
+      "get": {
+        "operationId": "listMachineEvents",
+        "summary": "Read controlled machine issuance audit metadata",
+        "description": "Requires audit.read on the token tenant. Explicit deny overrides other allows, including owner operational privileges. Requires audit.read on token tenant, explicit deny first. Machine actor is SP/credential, not its human creator. ID/application/SP/credential/action/time only, no token/SK/payload. UUID ascending keyset, no snapshot/immutable archive guarantee. Separate transactional machine outbox; periodic consumers not yet implemented.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/After"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read controlled machine issuance audit metadata",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineEventPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "permission:audit.read"
+      }
+    },
     "/v1/tenants/{tenant}/applications": {
       "post": {
         "operationId": "createApplication",
@@ -4957,9 +5964,292 @@
             "description": "Observation during this bounded reconciliation, not a permanent guarantee that a timed-out upstream transaction cannot finish later."
           }
         }
+      },
+      "ServicePrincipal": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "application_id",
+          "name",
+          "enabled",
+          "version",
+          "credential_count"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "application_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "credential_count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "ServicePrincipalInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Trimmed nonblank display name, maximum 128 UTF-8 bytes. Code is generated, not a global namespace chosen by this caller."
+          }
+        }
+      },
+      "ServicePrincipalPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/ServicePrincipal"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      },
+      "MachineCredentialInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "expires_in_days"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Trimmed nonblank display name, maximum 128 UTF-8 bytes. Code is generated, not a global namespace chosen by this caller."
+          },
+          "expires_in_days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 90
+          }
+        }
+      },
+      "MachineCredential": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "application_id",
+          "service_principal_id",
+          "access_key",
+          "name",
+          "state",
+          "active",
+          "expires_at",
+          "version",
+          "audience",
+          "scope"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "application_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "service_principal_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "access_key": {
+            "type": "string",
+            "pattern": "^ak_[a-f0-9]{32}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "active",
+              "revoked",
+              "expired"
+            ]
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "expires_at": {
+            "type": "integer"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "audience": {
+            "type": "string",
+            "pattern": "^urn:sso:application:[a-f0-9]{32}$"
+          },
+          "scope": {
+            "const": "machine:invoke"
+          }
+        }
+      },
+      "MachineCredentialPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/MachineCredential"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      },
+      "MachineCredentialCreated": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "credential",
+          "secret_key"
+        ],
+        "properties": {
+          "credential": {
+            "$ref": "#/components/schemas/MachineCredential"
+          },
+          "secret_key": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "readOnly": true,
+            "description": "One-time 256-bit SK, delivered only by this first successful create response. Never in GET/list/audit or recoverable business storage. Response loss requires revoke and new creation."
+          }
+        }
+      },
+      "MachineEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "application_id",
+          "service_principal_id",
+          "credential_id",
+          "action",
+          "occurred_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "application_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "service_principal_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "credential_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "action": {
+            "const": "token.client_credentials"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "MachineEventPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/MachineEvent"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
       }
     },
     "parameters": {
+      "PrincipalMatch": {
+        "in": "header",
+        "name": "If-Match",
+        "required": true,
+        "description": "Exact principal detail version bound to tenant/principal.",
+        "schema": {
+          "type": "string",
+          "pattern": "^\"sp-[a-f0-9]{32}-[a-f0-9]{32}-[1-9][0-9]*\"$"
+        }
+      },
+      "CredentialMatch": {
+        "in": "header",
+        "name": "If-Match",
+        "required": true,
+        "description": "Exact credential detail API revision, including overlap expiry changes. It is distinct from the private JWT security version.",
+        "schema": {
+          "type": "string",
+          "pattern": "^\"cred-[a-f0-9]{32}-[a-f0-9]{32}-[1-9][0-9]*\"$"
+        }
+      },
       "ClientMatch": {
         "in": "header",
         "name": "If-Match",
@@ -5103,11 +6393,29 @@
           "type": "string",
           "pattern": "^[a-f0-9]{32}$"
         }
+      },
+      "principalID": {
+        "in": "path",
+        "name": "principal",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{32}$"
+        }
+      },
+      "credentialID": {
+        "in": "path",
+        "name": "credential",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{32}$"
+        }
       }
     },
     "responses": {
       "Problem": {
-        "description": "RFC 9457 problem. Fixed code only; no input, token or SQL echoed. Codes include application_unmanaged, invalid_client_state, protocol_client_conflict, protected_organization, organization_not_empty, protected_application, application_unavailable, invalid_token, forbidden, insufficient_scope, recent_mfa_required, tenant_mismatch, invalid_request, not_found, already_exists, reserved_role, role_in_use, last_active_owner, root_cannot_move, organization_cycle, version_conflict, precondition_required, invalid_precondition, rate_limited, temporarily_unavailable.",
+        "description": "RFC 9457 problem. Fixed code only; no input, token or SQL echoed. Codes include credential_limit, invalid_credential_state, service_principal_disabled, application_unmanaged, invalid_client_state, protocol_client_conflict, protected_organization, organization_not_empty, protected_application, application_unavailable, invalid_token, forbidden, insufficient_scope, recent_mfa_required, tenant_mismatch, invalid_request, not_found, already_exists, reserved_role, role_in_use, last_active_owner, root_cannot_move, organization_cycle, version_conflict, precondition_required, invalid_precondition, rate_limited, temporarily_unavailable.",
         "headers": {
           "X-Request-ID": {
             "$ref": "#/components/headers/RequestID"

@@ -206,6 +206,21 @@ export default function Playground({
                 type="button"
                 onClick={() => {
                   clear();
+                  const principalVersion = match.schema.pattern.includes("sp-");
+                  const credentialVersion =
+                    match.schema.pattern.includes("cred-");
+                  if (
+                    (principalVersion || credentialVersion) &&
+                    (!/^[a-f0-9]{32}$/.test(values.application || "") ||
+                      !/^[a-f0-9]{32}$/.test(values.principal || "") ||
+                      (credentialVersion &&
+                        !/^[a-f0-9]{32}$/.test(values.credential || "")))
+                  ) {
+                    setError(
+                      "请先填写目标 application、principal 以及需要的 credential ID。",
+                    );
+                    return;
+                  }
                   const clientVersion =
                     match.schema.pattern.includes("client-");
                   if (
@@ -235,16 +250,24 @@ export default function Playground({
                       path:
                         "/v1/tenants/" +
                         me.tenant_id +
-                        (clientVersion
+                        (principalVersion || credentialVersion
                           ? "/applications/" +
                             values.application +
-                            "/clients/" +
-                            values.client
-                          : applicationVersion
-                            ? "/applications/" + values.application
-                            : match.schema.pattern.includes("org-")
-                              ? "/organizations?limit=1"
-                              : ""),
+                            "/service-principals/" +
+                            values.principal +
+                            (credentialVersion
+                              ? "/credentials/" + values.credential
+                              : "")
+                          : clientVersion
+                            ? "/applications/" +
+                              values.application +
+                              "/clients/" +
+                              values.client
+                            : applicationVersion
+                              ? "/applications/" + values.application
+                              : match.schema.pattern.includes("org-")
+                                ? "/organizations?limit=1"
+                                : ""),
                     },
                     true,
                   );
@@ -253,6 +276,12 @@ export default function Playground({
                 读取最新 ETag
               </button>
             </div>
+          )}
+          {operation["x-playground-execute"] === false && (
+            <p role="status" className="notice">
+              一次性凭证创建请使用机器身份的凭证专页。本页继续展示 API
+              合同，避免创建后 SK 被脱敏而无法保存。
+            </p>
           )}
           {operation.requestBody && (
             <label>
@@ -271,7 +300,10 @@ export default function Playground({
             </label>
           )}
           <div className="actions playground-actions">
-            <button type="submit">
+            <button
+              type="submit"
+              disabled={operation["x-playground-execute"] === false}
+            >
               {operation.method === "GET" ? "发送读取请求" : "检查写入请求"}
             </button>
             <button

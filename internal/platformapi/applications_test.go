@@ -90,6 +90,23 @@ func verifyApplicationPrimaryChecks(t *testing.T, db *sql.DB, repo store.Store, 
 			continue
 		}
 		ownedID, _ := store.ParseID(owned.ID)
+		machineRepo := repo.ForAuthorization(a)
+		if _, err = machineRepo.APICreatePrincipal(ctx, ownedID, "Aged principal"); !errors.Is(err, store.ErrStepUp) {
+			t.Fatal("principal create trusted caller Recent flag")
+		}
+		if _, err = machineRepo.SetPrincipalEnabled(ctx, ownedID, ownedID, false, 1); !errors.Is(err, store.ErrStepUp) {
+			t.Fatal("principal lifecycle trusted caller Recent flag")
+		}
+		if _, err = machineRepo.CreateMachineCredential(ctx, ownedID, ownedID, "Aged key", 1, hydra.New()); !errors.Is(err, store.ErrStepUp) {
+			t.Fatal("credential create trusted caller Recent flag")
+		}
+		if _, err = machineRepo.RevokeMachineCredential(ctx, ownedID, ownedID, ownedID, 1); !errors.Is(err, store.ErrStepUp) {
+			t.Fatal("credential revoke trusted caller Recent flag")
+		}
+		if _, err = machineRepo.CleanupMachineCredential(ctx, ownedID, ownedID, ownedID, 1, hydra.New()); !errors.Is(err, store.ErrStepUp) {
+			t.Fatal("credential cleanup trusted caller Recent flag")
+		}
+
 		if _, err = repo.ForAuthorization(a).APICreateManagedClient(ctx, ownedID, "Aged MFA", "http://127.0.0.1:9876/callback"); !errors.Is(err, store.ErrStepUp) {
 			t.Fatal("client registration trusted caller Recent flag")
 		}

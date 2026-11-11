@@ -15,7 +15,7 @@ const all = operations(spec),
   tenant = "a".repeat(32);
 const op = (name) => all.find((x) => x.operationId === name);
 test("tenant path is bound to the session; query and resource IDs are constrained", () => {
-  assert.equal(all.length, 43);
+  assert.equal(all.length, 54);
   assert.equal(
     buildCall(
       op("listMembers"),
@@ -167,4 +167,31 @@ test("client cursors are encoded and application ETags have their own schema", (
       tenant,
     ),
   );
+});
+
+test("one-time credential creation stays in the dedicated delivery page", () => {
+  assert.throws(
+    () =>
+      buildCall(
+        op("createMachineCredential"),
+        { application: "b".repeat(32), principal: "c".repeat(32) },
+        JSON.stringify({ name: "First", expires_in_days: 90 }),
+        "",
+        tenant,
+      ),
+    /一次性凭证/,
+  );
+  const call = buildCall(
+    op("revokeMachineCredential"),
+    {
+      application: "b".repeat(32),
+      principal: "c".repeat(32),
+      credential: "d".repeat(32),
+    },
+    "{}",
+    '"cred-' + tenant + "-" + "d".repeat(32) + '-2"',
+    tenant,
+  );
+  assert.equal(call.method, "POST");
+  assert(call.path.endsWith("/revoke"));
 });

@@ -7,6 +7,7 @@ import Playground from "./Playground.jsx";
 import AccountSecurity from "./AccountSecurity.jsx";
 import ApplicationManagement from "./ApplicationManagement.jsx";
 import OrganizationActions from "./OrganizationActions.jsx";
+import MachineEvents from "./MachineEvents.jsx";
 
 const tabs = [
   ["overview", "空间概览", "◈"],
@@ -38,6 +39,14 @@ const actionNames = {
   "role.created": "创建角色",
   "application.enabled": "恢复空间应用",
   "application.created": "创建应用",
+  "service_principal.created": "创建机器身份",
+  "service_principal.disabled": "停用机器身份",
+  "service_principal.enabled": "恢复机器身份",
+  "credential.pending": "登记待处理机器凭证",
+  "credential.activated": "激活机器凭证",
+  "credential.revoked": "撤销机器凭证",
+  "credential.overlap_shortened": "缩短旧凭证重叠期",
+  "credential.protocol_cleanup_checked": "核对机器凭证协议清理",
   "client.registration_pending": "登记公开客户端",
   "client.activated": "客户端登记生效",
   "client.revoked": "撤销客户端",
@@ -918,6 +927,16 @@ function App() {
                   csrf={csrf.current}
                   onFailure={fail}
                   revision={revision}
+                />
+              )}
+              {tab === "audit" && (
+                <MachineEvents
+                  key={context + "machine-events"}
+                  context={context}
+                  csrf={csrf.current}
+                  tenant={me.tenant_id}
+                  revision={revision}
+                  onFailure={fail}
                 />
               )}
               {tab === "roles" && (

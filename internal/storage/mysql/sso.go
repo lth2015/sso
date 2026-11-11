@@ -536,11 +536,11 @@ func (s Store) LogoutAll(ctx context.Context, digest, csrf []byte) (ID, error) {
 }
 func (s Store) SSOReady(ctx context.Context) error {
 	var count int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations WHERE version IN ('004_sso','006_account_security','007_authenticator_changes','008_managed_clients')`).Scan(&count)
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations WHERE version IN ('004_sso','006_account_security','007_authenticator_changes','008_managed_clients','009_machine_credentials')`).Scan(&count)
 	if err != nil {
 		return err
 	}
-	if count != 4 {
+	if count != 5 {
 		return errors.New("SSO schema unavailable")
 	}
 	return nil

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { request, errorText } from "./api.js";
 import ManagedRegistration from "./ManagedRegistration.jsx";
+import MachineIdentityManagement from "./MachineIdentityManagement.jsx";
 function Dialog({ title, busy, close, children }) {
   const ref = useRef(null);
   useEffect(() => {
@@ -47,6 +48,7 @@ export default function ApplicationManagement({
     [notice, setNotice] = useState(""),
     [confirmed, setConfirmed] = useState(false);
   const [registration, setRegistration] = useState(null);
+  const [machineApp, setMachineApp] = useState(null);
   const alive = useRef(true),
     generation = useRef(0),
     dialogAbort = useRef(null);
@@ -228,6 +230,14 @@ export default function ApplicationManagement({
                       {app.managed && (
                         <button
                           className="secondary"
+                          onClick={() => setMachineApp(app)}
+                        >
+                          机器身份
+                        </button>
+                      )}
+                      {app.managed && (
+                        <button
+                          className="secondary"
                           disabled={busy || !app.enabled || !app.available}
                           onClick={() =>
                             setRegistration({ kind: "create-client", app })
@@ -390,6 +400,16 @@ export default function ApplicationManagement({
             </form>
           )}
         </Dialog>
+      )}
+      {machineApp && (
+        <MachineIdentityManagement
+          key={identity + machineApp.id}
+          app={machineApp}
+          context={context}
+          csrf={csrf}
+          close={() => setMachineApp(null)}
+          onFailure={onFailure}
+        />
       )}
       {registration && (
         <ManagedRegistration

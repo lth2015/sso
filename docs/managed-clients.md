@@ -51,3 +51,7 @@ client path 仅接受此功能生成的 32-hex ID；旧的字符串 client_id �
 运行 `scripts/console clients-test`，配合 `scripts/api test`、`scripts/m1 test`。使用独立合成账户/自有应用/协议对象，清理器核实封闭账户集合及所有权，禁止触碰其他空间或共享客户端。真实协议测试包含新客户端 code/PKCE、refresh、只读 scope、撤销后 access/refresh 拒绝及协议清理；不将注入 HTTP 故障的测试当成真实 Hydra 验证。
 
 新增 migration 008 只添加所有权/状态表，既有迁移校验和保留。周五演示固定标签与数据保留；CI/GCP/生产部署由 SRE 负责。本切片不构成 confidential/M2M、机器密钥轮换、生产 TLS/KMS 或外部 Marketstars 接通的声明。
+
+## 后续机器凭证切片
+
+本页的无 secret 约束仅适用于公开 PKCE 客户端。自有应用的 SP、一次性 AK/SK、双凭证轮换和独立机器 API 已另列 [机器凭证手册](machine-credentials.md) 与 ADR 0016；不复用公开客户端 reconcile 来恢复秘密或激活未知 pending。

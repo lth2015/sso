@@ -1,13 +1,23 @@
 # 持续开发交接
 
-用户授权持续本地功能开发、验收、文档化并推送 master；CI/GCP/部署由 SRE 负责。周五演示基线 `demo-friday-2026-11-13` / 5d8b46b 及私有演示数据必须保留。此前稳定开发提交 f8e5dbc（OpenAPI 0.12.0 / 38 操作），完整验收见 validation.md。
+用户授权持续本地功能开发、验收、文档化并推送 master；CI/GCP/部署由 SRE 负责。平台中断或会话结束不代表仍在后台运行，以 Git、本日志和 validation.md 为实际进度。
 
-当前推进：租户自有应用、公开 PKCE 客户端的 pending → active → revoked 生命周期与协议对账。先实现不含 secret 的注册，再推进 confidential/SP/凭证。已有共享平台/演示应用不能被任意租户改写客户端。每块功能在真实主库/Hydra/浏览器验收后提交，不把实验或待办写成已完成。
+## 固定与已推送节点
 
-后续队列：服务端客户端与凭证一次性发放/轮换；SP/机器身份与受限 audience/scope；受控 MFA 恢复；组织/应用范围授权；审计投递及导出。当前会话停止不代表后台继续执行，以 Git/本日志和 validation.md 为实际进度。
+周五演示基线 `demo-friday-2026-11-13` / 5d8b46b、原源码与文档备份、私有演示数据及长期密钥保留。0.12.0 / f8e5dbc 完成组织生命周期；最近已推送稳定节点为 e4184ab / 0.13.0，包含自有应用和公开 PKCE 客户端生命周期，43 项 User API。其完整本地验收见 validation.md，文档包 artifacts/sso-documentation-v0.13.0.zip。
 
-工作中记录：已新增 migration 008、owned application/public PKCE pending/active/revoked 仓储、五个 API（合同草稿 0.13.0 / 43 操作）、控制台及核对/撤销。28 项仓储/配置检查已实际通过（其中 27 项连接主库），真实浏览器/原生协议及全部既有回归已通过，随当前节点提交；实际 SHA 以 Git 历史为准。私有 Admin 连接已与出站代理分离；注入协议 drift 的测试夹具明确使用 UTF-8，未放宽名称/profile 比较。以 validation.md 的最终通过记录为交付依据。
+## 当前切片 0.14.0
 
-下一切片的未实现设计与验收约束记录在 machine-credentials-next.md，避免平台中断后丢失决策；先完成当前节点的提交，再切换实现。
+migration 009 已本地应用，旧迁移不改。新增 SP、一次性 SK、双凭证轮换、独立机器 Hook/资源检查和签发审计；User/BFF 合同 54 项，机器合同独立，不经 User BFF。当前本地服务已构建运行此切片。
 
-0.13.0 本地节点完成：27 项主库测试 + 回调边界共 28 项、147 个原生 API 响应、30 个新浏览器合同响应与既有回归/演示全部通过，秘密排除/文档包在提交前完成检查。下一步按 machine-credentials-next.md 实施机器身份与一次性凭证。
+专项实际通过：35 项仓储/配置检查（34 项连接主库，1 项纯回调配置）；69 个真实原生合同响应，24 个真实 BFF 合同响应及一次性秘密/丢包/手机交互。另验证创建者移交/停用后的机器持续资格、新所有者撤销与审计委托不扩大管理权限。引擎对扩展数字的处理曾导致到期字段解码失败，已改规范十进制字符串并通过真实签发/资源检查。秘密仅在进程内，秘密页面不截图。
+
+修正后的第二次全部既有回归、完整演示彩排、实际 SK/令牌文件与日志排除均已通过；文档导出和 Git 提交随本节点收尾。测试过程和完成 SHA 以 validation.md / Git 为准，当前 ADR 0016 的已实现范围见 machine-credentials.md，原实施约束 machine-credentials-next.md 只作历史记录。
+
+## 后续队列
+
+优先按 external-machine-integration-next.md 完善外部机器接入代码与受控对账；随后按设计推进邀请重发/结果不明体验、受控 MFA 恢复、组织/应用范围授权、审计投递及导出。private_key_jwt、自定义机器业务授权、正式邮件/TLS/KMS/HA/DR/SLO 尚未交付。不介入 SRE 的 CI、GCP 和部署工作。任何新切片均保留既有演示，完成可复验实现和文档后提交。
+
+## 本节点必须保留的修正记录
+
+初次全量回归末尾发现一次人工清理过宽，误删固定演示账号/数据。已按 MySQL FULL 行事件恢复 398 条原记录，逐行原值和 60 项 FK 检查通过；原密码散列/TOTP/恢复码散列/ID 未重生，恢复后 scripts/demo check 通过。新增 fixture_protection.py 在普通账户/API 清理任何变更前保护清单，显式 demo reset 才允许匹配上下文删除。8 项保护测试及真实拒绝探针通过。修正后的第二次全量回归及完整 scripts/demo rehearse 已通过，不沿用初次失败结果。私有恢复资料和凭证指纹只在 .local/recovery。详情见 validation.md。

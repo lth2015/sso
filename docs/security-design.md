@@ -78,3 +78,7 @@ Playground 沿用固定 BFF 目标/路径白名单、cookie/context、Origin/CSR
 ## 公开客户端登记与隔离
 
 应用所有权与关联启用分离，关联 owner 不能改写共享/其他空间的全局客户端。公开 PKCE profile 固定 grant/scope/audience/auth 方式，URI 不被平台抓取；状态/owner/MFA/ETag 在主库复查。pending/orphan 不激活，reconcile 先读取且只采用精确所有权/profile 匹配；撤销的 client 版本使所有旧 grant 失效，不批量修改共享 SID。私有协议错误只记录受控字段名与请求 ID，不返回上游正文或秘密。控制台/Playground 不接收 Admin 目标/凭证。见 ADR 0015 和 managed-clients.md。
+
+## 机器身份切片
+
+机器身份 0.14.0：pending→私有协议核对→主库复查激活；SK 仅首次成功响应，业务库不保存可恢复副本。双凭证最多 24 小时重叠，撤销先本地失效；SP/应用恢复不复活旧 JWT。机器审计不伪造人类 actor。独立资源检查主库权威，不能据此保证外部离线验签服务实时撤销。详见 machine-credentials.md。

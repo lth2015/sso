@@ -21,6 +21,10 @@ export function bodyExample(spec, operation, tenant) {
   return JSON.stringify(value, null, 2);
 }
 export function buildCall(operation, values, text, etag, tenant) {
+  if (operation["x-playground-execute"] === false)
+    throw new Error(
+      "一次性凭证创建请使用机器身份的凭证专页，通用 Playground 不交付 SK。",
+    );
   let path = operation.path;
   for (const name of path.matchAll(/\{(\w+)\}/g)) {
     const value = name[1] === "tenant" ? tenant : values[name[1]];

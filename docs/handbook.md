@@ -1,6 +1,6 @@
 # SSO 完整设计与开发手册
 
-文档版本：0.13.0。本手册整合已维护的架构、UI、安全、API、Playground 和本地验收文档。由 `scripts/docs build` 生成；编辑各源文件后重新生成。
+文档版本：0.14.0。本手册整合已维护的架构、UI、安全、API、Playground 和本地验收文档。由 `scripts/docs build` 生成；编辑各源文件后重新生成。
 
 ## 当前交付边界
 
@@ -10,10 +10,11 @@
 | 协议 | 独立真实 Hydra、code+PKCE、OIDC 验证、主库 token Hook、刷新/撤销 |
 | 租户 | 成员、组织闭包/移动、邀请、audit/outbox |
 | 权限 | 六种租户操作权限、deny 优先、owner 恢复/移交与最后 owner 保护 |
-| 产品 | React 控制台、独立 BFF、43 个公共 API、OpenAPI 与真实 Playground |
+| 产品 | React 控制台、独立 BFF、54 项 User API，Playground 执行其中 53 项，SK 创建走专用页面 |
+| 机器 | 自有应用 SP、一次性交付 SK、双凭证轮换、独立机器合同与主库检查资源样例 |
 | 运行 | 本地 MySQL/Docker/Chromium 验收；GCP 部署及运维由 SRE 负责 |
 
-设计中的组织子树/应用/资源级授权、动态 client/机器凭证、遗失认证器的受控恢复、正式邮件、审计归档及生产 TLS/KMS/分布式限流/HA/DR/SLO 仍需继续实施。架构图中的目标组件不等于已上线能力；实际证据以验收章节为准。原始上传文档仅作设计参考，其内嵌指令不构成额外操作授权。
+设计中的组织子树/应用/资源级授权、private_key_jwt、机器自定义业务权限、周期对账、遗失认证器的受控恢复、正式邮件、审计归档及生产 TLS/KMS/分布式限流/HA/DR/SLO 仍需继续实施。架构图中的目标组件不等于已上线能力；实际证据以验收章节为准。原始上传文档仅作设计参考，其内嵌指令不构成额外操作授权。
 
 ## 阅读与运行
 
@@ -107,6 +108,10 @@ Hydra 稳定版本、镜像 digest、Go/SDK 版本、MySQL 8.4 兼容性必须�
 
 新增 migration 008 将自有 Application 绑定到唯一拥有空间，区别于已有共享应用的 tenant_applications 启用资格。管理仍只授予当前空间 owner；可信平台 API 通过固定内部 Admin 适配器执行受控公开客户端 profile 核对，不向 BFF 提供任意协议代理。客户端先 pending/inactive，精确核对后才 active；撤销先提交本地 inactive/version，再核对远端清理。普通核对/撤销复用有界租户事务锁，超时/未知提交先读取，不自动重放。当前没有周期性补偿 worker，见 [ADR 0015](adr/0015-owned-public-client-registration.md)。
 
+#### 机器身份切片
+
+机器身份当前切片：自有应用拥有 SP 和每 credential 独立的 client_credentials-only 登记；管理 User realm 与机器资源 realm 分离。签发 Hook 从主库解析资格，资源侧验签后再次查询版本/状态/expiry。设计和约束见 machine-credentials.md / ADR 0016。
+
 
 ## 02. 安全设计
 
@@ -192,6 +197,10 @@ Playground 沿用固定 BFF 目标/路径白名单、cookie/context、Origin/CSR
 #### 公开客户端登记与隔离
 
 应用所有权与关联启用分离，关联 owner 不能改写共享/其他空间的全局客户端。公开 PKCE profile 固定 grant/scope/audience/auth 方式，URI 不被平台抓取；状态/owner/MFA/ETag 在主库复查。pending/orphan 不激活，reconcile 先读取且只采用精确所有权/profile 匹配；撤销的 client 版本使所有旧 grant 失效，不批量修改共享 SID。私有协议错误只记录受控字段名与请求 ID，不返回上游正文或秘密。控制台/Playground 不接收 Admin 目标/凭证。见 ADR 0015 和 managed-clients.md。
+
+#### 机器身份切片
+
+机器身份 0.14.0：pending→私有协议核对→主库复查激活；SK 仅首次成功响应，业务库不保存可恢复副本。双凭证最多 24 小时重叠，撤销先本地失效；SP/应用恢复不复活旧 JWT。机器审计不伪造人类 actor。独立资源检查主库权威，不能据此保证外部离线验签服务实时撤销。详见 machine-credentials.md。
 
 
 ## 03. UI 与交互设计
@@ -301,6 +310,10 @@ API Playground 已接入真实控制台授权：接口选择、参数、JSON、I
 
 应用接入页为 owner 提供创建应用和自有应用下的公开客户端登记，现有共享应用保持只读客户端元数据。显式区分 pending/active/revoked，核对、撤销和协议清理均需确认；失败后刷新状态，不自动重放。手机端应用列表使用纵向卡片保留所有操作，确认 checkbox 与说明同行，元数据不包含 secret。详见 [客户端登记](managed-clients.md)。
 
+#### 机器身份切片
+
+机器凭证当前交互：应用行进入专用模态页，SP/凭证列表与一次性秘密页分开；确认后创建，不自动重试。返回、关闭或切换空间清除显示中的 SK；网络结果不明引导先核对、撤销后重建。Playground 中创建 SK 的操作只读合同并指向此专用页，其余管理操作仍可执行。详见 machine-credentials.md。
+
 
 ## 04. 租户权限与恢复边界
 
@@ -379,7 +392,7 @@ node tests/api/docs.cjs
 scripts/api enable --email YOUR_LOCAL_ADDRESS
 ```
 
-随后从 OAuth 客户端发起登录，完成密码和 MFA，选择有资格的空间。需要 step-up 时重新授权并请求 `max_age=0`。没有开放动态 client 注册；正式第三方接入需后续管理功能和 SRE 域名配置。
+随后从 OAuth 客户端发起登录，完成密码和 MFA，选择有资格的空间。需要 step-up 时重新授权并请求 `max_age=0`。自有应用支持受控公开 PKCE 登记与独立机器 AK/SK；详见 managed-clients.md 和 machine-credentials.md。正式入口与域名配置由 SRE 负责。
 
 取得平台 access token 后，可按下列格式调用（占位符不是可用凭证，不把实际 token 粘贴到日志/聊天）：
 
@@ -410,14 +423,14 @@ curl http://127.0.0.1:8083/v1/me \
 
 `api test` 注册两个独立合成账户，通过真实原生 OAuth code+PKCE、密码/MFA 后访问 API；实际成功请求和响应由 OpenAPI JSON Schema 校验，原有 18 个业务操作均须覆盖；另运行 `scripts/console rbac-test` 覆盖新增 8 个操作及真实角色 UI。反例包含 ID token/非法 token/cookie 旁路、scope、错租户、非 owner、非法 JSON/媒体类型/body、最近 MFA、并发 If-Match、邀请重放/错误邮箱/撤销、成员恢复旧授权拒绝、会话归属和审计。专用 Go 检查在验签后递增 fixture User 版本，证明写事务阻止旧证明；也检查事务内 token 到期。
 
-浏览器测试仅把 token/proof 保存在测试进程内，失败只打印阶段/类别；不会录制秘密页面。共享 fixture 清理要求租户全部成员都属于本轮合成账户，按叶到根删除组织，并清理自己的私有通知；拒绝清理包含其他账户的租户。`docs.cjs` 检查实际参考页的 43 项操作、桌面/手机布局、无凭证存储并生成截图。
+浏览器测试仅把 token/proof 保存在测试进程内，失败只打印阶段/类别；不会录制秘密页面。共享 fixture 清理要求租户全部成员都属于本轮合成账户，按叶到根删除组织，并清理自己的私有通知；拒绝清理包含其他账户的租户。`docs.cjs` 检查实际参考页的 54 项操作、桌面/手机布局、无凭证存储并生成截图。
 
 既有回归依次运行 `scripts/m0 test`、`scripts/m1 test`、`scripts/m2 test`、`scripts/sso test`、`scripts/sso network-test`、两个账户/SSO 浏览器脚本。普通 Go 测试明确跳过真实 fixture 案例，不能替代 API 浏览器集成测试。命令会短暂停止自己的通知 worker，不能与浏览器通知流程并发执行。
 
 用 `scripts/sso down` 停止全部本地服务，保留 volume/私有 key。不要修改既有迁移校验和、输出完整 env/Compose/容器 inspect、token/proof、MFA 材料或 SQL 输入。详见 [ADR 0006](adr/0006-public-platform-api.md)。
 
 
-公共 API 0.13.0 共 43 项业务操作，成员 email 由 members.read 授权（无 verified alias 时 null）。新增真实 React 控制台见 [控制台手册](runbooks/console.md)，浏览器边界合同为 `api/console.openapi.yaml`；该合同要求对应 cookie/context/CSRF，不替代公共 Bearer 接入合同。
+公共 API 0.14.0 共 54 项业务操作，成员 email 由 members.read 授权（无 verified alias 时 null）。新增真实 React 控制台见 [控制台手册](runbooks/console.md)，浏览器边界合同为 `api/console.openapi.yaml`；该合同要求对应 cookie/context/CSRF，不替代公共 Bearer 接入合同。
 
 
 #### 角色 API
@@ -427,7 +440,7 @@ curl http://127.0.0.1:8083/v1/me \
 创建使用 `{"code":"auditor","policies":[{"permission":"audit.read","effect":"allow"}]}`；更新使用完整 policies 数组，删除/绑定/解绑提交 `{}`。均需 JSON、最近 MFA 和 authz If-Match。角色 code 不可更名，owner 不可修改/删除；带绑定角色返回 409 role_in_use。解绑最后 active owner 返回 409 last_active_owner。真实变更后旧授权失效，重复绑定/解绑及相同策略替换不改变版本。权限目录、恢复边界、并发与历史审计详见 [ADR 0008](adr/0008-tenant-roles-and-deny.md)。
 
 
-完整字段和示例见 [API 参考](api-reference.md)；运行中 `/docs` 展示同一份合同的参数、请求/响应 schema。控制台 [Playground](playground.md) 使用现有 BFF 发起真实调用，支持写入确认、ETag、MFA/权限错误与凭证脱敏。OpenAPI 0.13.0 提供 43 个业务操作，包括组织生命周期、角色/权限读取 ETag 和写入 JSON 示例；新增同源只读 `/platform-openapi.json` 记录在 BFF 合同。
+完整字段和示例见 [API 参考](api-reference.md)；运行中 `/docs` 展示同一份合同的参数、请求/响应 schema。控制台 [Playground](playground.md) 使用现有 BFF 发起真实调用，支持写入确认、ETag、MFA/权限错误与凭证脱敏。OpenAPI 0.14.0 提供 54 个业务操作，包括组织生命周期、角色/权限读取 ETag 和写入 JSON 示例；新增同源只读 `/platform-openapi.json` 记录在 BFF 合同。
 
 新增 `GET /v1/me/security-events`：platform:read、有效当前租户 grant，仅本人记录；无需 audit.read。支持 limit/after，按时间与 ID 降序，其他用户/隐藏/未知游标统一 404。仅返回 id/action/occurred_at，完整语义见 [个人安全事件](security-events.md)。
 
@@ -440,7 +453,7 @@ curl http://127.0.0.1:8083/v1/me \
 
 ### 完整 API 参考
 
-OpenAPI 0.13.0；公共 Bearer API 共 43 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
+OpenAPI 0.14.0；公共 Bearer API 共 54 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
 
 真实交互入口见 [Playground 手册](playground.md)；外部接入见 [公共 API 手册](runbooks/public-api.md)。JSON/YAML 合同见 [OpenAPI](../api/openapi.yaml)。
 
@@ -470,10 +483,21 @@ OpenAPI 0.13.0；公共 Bearer API 共 43 个业务操作。此文件由 OpenAPI
 | POST | `/v1/tenants/{tenant}/applications/{application}/clients/{client}/revoke` | `revokeManagedClient` |
 | POST | `/v1/tenants/{tenant}/applications/{application}/disable` | `disableTenantApplication` |
 | POST | `/v1/tenants/{tenant}/applications/{application}/enable` | `enableTenantApplication` |
+| GET | `/v1/tenants/{tenant}/applications/{application}/service-principals` | `listServicePrincipals` |
+| POST | `/v1/tenants/{tenant}/applications/{application}/service-principals` | `createServicePrincipal` |
+| GET | `/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}` | `getServicePrincipal` |
+| GET | `/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/credentials` | `listMachineCredentials` |
+| POST | `/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/credentials` | `createMachineCredential` |
+| GET | `/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/credentials/{credential}` | `getMachineCredential` |
+| POST | `/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/credentials/{credential}/cleanup` | `cleanupMachineCredential` |
+| POST | `/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/credentials/{credential}/revoke` | `revokeMachineCredential` |
+| POST | `/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/disable` | `disableServicePrincipal` |
+| POST | `/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/enable` | `enableServicePrincipal` |
 | GET | `/v1/tenants/{tenant}/audit-events` | `listAuditEvents` |
 | GET | `/v1/tenants/{tenant}/invitations` | `listInvitations` |
 | POST | `/v1/tenants/{tenant}/invitations` | `createInvitation` |
 | POST | `/v1/tenants/{tenant}/invitations/{invitation}/revoke` | `revokeInvitation` |
+| GET | `/v1/tenants/{tenant}/machine-events` | `listMachineEvents` |
 | GET | `/v1/tenants/{tenant}/members` | `listMembers` |
 | POST | `/v1/tenants/{tenant}/members/{member}/restore` | `restoreMember` |
 | GET | `/v1/tenants/{tenant}/members/{member}/roles` | `listMemberRoles` |
@@ -2892,6 +2916,1527 @@ HTTP 200
 错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
 
 
+#### GET /v1/tenants/{tenant}/applications/{application}/service-principals
+
+List this owned application machine principals
+
+Active tenant owner required.
+
+OAuth scope：`platform:read`。权限：`reserved_owner:roles.manage`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "query",
+    "name": "limit",
+    "description": "Bounded keyset page size.",
+    "schema": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 50
+    }
+  },
+  {
+    "in": "query",
+    "name": "after",
+    "description": "Previous next_cursor; ascending UUID keyset, not a snapshot or timestamp ordering guarantee.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+##### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "List this owned application machine principals",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "application_id",
+                "name",
+                "enabled",
+                "version",
+                "credential_count"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "application_id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "credential_count": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+#### POST /v1/tenants/{tenant}/applications/{application}/service-principals
+
+Create a tenant-owned machine identity
+
+Active owner/recent MFA; app must be owned/enabled/available. Maximum 100 principals per app. SP belongs to the tenant owner collective, not the creator personal session. No machine key or User grant is created; current User authorization stays valid.
+
+OAuth scope：`platform:write`。权限：`reserved_owner:roles.manage`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+##### 请求示例
+
+```json
+{
+  "name": "本地自动化任务"
+}
+```
+
+##### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "name"
+  ],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Trimmed nonblank display name, maximum 128 UTF-8 bytes. Code is generated, not a global namespace chosen by this caller."
+    }
+  }
+}
+```
+
+##### 成功响应
+
+HTTP 201
+
+```json
+{
+  "description": "Create a tenant-owned machine identity",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "Location": {
+      "description": "Created resource path; read metadata here after a result is known.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "application_id",
+          "name",
+          "enabled",
+          "version",
+          "credential_count"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "application_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "credential_count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+#### GET /v1/tenants/{tenant}/applications/{application}/service-principals/{principal}
+
+Read one machine principal and version
+
+Active tenant owner required.
+
+OAuth scope：`platform:read`。权限：`reserved_owner:roles.manage`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "principal",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+##### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Read one machine principal and version",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "application_id",
+          "name",
+          "enabled",
+          "version",
+          "credential_count"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "application_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "credential_count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+#### GET /v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/credentials
+
+List credential metadata without SK
+
+Active tenant owner required.
+
+OAuth scope：`platform:read`。权限：`reserved_owner:roles.manage`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "principal",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "query",
+    "name": "limit",
+    "description": "Bounded keyset page size.",
+    "schema": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 50
+    }
+  },
+  {
+    "in": "query",
+    "name": "after",
+    "description": "Previous next_cursor; ascending UUID keyset, not a snapshot or timestamp ordering guarantee.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+##### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "List credential metadata without SK",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "application_id",
+                "service_principal_id",
+                "access_key",
+                "name",
+                "state",
+                "active",
+                "expires_at",
+                "version",
+                "audience",
+                "scope"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "application_id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "service_principal_id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "access_key": {
+                  "type": "string",
+                  "pattern": "^ak_[a-f0-9]{32}$"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "state": {
+                  "enum": [
+                    "pending",
+                    "active",
+                    "revoked",
+                    "expired"
+                  ]
+                },
+                "active": {
+                  "type": "boolean"
+                },
+                "expires_at": {
+                  "type": "integer"
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "audience": {
+                  "type": "string",
+                  "pattern": "^urn:sso:application:[a-f0-9]{32}$"
+                },
+                "scope": {
+                  "const": "machine:invoke"
+                }
+              }
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+#### POST /v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/credentials
+
+Issue an independent one-time AK/SK credential
+
+Active owner/recent MFA and enabled owned app/principal. TTL 1–90 days, maximum two live active/pending credentials and 100 lifetime records per principal. Fixed client_credentials-only, machine:invoke and this app URN audience; no platform management/refresh/ID token. Commits pending, registers and verifies exact private engine profile, then rechecks User authority and principal/application versions before activation. SK returned only here and never stored recoverably in business DB. Unknown response/commit: GET/list, revoke and create a new credential; pending cannot be reconciled active or have SK recovered. On successful activation only, other active key expiry is shortened to at most 24h overlap; API revision changes, security version remains, so cached old JWT stays usable during overlap. Failed creation preserves prior key expiry. No automatic request replay.
+
+OAuth scope：`platform:write`。权限：`reserved_owner:roles.manage`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "principal",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+##### 请求示例
+
+```json
+{
+  "name": "初始凭证",
+  "expires_in_days": 90
+}
+```
+
+##### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "expires_in_days"
+  ],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Trimmed nonblank display name, maximum 128 UTF-8 bytes. Code is generated, not a global namespace chosen by this caller."
+    },
+    "expires_in_days": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 90
+    }
+  }
+}
+```
+
+##### 成功响应
+
+HTTP 201
+
+```json
+{
+  "description": "Issue an independent one-time AK/SK credential",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "Location": {
+      "description": "Created resource path; read metadata here after a result is known.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "credential",
+          "secret_key"
+        ],
+        "properties": {
+          "credential": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "application_id",
+              "service_principal_id",
+              "access_key",
+              "name",
+              "state",
+              "active",
+              "expires_at",
+              "version",
+              "audience",
+              "scope"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              "application_id": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              "service_principal_id": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              "access_key": {
+                "type": "string",
+                "pattern": "^ak_[a-f0-9]{32}$"
+              },
+              "name": {
+                "type": "string"
+              },
+              "state": {
+                "enum": [
+                  "pending",
+                  "active",
+                  "revoked",
+                  "expired"
+                ]
+              },
+              "active": {
+                "type": "boolean"
+              },
+              "expires_at": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "audience": {
+                "type": "string",
+                "pattern": "^urn:sso:application:[a-f0-9]{32}$"
+              },
+              "scope": {
+                "const": "machine:invoke"
+              }
+            }
+          },
+          "secret_key": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "readOnly": true,
+            "description": "One-time 256-bit SK, delivered only by this first successful create response. Never in GET/list/audit or recoverable business storage. Response loss requires revoke and new creation."
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+#### GET /v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/credentials/{credential}
+
+Read credential metadata and API revision
+
+Active owner only. No secret/hash/recoverable private key in this response. Expired is derived from primary time. API revision may differ from internal JWT security version because overlap expiry metadata changes do not revive or invalidate a still-valid token.
+
+OAuth scope：`platform:read`。权限：`reserved_owner:roles.manage`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "principal",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "credential",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+##### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Read credential metadata and API revision",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "application_id",
+          "service_principal_id",
+          "access_key",
+          "name",
+          "state",
+          "active",
+          "expires_at",
+          "version",
+          "audience",
+          "scope"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "application_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "service_principal_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "access_key": {
+            "type": "string",
+            "pattern": "^ak_[a-f0-9]{32}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "active",
+              "revoked",
+              "expired"
+            ]
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "expires_at": {
+            "type": "integer"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "audience": {
+            "type": "string",
+            "pattern": "^urn:sso:application:[a-f0-9]{32}$"
+          },
+          "scope": {
+            "const": "machine:invoke"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+#### POST /v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/credentials/{credential}/cleanup
+
+Clean up a matching revoked credential protocol object
+
+Active owner/recent MFA. Only revoked credentials; never activates pending or reveals/recreates SK. Fixed private Admin profile/ownership check; foreign/drifted objects not deleted. Local revoked tombstone persists even when remote cleanup fails. Absence is observed, not a permanent assurance about old timed-out transactions. Works with disabled SP/app.
+
+OAuth scope：`platform:write`。权限：`reserved_owner:roles.manage`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "principal",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "credential",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Exact credential detail API revision, including overlap expiry changes. It is distinct from the private JWT security version.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"cred-[a-f0-9]{32}-[a-f0-9]{32}-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+##### 请求示例
+
+```json
+{}
+```
+
+##### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
+```
+
+##### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Clean up a matching revoked credential protocol object",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "application_id",
+          "service_principal_id",
+          "access_key",
+          "name",
+          "state",
+          "active",
+          "expires_at",
+          "version",
+          "audience",
+          "scope"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "application_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "service_principal_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "access_key": {
+            "type": "string",
+            "pattern": "^ak_[a-f0-9]{32}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "active",
+              "revoked",
+              "expired"
+            ]
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "expires_at": {
+            "type": "integer"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "audience": {
+            "type": "string",
+            "pattern": "^urn:sso:application:[a-f0-9]{32}$"
+          },
+          "scope": {
+            "const": "machine:invoke"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+#### POST /v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/credentials/{credential}/revoke
+
+Irreversibly revoke a machine credential
+
+Active owner/recent MFA. Pending/active/expired becomes revoked with higher API/security versions and transactional User audit/outbox; same-state/current revision no-op. Key and all old machine JWTs are refused by primary authority immediately. Other keys, SPs and User login remain valid; no shared SID logout. Revoke still works when SP/app is disabled.
+
+OAuth scope：`platform:write`。权限：`reserved_owner:roles.manage`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "principal",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "credential",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Exact credential detail API revision, including overlap expiry changes. It is distinct from the private JWT security version.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"cred-[a-f0-9]{32}-[a-f0-9]{32}-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+##### 请求示例
+
+```json
+{}
+```
+
+##### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
+```
+
+##### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Irreversibly revoke a machine credential",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "application_id",
+          "service_principal_id",
+          "access_key",
+          "name",
+          "state",
+          "active",
+          "expires_at",
+          "version",
+          "audience",
+          "scope"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "application_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "service_principal_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "access_key": {
+            "type": "string",
+            "pattern": "^ak_[a-f0-9]{32}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "active",
+              "revoked",
+              "expired"
+            ]
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "expires_at": {
+            "type": "integer"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "audience": {
+            "type": "string",
+            "pattern": "^urn:sso:application:[a-f0-9]{32}$"
+          },
+          "scope": {
+            "const": "machine:invoke"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+#### POST /v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/disable
+
+Disable a machine principal
+
+Active owner/recent MFA and exact principal ETag. Changes principal security version and User audit/outbox, retaining credentials. Old JWTs fail immediately at the reference resource and never revive after restoration. Restored valid credentials may obtain fresh tokens. Same-state/current ETag no-op; enabling requires app available/enabled. Does not change the User tenant authorization version.
+
+OAuth scope：`platform:write`。权限：`reserved_owner:roles.manage`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "principal",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Exact principal detail version bound to tenant/principal.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"sp-[a-f0-9]{32}-[a-f0-9]{32}-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+##### 请求示例
+
+```json
+{}
+```
+
+##### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
+```
+
+##### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Disable a machine principal",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "application_id",
+          "name",
+          "enabled",
+          "version",
+          "credential_count"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "application_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "credential_count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+#### POST /v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/enable
+
+Enable a machine principal
+
+Active owner/recent MFA and exact principal ETag. Changes principal security version and User audit/outbox, retaining credentials. Old JWTs fail immediately at the reference resource and never revive after restoration. Restored valid credentials may obtain fresh tokens. Same-state/current ETag no-op; enabling requires app available/enabled. Does not change the User tenant authorization version.
+
+OAuth scope：`platform:write`。权限：`reserved_owner:roles.manage`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "principal",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Exact principal detail version bound to tenant/principal.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"sp-[a-f0-9]{32}-[a-f0-9]{32}-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+##### 请求示例
+
+```json
+{}
+```
+
+##### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
+```
+
+##### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Enable a machine principal",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "application_id",
+          "name",
+          "enabled",
+          "version",
+          "credential_count"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "application_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "credential_count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
 #### GET /v1/tenants/{tenant}/audit-events
 
 List controlled space audit metadata
@@ -3317,6 +4862,136 @@ HTTP 204
       "description": "Server-generated request correlation ID.",
       "schema": {
         "type": "string"
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+#### GET /v1/tenants/{tenant}/machine-events
+
+Read controlled machine issuance audit metadata
+
+Requires audit.read on the token tenant. Explicit deny overrides other allows, including owner operational privileges. Requires audit.read on token tenant, explicit deny first. Machine actor is SP/credential, not its human creator. ID/application/SP/credential/action/time only, no token/SK/payload. UUID ascending keyset, no snapshot/immutable archive guarantee. Separate transactional machine outbox; periodic consumers not yet implemented.
+
+OAuth scope：`platform:read`。权限：`permission:audit.read`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "query",
+    "name": "limit",
+    "description": "Bounded keyset page size.",
+    "schema": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 50
+    }
+  },
+  {
+    "in": "query",
+    "name": "after",
+    "description": "Previous next_cursor; ascending UUID keyset, not a snapshot or timestamp ordering guarantee.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+##### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Read controlled machine issuance audit metadata",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "application_id",
+                "service_principal_id",
+                "credential_id",
+                "action",
+                "occurred_at"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "application_id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "service_principal_id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "credential_id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "action": {
+                  "const": "token.client_credentials"
+                },
+                "occurred_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
       }
     }
   }
@@ -5571,7 +7246,7 @@ If-Match 使用带双引号的 authz-N / org-N。权限版本变更使旧 grant 
 
 ### API Playground
 
-Playground 是登录后的真实 API 客户端。它读取与公共服务相同的 OpenAPI 0.13.0，通过控制台 BFF 调用现有 43 个业务操作。它使用真实 Hydra/主库授权，不创建演示身份或伪造 token。
+Playground 是登录后的真实 API 客户端。它读取与公共服务相同的 OpenAPI 0.14.0，通过控制台 BFF 展示现有 54 项 User 管理操作，除一次性 SK 创建外，其余 53 项可真实执行。它使用真实 Hydra/主库授权，不创建演示身份或伪造 token。
 
 #### 启动与使用
 
@@ -5613,6 +7288,10 @@ scripts/console enable --email YOUR_LOCAL_ADDRESS
 GCP、公网域名、TLS 和部署由 SRE 负责。本地验收不代表生产发布。
 
 应用停用/恢复的“读取最新 ETag”先校验 application ID，再读取目标应用详情；完整 app ETag 可超过 64 字符。组织重命名/删除使用组织列表版本，归属移除使用 authz 版本。写入确认仍只发送一次，不自动重新取版本后重放。
+
+#### 机器身份切片
+
+一次性凭证创建 `createMachineCredential` 使用 x-playground-execute=false；它保留完整可读合同、输入示例和安全提示，但禁用通用执行。请在「应用接入 → 机器身份」专用页创建并保存 SK。机器资源和引擎 token 端点使用独立 machine.openapi.yaml，不经 User BFF，Playground 不接受机器 token。
 
 
 ## 08. 个人账户安全
@@ -5848,6 +7527,10 @@ reset 使用封闭账户集合检查：如果演示空间中出现了清单之�
 
 已将通过彩排的 5d8b46b 固定为标签 `demo-friday-2026-11-13`，源码与原文档另存于 artifacts 的 sso-demo-baseline-5d8b46b 文件及 SHA-256 清单；私有账号资料仍只保留在原工作区。后续开发版与原 0.10.0 文档包分开，必要时在干净工作区切回此标签，重新 prepare/up 后运行 check。不要重置或重新生成已有本地数据库密钥。
 
+#### 保留演示数据的测试保护
+
+普通测试清理工具会先读取本地演示清单，拒绝受保护邮箱/空间，即使邮箱也符合 browser-* 合成格式。只有显式 scripts/demo reset 才携带匹配当前清单与环境的重置上下文；不要按邮箱前缀批量选择数据清理。此保护用于防止误操作，不替代独立备份；2026-11-11 清理事故与原行恢复的实际记录见 validation.md。
+
 
 ## 12. 应用接入管理
 
@@ -5946,8 +7629,91 @@ client path 仅接受此功能生成的 32-hex ID；旧的字符串 client_id �
 
 新增 migration 008 只添加所有权/状态表，既有迁移校验和保留。周五演示固定标签与数据保留；CI/GCP/生产部署由 SRE 负责。本切片不构成 confidential/M2M、机器密钥轮换、生产 TLS/KMS 或外部 Marketstars 接通的声明。
 
+#### 后续机器凭证切片
 
-## 14. 组织生命周期
+本页的无 secret 约束仅适用于公开 PKCE 客户端。自有应用的 SP、一次性 AK/SK、双凭证轮换和独立机器 API 已另列 [机器凭证手册](machine-credentials.md) 与 ADR 0016；不复用公开客户端 reconcile 来恢复秘密或激活未知 pending。
+
+
+## 14. 机器身份与一次性凭证
+
+来源：[machine-credentials.md](machine-credentials.md)。
+
+### 机器身份、AK/SK 与机器 API
+
+本切片为租户自有应用增加 Service Principal（SP）、一次性交付的 SK、双凭证轮换和独立机器资源样例。管理操作属于 User/MFA realm；机器调用属于独立 application audience。固定周五演示基线继续保留，CI/GCP 部署由 SRE 负责。
+
+#### 控制台操作
+
+登录控制台，进入「应用接入」，在自有应用行选择「机器身份」。空间所有者可创建 SP，进入凭证列表，填写名称和 1–90 天有效期，确认后创建凭证。共享内置应用不能登记本空间机器身份。
+
+成功页面只展示一次 SK；AK 为公开标识 `ak_<credential ID>`，不是秘密。复制按钮只在明确点击时写剪贴板，没有自动下载、浏览器存储或再次查看接口。选择「我已安全保存 SK」、关闭、刷新或离开页面后不能恢复 SK。响应使用 no-store。不要录屏或截取秘密页。
+
+如果创建超时或未收到 SK，先返回列表核对。无论看到 pending 还是 active，只要 SK 未保存，都应撤销该凭证，执行协议清理，再创建新凭证。页面不自动重试创建；GET、清理和公开客户端 reconcile 都不能恢复或激活未知 SK。
+
+每个 SP 最多两份未过期 active/pending 凭证。第二份激活成功时，旧 active 凭证的到期时间缩短至最多 24 小时；新建失败不缩短旧凭证。先更新消费者，再撤销旧凭证。到期由服务端主库实时判断；清理保留撤销记录。每应用最多 100 个 SP，每 SP 最多保留 100 条凭证记录，这是当前明确的容量边界。
+
+#### 管理 API 与 OpenAPI
+
+[公共 User OpenAPI](../api/openapi.yaml) 0.14.0 共 54 项业务操作，本次增加 11 项；[Console BFF 合同](../api/console.openapi.yaml) 为相同管理操作提供 cookie/context/CSRF 边界。
+
+| 方法 | 路径（前缀 `/v1/tenants/{tenant}`） | 作用 |
+| --- | --- | --- |
+| GET / POST | `/applications/{application}/service-principals` | 列表 / 创建 SP |
+| GET | `/applications/{application}/service-principals/{principal}` | SP 元数据与 ETag |
+| POST | `.../{principal}/disable`、`.../{principal}/enable` | 停用 / 恢复 SP |
+| GET / POST | `.../{principal}/credentials` | 元数据列表 / 创建并一次性交付 SK |
+| GET | `.../{principal}/credentials/{credential}` | 元数据与 ETag，不含 SK |
+| POST | `.../{credential}/revoke`、`.../{credential}/cleanup` | 先本地撤销 / 后核对清理 |
+| GET | `/machine-events` | 独立机器签发审计 |
+
+管理读取/写入需要 active owner 的保留 `roles.manage` 权限；写入还要求 `platform:write` 和最近 300 秒 MFA。签发审计读取只需 `audit.read`，不因此获得凭证管理权。分页使用 `limit`/`next_cursor`。SP 的 If-Match 为 `"sp-<tenant>-<principal>-<version>"`，凭证为 `"cred-<tenant>-<credential>-<version>"`；从当前目标 GET 获取，不自行构造。缺少 428，格式错误 400，错对象/旧版本 412。创建不提供通用幂等重试。
+
+创建凭证请求示例：
+
+```json
+{"name":"nightly-import","expires_in_days":30}
+```
+
+唯一含 SK 的成功响应为 HTTP 201 `{"credential":{...},"secret_key":"<one-time value>"}`。数据库不保存可恢复 SK 副本，协议引擎保存自己的认证散列；业务元数据、审计与 outbox 不含 SK。公开 Playground 展示全部 54 项管理合同，其中凭证创建仅供查看并引导专用页面，避免通用响应脱敏吞掉唯一 SK；其余 53 项支持现有真实执行流程。
+
+#### 机器换取 token 和访问资源
+
+机器协议与业务资源的合同单列在 [Machine OpenAPI](../api/machine.openapi.yaml)，JSON 版见 [machine.openapi.json](../api/machine.openapi.json)。运行中的匿名只读入口为 `http://api.localhost:8083/machine-openapi.yaml` / `.json`。合同包含一个机器业务资源和引擎 `/oauth2/token`，不计入 54 项 User 管理操作，不加入 User BFF 或 Playground。
+
+在服务端进程内，向本地 `http://auth.localhost:4464/oauth2/token` 发送表单：`grant_type=client_credentials`、`scope=machine:invoke`、`audience=urn:sso:application:<application ID>`。HTTP Basic 的用户名为 AK，密码为 SK。不要把 AK/SK 或换得的 token 写入日志、命令行、URL、前端代码或导出文档；使用秘密管理系统或进程内配置注入。
+
+成功得到最长 300 秒的 access token，无 refresh token、ID token 或用户会话。业务资源样例为 `GET http://api.localhost:8083/v1/machine/applications/<application ID>/identity`，使用 `Authorization: Bearer <access token>`。返回租户、应用、SP、credential 的非秘密身份元数据。
+
+该接口按资源路径构造预期 audience，验 RS256、固定 issuer、到期、scope、机器 claims，再查询业务主库检查凭证/SP/应用/空间状态和版本。不接受调用者选择 issuer/JWKS；payload/header 中的身份 hint 不提供权限。User token 不能调用此资源，机器 token 不能管理平台，另一应用 token 也不能调用此资源。
+
+机器 JWT 的 `ext` 包括 `principal_type=service_principal`、tenant/application/principal/credential ID；安全版本与 `credential_expires_at` 使用规范十进制字符串，避免引擎处理扩展数字时产生浮点格式或精度差异。标准 `exp` 仍由协议引擎签发。消费者不能只解码而跳过验签。
+
+#### 状态、并发与撤销
+
+先在主库提交 pending，再私有创建并逐项核对协议 profile，最后复查 owner/MFA 与 SP/应用版本并激活。创建期间发生停用再恢复也不能激活旧 pending。已有引擎对象不被收养或覆写，因为无法证明其秘密；未知结果关闭权限，保留待撤销记录。
+
+撤销先在主库递增安全版本并关闭资格，协议删除失败不会恢复权限。清理只处理已撤销且所有权和固定 profile 完全匹配的对象，保留墓碑。SP 停用/恢复不影响其他 SP 或人的会话；恢复后旧 JWT 仍失效，尚有效 AK/SK 可换取新 token。应用停用/恢复同样不复活旧 JWT。机器长期资格来自租户/SP/credential，而非创建者后续是否仍有登录会话。
+
+API 元数据 revision 与 token security version 分开：轮换只缩短旧凭证 expiry 并改变其 ETag，重叠期内缓存 JWT 仍可用；撤销则改变安全版本。资源每次检查实时 expiry，因此旧 JWT 中较长的到期提示不能绕过缩短后的期限。
+
+机器签发动作写独立 `machine_events` 和 `machine_outbox_events`，actor 为 SP/credential，不伪造创建者作为调用人。记录表示 Hook 已授权签发，不证明客户端收到 token。机器资源样例的实时拒绝保证不能自动推广到外部仅离线验签的服务；外部业务服务需实施同等在线资格校验或接受短 JWT 的撤销延迟。
+
+#### 本地验收与剩余工作
+
+运行 `scripts/console machine-api-test` 与 `scripts/console machine-test`；测试使用真实账户/MFA、MySQL 和 Hydra，秘密仅在测试进程内，秘密页面不截图。主库专项 `scripts/m1 test` 还验证协议失败和并发，故障注入与真实协议证据分别记录在 [validation.md](validation.md)。
+
+本切片未提供 private_key_jwt、机器自定义 scope、任意业务权限策略、自动轮换代理、周期性对账/清理、外部资源 SDK 或生产 TLS/KMS/邮件/HA 验收。迁移 009 为新增表；已应用的 001–008 不修改。周五演示账户与恢复码、原始上传参考、固定基线备份不变。
+
+#### 元数据页面
+
+以下截图只含合成身份与公开 AK/元数据，不包含一次性 SK。
+
+![桌面机器凭证列表](ui/machine-credentials-desktop.png)
+
+![手机机器凭证列表](ui/machine-credentials-mobile.png)
+
+
+## 15. 组织生命周期
 
 来源：[organization-management.md](organization-management.md)。
 
@@ -5989,7 +7755,7 @@ client path 仅接受此功能生成的 32-hex ID；旧的字符串 client_id �
 运行 `scripts/console organizations-test` 验证真实登录、BFF→API→MySQL、合同响应、MFA、根/非空保护、跨空间、成员分页及桌面/手机操作。`scripts/m1 test` 包含闭包完整性、停用成员清理、委托读取双权限和并发创建/删除测试；原演示账号和数据不作这些测试的 fixture。周五基线标签 demo-friday-2026-11-13 保持原提交，开发后另跑 scripts/demo check。
 
 
-## 15. React 控制台
+## 16. React 控制台
 
 来源：[runbooks/console.md](runbooks/console.md)。
 
@@ -6050,7 +7816,7 @@ scripts/console enable --email YOUR_LOCAL_ADDRESS --second-tenant
 `rbac-test` 使用三个合成账户，通过真实登录/API/BFF 验收默认拒绝、委托读写、deny 优先、撤销、跨租户对象拒绝、owner 恢复/移交及真实 React 角色管理。新增截图：[角色](ui/rbac-roles.png)、[受委托审计员](ui/rbac-auditor.png)。设计和 API 细节见 [ADR 0008](adr/0008-tenant-roles-and-deny.md)。
 
 
-新增 API Playground 导航，可读取同源 OpenAPI 并调用固定的 43 个业务操作。GET 直接发送，写入预览/确认后发送一次，支持 ETag 读取、HTTP 状态/错误、cURL 模板和凭证字段脱敏；离开页面清空内存并取消在途读取，不自动重发写入。使用及限制见 [Playground 手册](playground.md)。
+新增 API Playground 导航，可读取同源 OpenAPI 的 54 项 User 管理合同，真实执行其中 53 项；一次性 SK 创建引导专用机器凭证页面。GET 直接发送，写入预览/确认后发送一次，支持 ETag 读取、HTTP 状态/错误、cURL 模板和凭证字段脱敏；离开页面清空内存并取消在途读取，不自动重发写入。使用及限制见 [Playground 手册](playground.md)。
 
 
 安全会话页面已增加个人 MFA/恢复码/会话概览及“撤销其他会话”确认流程；同一中央会话的多个标签页保留。恢复码管理和认证器更换跳转可信认证域，不在 BFF/Playground 输入密码或验证码。认证器更换的两阶段/取消/结果不明处理见 [专门手册](authenticator-management.md)，验收 `scripts/console authenticator-test`。见 [个人安全](account-security.md)。
@@ -6058,7 +7824,7 @@ scripts/console enable --email YOUR_LOCAL_ADDRESS --second-tenant
 个人安全记录位于安全会话页，20 条分页与刷新，使用当前 User 的公开只读接口；跨空间仍只读本人记录，未公开内部目标标识。验收 `scripts/console events-test`；语义及限制见 [手册](security-events.md)。
 
 
-## 16. 可信登录与双应用
+## 17. 可信登录与双应用
 
 来源：[runbooks/local-sso.md](runbooks/local-sso.md)。
 
@@ -6117,7 +7883,7 @@ scripts/sso enable --email YOUR_LOCAL_ADDRESS --second-tenant
 生产边界见 [ADR 0005](adr/0005-trusted-login-mfa-bff.md)。这些示范应用使用同一 Application，完整权限控制台、MFA 管理、正式邮件与生产 TLS/KMS 等仍待后续开发。
 
 
-## 17. 账户生命周期
+## 18. 账户生命周期
 
 来源：[runbooks/m2-accounts.md](runbooks/m2-accounts.md)。
 
@@ -6155,7 +7921,7 @@ m2 test 暂停本项目 mail-worker，防止真实 worker 与集成 fixture 争�
 已实现注册邮箱证明、原子个人空间引导、Argon2id 密码、恢复挑战、安全版本递增、通知加密/本地可靠落盘、四个 HTTP API 和真实账户页面。账户接口不提供 token 旁路；可信登录、中央会话、MFA 与 BFF 现由 [本地 SSO 手册](runbooks/local-sso.md) 说明。管理接口仍未公开；M0 合成身份实验继续独立。GCP 部署交由 SRE，对应生产邮箱、密钥托管和分布式限流留作正式集成。
 
 
-## 18. 数据库与组织
+## 19. 数据库与组织
 
 来源：[runbooks/m1.md](runbooks/m1.md)。
 
@@ -6194,7 +7960,7 @@ GCP 部署和云端运维由 SRE 专门负责，不作为后续本地开发前�
 008 新增自有应用/公开客户端管理：本轮共 28 项仓储/配置检查，其中 27 项实际连接主库，另 1 项为纯回调校验。覆盖所有权/共享应用拒绝、pending 拒绝、响应丢失、冲突、不复活、并发核对/撤销和取消 RPC 回滚。业务数据库与真实 Hydra 行为分别验证，不混算 HTTP 注入实验。
 
 
-## 19. 协议实验
+## 20. 协议实验
 
 来源：[runbooks/m0.md](runbooks/m0.md)。
 
@@ -6250,7 +8016,7 @@ Go 的 GOPATH/GOMODCACHE/GOCACHE 全部位于 .local，避免受限 HOME 路径�
 M1 数据仓储的运行方式见 [M1 手册](runbooks/m1.md)。Cloud SQL 按用户要求本轮不验证，不把该项写成通过。
 
 
-## 20. 实施计划与剩余功能
+## 21. 实施计划与剩余功能
 
 来源：[implementation-plan.md](implementation-plan.md)。
 
@@ -6305,8 +8071,12 @@ API/文档切片已增加真实 Playground、逐操作运行时参考页、完�
 
 自有应用与公开客户端登记切片：migration 008 提供所有权、pending/active/revoked 管理表；公开 PKCE 固定只读平台范围，无 secret，owner/近期 MFA/客户端 ETag；协议核对匹配后才激活，本地撤销先于远端清理，真实证据见 validation.md。共享应用客户端不能被任意租户改写。confidential/M2M/SP/机器凭证、周期性补偿/对账仍未交付。
 
+#### 2026-11-11：机器身份切片 0.14.0
 
-## 21. 架构决策 0001
+新增 SP、一次性交付 AK/SK、双凭证轮换、独立机器 JWT/resource realm 与机器签发审计。User 管理合同 54 项，机器协议另列。旧阶段文字表示当时进度；当前范围和限制以 machine-credentials.md 与 validation.md 为准。下一步优先完善所有权交接、受控机器对账和外部资源接入体验；private_key_jwt、自定义业务授权、生产运维与 HA 尚未交付。
+
+
+## 22. 架构决策 0001
 
 来源：[adr/0001-platform-boundaries.md](adr/0001-platform-boundaries.md)。
 
@@ -6323,7 +8093,7 @@ API/文档切片已增加真实 Playground、逐操作运行时参考页、完�
 实施：先完成可运行 M0 和测试报告，再依次开展 M1–M5。UI 规格先完成，生产控制台后续交付。此次 Git push 是源码/文档交付，不是云部署或生产发布。上传原文保持不变供追溯。
 
 
-## 22. 架构决策 0002
+## 23. 架构决策 0002
 
 来源：[adr/0002-hydra-m0-findings.md](adr/0002-hydra-m0-findings.md)。
 
@@ -6359,7 +8129,7 @@ Hydra Admin 在本地为测试绑定 loopback，HTTP/--dev 仅此实验允许。
 每交易/refresh chain 绑定、logout/remembered consent/prompt=none/max_age、签名 key 轮换的本地真实引擎验证已补充。用户随后明确 Cloud SQL 由其准备且本轮无需验证，因此云端 HA/DR 不作为本轮本地代码推进阻塞项，也不记为通过。镜像漏洞/维护确认及生产部署前的云端验收仍需另行完成。M1 已开始内部数据与仓储切片，未开放生产功能。
 
 
-## 23. 架构决策 0003
+## 24. 架构决策 0003
 
 来源：[adr/0003-transaction-bindings-and-m1.md](adr/0003-transaction-bindings-and-m1.md)。
 
@@ -6402,7 +8172,7 @@ M0 实验资格表与 M1 业务表尚未连通；不把两个独立测试库的�
 用户进一步明确：本轮尽可能完成本地开发和验收，GCP 部署/云端运维由专门 SRE 负责。后续开发不等待 GCP 项目、实例或云凭证；本地迁移、接口合同和运行说明作为交接材料。云端 HA/DR、KMS 与上线 SLO 属于 SRE/联合生产验收，不由本轮代理执行，也不记为本地测试通过。
 
 
-## 24. 架构决策 0004
+## 25. 架构决策 0004
 
 来源：[adr/0004-account-proof-lifecycle.md](adr/0004-account-proof-lifecycle.md)。
 
@@ -6439,7 +8209,7 @@ worker 用 SELECT FOR UPDATE SKIP LOCKED 获取一条待投递记录，仅向私
 尚无 Hydra 可信登录交互、中央会话、MFA、BFF、真实邮件供应商、生产账号恢复审批与通知。M0 合成授权仍与此业务 User 权威状态分离；不能据 security_version 递增宣称现有 M0 JWT/refresh 已全部撤销。下一步必须把账户因素接入受 CSRF/Origin/交易状态保护的 Hydra 登录，再实施 MFA 与会话版本检查，而非新增 password-to-token 路由。
 
 
-## 25. 架构决策 0005
+## 26. 架构决策 0005
 
 来源：[adr/0005-trusted-login-mfa-bff.md](adr/0005-trusted-login-mfa-bff.md)。
 
@@ -6482,7 +8252,7 @@ BFF 会话绝对 8 小时、空闲 30 分钟。refresh 在会话行锁内串行�
 未实现正式 React 控制台、完整 scoped RBAC、MFA 撤销/更换及受控恢复、30 天 refresh 策略、产品级邮件供应商和全部业务事件消费者。GCP 部署、Cloud SQL HA/DR 验证由 SRE 负责；本地通过不代表生产验收。
 
 
-## 26. 架构决策 0006
+## 27. 架构决策 0006
 
 来源：[adr/0006-public-platform-api.md](adr/0006-public-platform-api.md)。
 
@@ -6529,7 +8299,7 @@ Owner 可列出成员、停用/恢复成员，创建组织、预览/执行移动
 本地固定域名/明文/loopback、开发 SQL 账号和单进程限流不得直接当作生产配置。正式域名、TLS、issuer/JWKS 接线、ingress、专用最小权限数据库账号、分布式限流、监控与容量由后续实施和 SRE 验收。没有部署公网、动态第三方 client 注册、通用机器身份凭证或完整控制台；已有 M0 机器 grant 仍是独立实验，不能调用此用户管理 API。
 
 
-## 27. 架构决策 0007
+## 28. 架构决策 0007
 
 来源：[adr/0007-console-bff-contexts.md](adr/0007-console-bff-contexts.md)。
 
@@ -6574,7 +8344,7 @@ BFF SQL 账号不能读取密码、MFA 密文、中央 cookie 摘要、login_ali
 后续实现更新：租户角色/委托见 ADR 0008，个人安全见 ADR 0010，认证器更换见 ADR 0011；本 ADR 的第一切片边界不代表后续能力仍未实现。
 
 
-## 28. 架构决策 0009
+## 29. 架构决策 0009
 
 来源：[adr/0009-api-playground-and-handbook.md](adr/0009-api-playground-and-handbook.md)。
 
@@ -6603,7 +8373,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 验收覆盖真实注册/密码/MFA/Hydra/BFF/API、写入确认/单次发送、ETag/412、普通成员 403、MFA 过期、凭证脱敏、输出转义、导航清理与桌面/手机；离线 HTML 检查目录锚点、无外部请求、无脚本/表单及布局，导出包校验每个摘要。受管 Chromium 禁止 file:// 导航，HTML 测试通过临时 loopback 只读服务加载同一文件，不将该测试描述为云端部署。GCP 部署与运维仍由 SRE 负责。
 
 
-## 29. 架构决策 0010
+## 30. 架构决策 0010
 
 来源：[adr/0010-self-service-account-security.md](adr/0010-self-service-account-security.md)。
 
@@ -6624,7 +8394,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 测试同时验证主库绑定/尝试次数/过期、密码重置竞态、并发仅一次成功，以及真实密码/TOTP/恢复码登录、旧授权失效、当前/其他用户会话隔离。未把普通 Go 中跳过的 fixture 用例当作数据库通过；SSO profile 明确运行新增 TestSSO 用例。生产 TLS/Secure cookie、分布式限流和 KMS 仍须后续由 SRE 实施验收。
 
 
-## 30. 架构决策 0011
+## 31. 架构决策 0011
 
 来源：[adr/0011-staged-authenticator-replacement.md](adr/0011-staged-authenticator-replacement.md)。
 
@@ -6645,7 +8415,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 公共/BFF/security 合同版本统一 0.9.0，公共操作数仍为 28；仅可信合同增加管理页和 start/confirm/cancel。生产 TLS、分布式限流和 KMS 仍按既有边界后续实施。此次不修改 SRE 的 CI 或部署配置。
 
 
-## 31. 架构决策 0012
+## 32. 架构决策 0012
 
 来源：[adr/0012-personal-security-events.md](adr/0012-personal-security-events.md)。
 
@@ -6664,7 +8434,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 本轮不改 CI、部署、既有迁移及 GCP；不可变归档、登录失败/设备监控、正式通知及事件消费者仍需继续实施。
 
 
-## 32. 架构决策 0013
+## 33. 架构决策 0013
 
 来源：[adr/0013-tenant-application-access.md](adr/0013-tenant-application-access.md)。
 
@@ -6683,7 +8453,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 无迁移或 CI/GCP 配置变更。演示基线固定为 demo-friday-2026-11-13 / 5d8b46b，源码/文档已分别备份；变更使用独立合成测试数据，演示账户保留并最后复验。公共/BFF/可信安全合同统一 0.11.0，公共业务 34 操作。
 
 
-## 33. 架构决策 0014
+## 34. 架构决策 0014
 
 来源：[adr/0014-organization-lifecycle.md](adr/0014-organization-lifecycle.md)。
 
@@ -6702,7 +8472,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 本地 DB 和真实浏览器验证隔离、双读取权限、权限委托/显式拒绝、根/非空保护、陈旧/缺失 ETag、近期 MFA、闭包删除、并发创建/删除、其他空间保留、旧授权失效及 UI 晚响应。实际结果写 validation.md。GCP/CI/部署仍由 SRE 负责，本切片不改动。
 
 
-## 34. 架构决策 0015
+## 35. 架构决策 0015
 
 来源：[adr/0015-owned-public-client-registration.md](adr/0015-owned-public-client-registration.md)。
 
@@ -6723,7 +8493,36 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 业务主库注入响应丢失/冲突并验证回滚、恢复、no-op 和并发；真实 Hydra 独立验证 code/PKCE、scope、refresh/撤销和所有权 metadata；真实浏览器检查 owner/member/错空间/MFA、冲突拒绝恢复、核对/撤销/清理、Playground 和手机布局。演示账号不作可变 fixture。
 
 
-## 35. 验收证据
+## 36. 架构决策 0016
+
+来源：[adr/0016-machine-principals-and-one-time-credentials.md](adr/0016-machine-principals-and-one-time-credentials.md)。
+
+### ADR 0016：机器身份、一次性凭证与独立资源边界
+
+状态：已采纳并实现于 0.14.0。基于 e4184ab / 0.13.0 的自有应用模型；专项、修正后的全部既有回归与完整周五彩排已通过，实际范围见 validation.md。
+
+机器身份属于租户自有 Application，与 User/MFA/session 分离。第一期由租户 active owner 集体管理，created_by 为审计历史而非持续资格来源。SP 可停用/恢复并递增安全版本，旧 token 不随恢复复活；尚未撤销/到期的 credential 可在恢复后重新换取 token。
+
+每 credential 独立 client_credentials-only client，固定 machine:invoke 和 urn:sso:application:<application ID> audience，无平台管理 scope/audience、无登录/ID token/refresh。机器分支按引擎认证 client_id 查主库 SP/credential/应用/空间，User 分支继续要求 business_context_id、MFA 和原授权链。未知/pending/orphan/expired/revoked/disabled 或版本不符均拒绝。
+
+SK 使用至少 256-bit 随机，只在首次成功创建响应交付，不存业务库可恢复副本，不通过 GET/reconcile/日志/审计/Playground 恢复。先提交 pending，再创建并核对固定远端 profile，最后复查 owner/MFA/状态并激活。未知协议/SQL/浏览器回包不能自动重放；pending 不得靠 public-client reconcile 变 active，只能撤销清理再建。API 成功但用户未收妥秘密的 active credential 也需撤销重建。
+
+每 SP 最多两份未过期 active/pending credential。新凭证成功激活时才原子缩短旧 active credential 的过期至最多 24 小时重叠；失败保留旧凭证。API revision 与 token security_version 分离，缩短 expiry 更新 API revision，避免无故使仍在重叠期的 JWT 失效；到期始终按实时主库判断。撤销增加两种版本，物理清理在本地失效之后，不覆盖/删除不匹配的协议对象。
+
+管理 API/Console BFF/Playground 继续使用 User/MFA realm。机器业务资源另列合同与固定路由前缀，只接受目标应用 machine audience，且主库复查签名 claims 对应的资格/版本/到期；不能把机器 Bearer 输入并入 User BFF，不能使 User token 被误当机器凭证。机器 token 不能管理平台，User token 也不能调用机器资源样例。当前示范资源实时拒绝不等于任意外部仅验 JWT 的服务也实时撤销。
+
+机器签发审计单列受控事件与 outbox，不能将 creator membership 冒充每次机器签发的 actor。管理变更继续写现有 User 审计；不记录秘密或 token。审计读取沿用 tenant audit.read，不隐式授予 SP/凭证管理权。
+
+验证必须同时覆盖真实 MySQL/Hydra、真实机器 token/resource、secret 一次性及丢包、配额/双凭证轮换/到期、SP/应用停用与恢复、跨空间/应用/realm、未知/orphan 拒绝、metadata/导出/日志秘密排除、User 回归与固定演示复验。故障注入和真实协议证据分开。CI/GCP/部署仍由 SRE 负责。
+
+#### 实现细节与边界
+
+机器 JWT 的主库版本和 credential_expires_at 采用规范十进制字符串，避免引擎中间的浮点 JSON 表达影响精度或严格解码；标准 exp 仍由引擎签发。创建过程中保存于内存的 SP/应用版本绑定必须在激活时复核，不可从 pending GET 重建这个授权快照。公开 Playground 的 createMachineCredential 明确禁止执行，完整合同仍可读，实际 SK 交付仅在专用 UI。
+
+SP 属于租户集体所有者，而非创建者持续个人所有。创建者离开后，新 owner 可以管理；旧 tenant revision 的 JWT 失效，但仍有效凭证可以按当前主库版本换取新 token。没有把创建者 membership 假作机器事件 actor，也没有另行实现命名 SP owner 的转移模型。
+
+
+## 37. 验收证据
 
 来源：[validation.md](validation.md)。
 
@@ -6952,3 +8751,29 @@ M0/M1 既有证据仍包括跨租户/授权链隔离、会话/退出与签名轮
 实测平台 API 内部 Admin 请求不应依赖出站代理/NO_PROXY 配置；私有固定目标适配器现在直接连接该内部服务并继续禁止重定向，不开放任意目的地。协议错误不透传上游 body，仅对 profile 冲突记录受控字段名和服务端请求 ID。测试注入工具显式使用 UTF-8，避免 CLI 默认 latin1 将中文登记名改变后造成额外冲突；未放宽生产 profile 精确校验。
 
 新增主库所有权表与状态表，旧迁移内容/校验和保留。所有可变协议/数据库夹具按封闭账户和所有权清理；不删除其他空间或共享 client。周五 tag、CI、部署、GCP 与原始上传参考均未改动。当前代码建立在 f8e5dbc 上，本节点交付 SHA 以包含本节的 Git 提交为准。机器身份/一次性凭证的下一阶段约束记录在 progress/machine-credentials-next.md，明确尚未实现。
+
+#### 2026-11-11：机器身份、一次性 SK 与独立资源（0.14.0）
+
+新增 migration 009、SP/credential 与独立机器签发审计/outbox；User/BFF 合同 54 项，另列机器协议/资源合同（一个机器业务资源与引擎 token 端点）。专用 SK 创建页与通用 Playground 分离。范围及限制见 machine-credentials.md / ADR 0016。
+
+| 检查 | 实际结果 | 边界 |
+| --- | --- | --- |
+| 主库与输入 | 35 项通过，其中 34 项连接 MySQL，1 项纯回调配置；机器专项 7 项 | SQL/协议未知结果保持 pending、秘密不恢复、旧 key 失败时不缩期、成功轮换才缩短、配额并发最多两份、SP 创建期间停用再恢复也不能激活、到期/撤销、创建者移交/停用后机器资格、新 owner 管理、audit.read 不扩大凭证权限。协议故障由受控 fake Admin 注入，不冒充真实 Hydra |
+| 真实原生协议/API | 69 个真实响应通过各自 OpenAPI | User code+PKCE 管理；真实 Basic AK/SK → client_credentials JWT → 独立资源。错误 secret/scope/audience、User/机器/其他应用隔离、未知/真实孤立引擎 client、pending、到期、双 key 轮换、撤销、SP/应用停用恢复、旧 JWT 不复活、机器审计和清理 |
+| 新浏览器 | 24 个真实 BFF 合同响应及 React 交互通过 | owner/member/跨空间/ETag/MFA、首次 SK、关闭重进后不可找回、不写浏览器存储、实际服务端创建成功但注入丢失回包后不自动重试、列表撤销/协议清理、机器审计、手机布局与截图。秘密页不截图 |
+
+引擎实测会将扩展到期数字转换为浮点 JSON 格式，导致严格 int64 claims 解码拒绝。机器版本号及 credential_expires_at 已改规范十进制字符串，并重新通过实际签发、验签、主库状态与资源访问；未放宽签名/issuer/audience 校验。标准 exp 仍由引擎管理，本地访问 token TTL 为 5 分钟。
+
+修正清理保护后第二次完整回归已通过：公开原生 147 响应、客户端登记 30、应用管理 27、组织 43、完整控制台、RBAC 96、Playground 的 54 项合同（53 项可执行，SK 创建实际禁用并指引专用页）、安全 13、认证器 18、安全事件 16、15 项真实 SSO 主库检查、两组网络隔离、54 操作在线文档桌面/手机，以及完整 scripts/demo rehearse。首次末尾失败的演示结果不冒充此通过结果，详见下节事故记录。
+
+Go test/vet、7 项前端边界模型、spec/YAML/JSON/BFF/手册同步、格式/差异检查通过。机器浏览器和原生测试以本轮实际 SK/令牌扫描 285 项候选文件与运行日志，均无秘密材料；已配置/演示材料及最终 ZIP 的 SHA-256 清单另经导出检查。截图只保留元数据页。当前节点的 Git SHA 以包含本节的提交为准；外部在线验证 SDK 仍为下一切片。
+
+旧迁移 001–008 未改，009 与已应用校验和一致。原始上传参考、固定周五源码/文档备份及长期配置/密钥保留；演示数据曾误删并已按原行恢复，没有重新生成登录资料。未介入 SRE 的 CI/GCP/部署。
+
+##### 本节点演示清理事故与修正
+
+初次全量回归末尾的固定演示检查失败。原因是一次中断测试的人工清理按 browser-* 邮箱格式收集了过宽集合，误删固定演示账号及关联空间；仅有邮箱格式/封闭成员集合不足以区分可丢弃测试和保留演示。此失误没有归因为产品登录问题，也没有用重建凭证来绕过验收。
+
+使用本地 MySQL FULL 行事件日志，从明确删除区间提取原两账号及其四个空间（包含原账户 home 空间）的 398 条原记录，一次事务恢复；每条原值相等性检查和 60 项全数据库外键检查通过。二进制字段按原固定长度补齐日志省略的尾零，密码散列、加密 TOTP、恢复码散列及数据 ID 均恢复原记录，未重新生成。随后 scripts/demo check 已以原密码/TOTP、双应用、角色及空间隔离通过，恢复码未消费。私有恢复日志/SQL/校验摘要只保留于忽略的 .local/recovery，不进入 Git 或文档包；这不是生产 HA/DR 验收。
+
+普通 API 与账户测试清理现在在任何数据库变更前检查保留演示清单，同时拒绝受保护邮箱和空间；显式 scripts/demo reset 传递匹配 runId/fingerprint 的受控上下文，完整账户集合校验保留。8 项独立无数据库保护测试通过，真实尝试普通清理固定账号已被拒绝。修正后重新执行完整回归和完整演示彩排，再计为交付。

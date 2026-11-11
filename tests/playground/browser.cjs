@@ -54,7 +54,17 @@ async function read(page, operation, code = 200) {
     await p.getByLabel("选择 API", { exact: true }).waitFor();
     assert.equal(
       await p.getByLabel("选择 API", { exact: true }).locator("option").count(),
-      43,
+      54,
+    );
+    await choose(p, "createMachineCredential");
+    await p
+      .getByRole("status")
+      .filter({ hasText: "一次性凭证创建请使用机器身份的凭证专页" })
+      .waitFor();
+    assert(
+      await p
+        .getByRole("button", { name: "检查写入请求", exact: true })
+        .isDisabled(),
     );
     await read(p, "getMe");
     assert(
@@ -187,7 +197,7 @@ async function read(page, operation, code = 200) {
   }
   if (success)
     console.log(
-      "Playground acceptance passed: 43 live operations, real reads/writes, explicit confirmation, one send per action, ETag/412, member denial, MFA, redaction, escaping, navigation reset and desktop/mobile",
+      "Playground acceptance passed: 54 management contracts (53 executable; one-time SK uses dedicated UI), real reads/writes, explicit confirmation, one send per action, ETag/412, member denial, MFA, redaction, escaping, navigation reset and desktop/mobile",
     );
 })().catch((e) => {
   console.error(

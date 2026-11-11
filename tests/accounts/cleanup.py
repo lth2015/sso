@@ -4,7 +4,16 @@ import subprocess
 import sys
 from pathlib import Path
 root=Path(__file__).resolve().parents[2]
-email=sys.argv[1]
+sys.path.insert(0,str(root/'tests/support'))
+from fixture_protection import protect_demo
+arguments=sys.argv[1:]
+reset_run=None
+if arguments[:1]==['--demo-reset']:
+ if len(arguments)!=3:raise SystemExit('Invalid demo reset context')
+ reset_run=arguments[1];arguments=arguments[2:]
+if len(arguments)!=1:raise SystemExit('Expected one generated fixture email')
+email=arguments[0]
+protect_demo(root,[email],reset_run=reset_run)
 if not re.fullmatch(r'browser-[a-f0-9]{32}@example\.invalid',email):
     raise SystemExit('Refusing non-fixture cleanup')
 command=['docker','compose','--env-file',str(root/'.local/m0.env'),'-f',str(root/'deploy/local/compose.yml'),'exec','-T','mysql','sh','-c','MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -N -B sso_business']
@@ -13,6 +22,12 @@ def sql(text):
     if result.returncode:raise SystemExit('Browser fixture cleanup failed (SQL withheld)')
     return result.stdout.decode().strip()
 user=sql(f"SELECT HEX(user_id) FROM login_aliases WHERE normalized_email='{email}';")
+tenants=[]
+if user:
+    if not re.fullmatch('[0-9A-F]{32}',user):raise SystemExit('Invalid fixture user ID')
+    tenants=sql(f"SELECT HEX(tenant_id) FROM memberships WHERE user_id=UNHEX('{user}');").splitlines()
+    protect_demo(root,[email],tenants,reset_run=reset_run)
+
 sql(f"DELETE n FROM account_notifications n JOIN account_challenges c ON c.id=n.challenge_id WHERE c.normalized_email='{email}'; DELETE e FROM identity_events e JOIN account_challenges c ON c.id=e.target_id WHERE c.normalized_email='{email}'; DELETE FROM account_challenges WHERE normalized_email='{email}';")
 if user:
     if not re.fullmatch('[0-9A-F]{32}',user):raise SystemExit('Invalid fixture user ID')
@@ -21,7 +36,7 @@ if user:
     if joined!='0':raise SystemExit('Refusing shared membership cleanup; use guarded multi-fixture cleanup')
     for table in ['authenticator_changes','security_actions','protocol_logout_jobs','bff_sessions','business_grants','login_interactions','sso_sessions','mfa_recovery_codes','mfa_factors']:
         sql(f"DELETE FROM {table} WHERE user_id=UNHEX('{user}');")
-    tenants=sql(f"SELECT HEX(tenant_id) FROM memberships WHERE user_id=UNHEX('{user}');").splitlines()
+
     for tenant in tenants:
         if not re.fullmatch('[0-9A-F]{32}',tenant):raise SystemExit('Invalid fixture tenant ID')
         for table in ['role_binding_changes','role_policies','org_memberships','invitations','outbox_events','audit_events','tenant_applications','role_bindings','roles','org_closure','tenant_roots']:

@@ -53,6 +53,10 @@ export const errorText = (error) =>
       "连接中断，操作结果可能已保存。请刷新核对后再决定是否重试。",
     recent_mfa_required: "请重新验证身份，再发起这项操作。",
     reserved_role: "内置所有者角色不能编辑或删除。",
+    service_principal_disabled: "机器身份已停用，请先恢复后再创建凭证。",
+    credential_limit: "机器身份或凭证达到配额，请先检查待处理及有效凭证。",
+    invalid_credential_state:
+      "凭证状态或创建期间的资格已变化；不能恢复 SK，请核对后撤销并新建。",
     protocol_client_conflict:
       "协议配置与此登记不一致，请先核对；不会覆盖或删除不匹配的登记。",
     application_unmanaged: "当前空间仅能查看此共享应用，不能改写其客户端登记。",

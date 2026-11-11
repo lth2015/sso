@@ -377,7 +377,12 @@ async function reset(m) {
   if (m.accounts.length)
     d.execFileSync(
       "python3",
-      ["tests/api/cleanup.py", ...m.accounts.map((a) => a.email)],
+      [
+        "tests/api/cleanup.py",
+        "--demo-reset",
+        m.runId,
+        ...m.accounts.map((a) => a.email),
+      ],
       { cwd: d.root, stdio: "pipe" },
     );
   for (const filename of [
