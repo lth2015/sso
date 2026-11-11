@@ -10,6 +10,8 @@ case "${1:-}" in
  security-test) node tests/security/browser.cjs ;;
  authenticator-test) node tests/authenticator/browser.cjs ;;
  events-test) node tests/events/browser.cjs ;;
+ invitations-test) node tests/invitations/browser.cjs ;;
+ invitations-api-test) node tests/invitations/native.cjs ;;
  exports-test) node tests/exports/browser.cjs ;;
  exports-api-test) node tests/exports/native.cjs ;;
  machine-sdk-test) scripts/test-machine-sdk ;;
@@ -24,5 +26,5 @@ case "${1:-}" in
   ;;
  enable) shift; scripts/api enable "$@" ;;
  down) scripts/sso down ;;
- *) echo 'Usage: scripts/console {prepare|up|test|rbac-test|playground-test|security-test|authenticator-test|events-test|applications-test|organizations-test|clients-test|machine-test|machine-api-test|machine-sdk-test|exports-test|exports-api-test|enable --email ADDRESS|down}' >&2; exit 2 ;;
+ *) echo 'Usage: scripts/console {prepare|up|test|rbac-test|playground-test|security-test|authenticator-test|events-test|applications-test|organizations-test|clients-test|machine-test|machine-api-test|machine-sdk-test|exports-test|exports-api-test|invitations-test|invitations-api-test|enable --email ADDRESS|down}' >&2; exit 2 ;;
 esac

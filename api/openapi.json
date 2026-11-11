@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "SSO Public Platform API",
-    "version": "0.16.0",
-    "description": "External server/native-client contract. Local reference server only; production requires TLS and configured public origins. OAuth code+S256 PKCE, platform audience https://api.sso.local. No cookie authentication or wildcard CORS; browser integrations use a BFF. All writes require MFA authenticated within 300 seconds; refresh does not update auth_time. Tenant-scoped roles grant separate member/organization/invitation/audit permissions; explicit deny wins. Only active owners manage roles and owner bindings; roles.manage cannot be delegated or denied via custom policies. Resource/subtree scopes are not implemented. Delegated member operators cannot suspend/restore owner bindings. Authorization is checked against the business primary inside each operation transaction. Tenant-version mutations invalidate prior tenant grants, requiring new authorization. JSON objects reject duplicate keys, unknown fields, invalid UTF-8 and extra documents. Only role policy requests admit typed nested rules, with depth/work and policy-count limits. Request body limit 4096 bytes. UUIDs are lowercase 32-hex strings. List limit 1–100, default 50; after is previous next_cursor. No pagination snapshot guarantee. Error format follows RFC 9457. All responses no-store. Invitation proofs never appear in lists/audit."
+    "version": "0.17.0",
+    "description": "External server/native-client contract. Local reference server only; production requires TLS and configured public origins. OAuth code+S256 PKCE, platform audience https://api.sso.local. No cookie authentication or wildcard CORS; browser integrations use a BFF. All writes require MFA authenticated within 300 seconds; refresh does not update auth_time. Tenant-scoped roles grant separate member/organization/invitation/audit permissions; explicit deny wins. Only active owners manage roles and owner bindings; roles.manage cannot be delegated or denied via custom policies. Resource/subtree scopes are not implemented. Delegated member operators cannot suspend/restore owner bindings. Authorization is checked against the business primary inside each operation transaction. Tenant-version mutations invalidate prior tenant grants, requiring new authorization. JSON objects reject duplicate keys, unknown fields, invalid UTF-8 and extra documents. Only role policy requests admit typed nested rules, with depth/work and policy-count limits. Request body limit 4096 bytes. UUIDs are lowercase 32-hex strings. List limit 1–100, default 50; after is previous next_cursor. No pagination snapshot guarantee. Error format follows RFC 9457. All responses no-store. Invitation proofs never appear in lists/detail/audit; creation and explicit reissue each return only their new one-time proof."
   },
   "servers": [
     {
@@ -3438,6 +3438,179 @@
         }
       }
     },
+    "/v1/tenants/{tenant}/invitations/{invitation}": {
+      "get": {
+        "operationId": "getInvitation",
+        "summary": "Read current invitation metadata and revision",
+        "description": "Requires invitations.manage on the token tenant. Explicit deny overrides other allows, including owner operational privileges. User platform:read and current invitations.manage. Tenant-bound primary read; response contains email/state/expiry/revision only, never proof/digest or arbitrary payload. Missing legacy revision metadata is revision 1 without modifying the invitation. ETag binds tenant/invitation/revision. GET has no request body. Closed covers accepted/revoked; closed invitations cannot reopen.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/invitationID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read current invitation metadata and revision",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "permission:invitations.manage"
+      }
+    },
+    "/v1/tenants/{tenant}/invitations/{invitation}/reissue": {
+      "post": {
+        "operationId": "reissueInvitation",
+        "summary": "Replace a lost or expired invitation proof once",
+        "description": "Requires invitations.manage on the token tenant. Explicit deny overrides other allows, including owner operational privileges. User platform:write, current invitations.manage and recent MFA. Empty JSON body; exact resource ETag. Only pending/expired invitations; closed returns 409 invalid_invitation_state with a current revision. Replaces proof digest and expiry for 24 hours, leaves tenant/resource/target email fixed, and makes the current manager responsible for subsequent acceptance. Revision and controlled audit/outbox commit atomically; no tenant authorization version change. Concurrent same-revision updates allow one success, other 412. Acceptance/revocation also increase revision and serialize with updates; old proof cannot join afterward. Secret returned once, never recoverable or automatically replayed. On uncertain result read metadata and explicitly update again if necessary. No invitation email is sent. Generic Playground redacts proof; use the dedicated invitation dialog for secure handoff.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/invitationID"
+          },
+          {
+            "$ref": "#/components/parameters/InvitationMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Replace a lost or expired invitation proof once",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationReissued"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-recent-mfa-seconds": 300,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Empty"
+              },
+              "example": {}
+            }
+          }
+        },
+        "x-authorization": "permission:invitations.manage"
+      }
+    },
     "/v1/invitations/accept": {
       "post": {
         "operationId": "acceptInvitation",
@@ -5165,6 +5338,71 @@
           }
         }
       },
+      "InvitationDetail": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "email",
+          "expires_at",
+          "state",
+          "revision"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "expires_at": {
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "expired",
+              "closed"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "InvitationReissued": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "token",
+          "expires_in",
+          "revision"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "token": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "readOnly": true,
+            "description": "New one-time bearer proof. Replaces the old proof; never restored by metadata/GET. Unknown response: read current revision before explicitly updating again. No automatic email transport."
+          },
+          "expires_in": {
+            "type": "integer",
+            "const": 86400
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
       "InvitationInput": {
         "type": "object",
         "additionalProperties": false,
@@ -6531,6 +6769,16 @@
           "pattern": "^\"sp-[a-f0-9]{32}-[a-f0-9]{32}-[1-9][0-9]*\"$"
         }
       },
+      "InvitationMatch": {
+        "in": "header",
+        "name": "If-Match",
+        "required": true,
+        "description": "Exact current invitation detail revision, bound to tenant and invitation. Missing 428, malformed 400, stale/other resource 412. Acceptance, revocation and reissue invalidate earlier revisions.",
+        "schema": {
+          "type": "string",
+          "pattern": "^\"invite-[a-f0-9]{32}-[a-f0-9]{32}-[1-9][0-9]*\"$"
+        }
+      },
       "CredentialMatch": {
         "in": "header",
         "name": "If-Match",
@@ -6706,7 +6954,7 @@
     },
     "responses": {
       "Problem": {
-        "description": "RFC 9457 problem. Fixed code only; no input, token or SQL echoed. Codes include credential_limit, invalid_credential_state, service_principal_disabled, application_unmanaged, invalid_client_state, protocol_client_conflict, protected_organization, organization_not_empty, protected_application, application_unavailable, invalid_token, forbidden, insufficient_scope, recent_mfa_required, tenant_mismatch, invalid_request, not_found, already_exists, reserved_role, role_in_use, last_active_owner, root_cannot_move, organization_cycle, version_conflict, precondition_required, invalid_precondition, rate_limited, temporarily_unavailable.",
+        "description": "RFC 9457 problem. Fixed code only; no input, token or SQL echoed. Codes include credential_limit, invalid_credential_state, service_principal_disabled, application_unmanaged, invalid_client_state, invalid_invitation_state, protocol_client_conflict, protected_organization, organization_not_empty, protected_application, application_unavailable, invalid_token, forbidden, insufficient_scope, recent_mfa_required, tenant_mismatch, invalid_request, not_found, already_exists, reserved_role, role_in_use, last_active_owner, root_cannot_move, organization_cycle, version_conflict, precondition_required, invalid_precondition, rate_limited, temporarily_unavailable.",
         "headers": {
           "X-Request-ID": {
             "$ref": "#/components/headers/RequestID"
@@ -6735,7 +6983,7 @@
         }
       },
       "ETag": {
-        "description": "Quoted collection version for If-Match.",
+        "description": "Quoted resource or collection version for If-Match.",
         "schema": {
           "type": "string"
         }

@@ -72,6 +72,8 @@ export const errorText = (error) =>
     already_exists: "相同记录已存在，请核对后再操作。",
     root_cannot_move: "空间根组织不能移动。",
     organization_cycle: "不能把组织移动到它自身或下级组织中。",
+    invalid_invitation_data: "邀请数据不正确，请关闭后重新核对。",
+    invalid_invitation_state: "邀请已关闭，不能重新开启。请创建新的邀请。",
     invalid_export_data: "导出数据格式不正确，请重新生成。",
     forbidden: "你没有执行这项管理操作的权限。",
     insufficient_scope: "当前授权不包含这项操作，请重新登录。",

@@ -54,7 +54,7 @@ async function read(page, operation, code = 200) {
     await p.getByLabel("选择 API", { exact: true }).waitFor();
     assert.equal(
       await p.getByLabel("选择 API", { exact: true }).locator("option").count(),
-      55,
+      57,
     );
     await choose(p, "createMachineCredential");
     await p
@@ -151,6 +151,32 @@ async function read(page, operation, code = 200) {
         .token,
       "[已隐藏]",
     );
+    phase = "invitation-resource-etag-and-proof-redaction";
+    const invitationRows = (await s.bff(p, base + "/invitations")).body.items;
+    const pendingInvitation = invitationRows.find(
+      (row) => row.state === "pending",
+    );
+    assert(pendingInvitation);
+    await choose(p, "reissueInvitation");
+    await p
+      .getByLabel("invitation", { exact: true })
+      .fill(pendingInvitation.id);
+    await p.getByRole("button", { name: "读取最新 ETag", exact: true }).click();
+    await status(p, 200);
+    assert(
+      (await p.getByLabel("If-Match", { exact: true }).inputValue()).startsWith(
+        '"invite-' + me.tenant_id + "-" + pendingInvitation.id + "-",
+      ),
+    );
+    await p.getByRole("button", { name: "检查写入请求", exact: true }).click();
+    await p.getByLabel("我确认向当前空间发送这项写入请求").check();
+    await p.getByRole("button", { name: "确认发送一次", exact: true }).click();
+    await status(p, 200);
+    const renewedInvitation = JSON.parse(
+      await p.getByTestId("playground-response").textContent(),
+    );
+    assert.equal(renewedInvitation.token, "[已隐藏]");
+    assert.equal(renewedInvitation.revision, 2);
     phase = "actual-permission-denial";
     await s.nav(guest.page, "API Playground");
     await read(guest.page, "listMembers", 403);
@@ -216,7 +242,7 @@ async function read(page, operation, code = 200) {
   }
   if (success)
     console.log(
-      "Playground acceptance passed: 55 management contracts (54 executable; one-time SK uses dedicated UI), real reads/writes, explicit confirmation, one send per action, ETag/412, member denial, MFA, redaction, escaping, navigation reset and desktop/mobile",
+      "Playground acceptance passed: 57 management contracts (56 executable; one-time SK uses dedicated UI), real reads/writes, explicit confirmation, one send per action, ETag/412, member denial, MFA, redaction, escaping, navigation reset and desktop/mobile",
     );
 })().catch((e) => {
   console.error(

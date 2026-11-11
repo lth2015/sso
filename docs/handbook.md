@@ -1,6 +1,6 @@
 # SSO 完整设计与开发手册
 
-文档版本：0.16.0。本手册整合已维护的架构、UI、安全、API、Playground 和本地验收文档。由 `scripts/docs build` 生成；编辑各源文件后重新生成。
+文档版本：0.17.0。本手册整合已维护的架构、UI、安全、API、Playground 和本地验收文档。由 `scripts/docs build` 生成；编辑各源文件后重新生成。
 
 ## 当前交付边界
 
@@ -10,7 +10,7 @@
 | 协议 | 独立真实 Hydra、code+PKCE、OIDC 验证、主库 token Hook、刷新/撤销 |
 | 租户 | 成员、组织闭包/移动、邀请、audit/outbox、受控 JSON 审计批次导出 |
 | 权限 | 六种租户操作权限、deny 优先、owner 恢复/移交与最后 owner 保护 |
-| 产品 | React 控制台、独立 BFF、55 项 User API，Playground 执行其中 54 项，SK 创建走专用页面 |
+| 产品 | React 控制台、独立 BFF、57 项 User API，Playground 执行其中 56 项，SK 创建走专用页面 |
 | 机器 | 自有应用 SP、一次性交付 SK、双凭证轮换、独立机器合同与主库检查资源样例 |
 | 外部服务 | Go 在线身份验证 SDK、独立回环服务/客户端参考与自身 OpenAPI |
 | 运行 | 本地 MySQL/Docker/Chromium 验收；GCP 部署及运维由 SRE 负责 |
@@ -117,6 +117,10 @@ Hydra 稳定版本、镜像 digest、Go/SDK 版本、MySQL 8.4 兼容性必须�
 
 User/BFF 新增只读 audit-exports 资源，管理与机器来源分别以独立固定 DTO 投影，避免列表模型扩展时静默改变下载字段。每批在主库 publicRead 事务检查当前身份、权限和本空间/来源游标，最多读取 101 行、返回 100 行；不生成审计写入或后台任务。响应明确记录单批权限版本和生成时间，跨批次不承诺冻结快照。见 [审计导出](audit-exports.md) / ADR 0018。
 
+#### 邀请生命周期切片 0.17.0
+
+邀请详情/资源 ETag 与显式 proof 更新使用原租户权限/主库事务。migration 010 的辅助版本表仅以全局唯一 invitation ID 关联父邀请，访问先按父记录所属空间检查；旧记录缺少辅助行时视为 revision 1，无需重写原邀请。成功更新、接受及撤销实际转换递增 revision，closed 不可复活；更新 digest/expiry/当前责任管理者与审计/outbox 原子提交，保持目标邮箱/资源不变。见 [邀请生命周期](invitation-lifecycle.md) / ADR 0019。
+
 
 ## 02. 安全设计
 
@@ -210,6 +214,10 @@ Playground 沿用固定 BFF 目标/路径白名单、cookie/context、Origin/CSR
 #### 审计批次导出 0.16.0
 
 导出沿用 User platform:read 和主库 audit.read，不接受机器 JWT、跨租户覆盖、任意字段或原始 payload。管理事件仅投影受控 ID/action/time 与角色绑定快照；机器事件仅有应用/SP/credential ID 和签发时间，不借用创建者的人类身份。外空间、跨来源及未知游标统一 404；请求/响应均有单批边界，GET 无写入副作用。前端在每次下载重新获取并验证固定字段/namespace/数量/游标，取消与上下文改变后的迟到响应不能触发文件保存。下载文件仍含受控身份标识，按本空间审计数据管理；本切片不提供签名存证、完整历史保留或持久归档。见 ADR 0018。
+
+#### 邀请 proof 更新 0.17.0
+
+新随机 256-bit proof 仅一次返回，数据库保存 SHA-256 摘要；元数据/ETag/审计不恢复 proof。新写入自身强制近期 MFA，不信任内部调用者 Recent=false。invitations.manage、资源/租户/修订版本和当前角色在事务复查，禁止更换目标邮箱、越空间、重开 accepted/revoked；并发更新只一项成功，接受与更新按同一租户锁串行化。初始查找之后旧 digest 被替换也受控拒绝。更新由当前管理者承担接受时需复查的资格，不沿用失权创建者。浏览器专用结果不写 storage、关闭/空间变化后丢弃迟到结果，写入丢包不重试。Playground 沿用通用 proof 脱敏，不负责安全转交。见 ADR 0019。
 
 
 ## 03. UI 与交互设计
@@ -327,6 +335,10 @@ API Playground 已接入真实控制台授权：接口选择、参数、JSON、I
 
 审计页增加独立批次卡片：管理/机器类型、25/50/100 条、首批预览、下载与下一批。下载重新请求当前资格，不从旧预览保存文件；读取期间可取消，离开/切换空间或授权版本变化后清空旧数据。结果含条数、版本、生成时间、继续游标及可展开 JSON；按固定类型/空间/UTC 时间命名。桌面与手机的实际截图见 [桌面](ui/audit-export-desktop.png) / [手机](ui/audit-export-mobile.png)，按钮可换行，无页面横向溢出。只读审计员也可导出，不能因页面具备此功能而管理凭证。
 
+#### 邀请凭证更新 0.17.0
+
+待接受/过期邀请行可打开专用更新对话框，先读当前 metadata/ETag；勾选旧凭证失效与安全转交确认后只提交一次。成功后新 proof 只在内存与专用 DOM 一次展示，允许显式复制，关闭不恢复。读取中可关闭；写入中明确关闭不撤销已提交操作。未知回包不自动重发，先重新读当前状态；关闭或换空间后的迟到 proof 不显示。控制台明确未发送邮件。截图见 [桌面](ui/invitation-reissue-desktop.png) / [手机](ui/invitation-reissue-mobile.png)，只记录确认表单。
+
 
 ## 04. 租户权限与恢复边界
 
@@ -436,14 +448,14 @@ curl http://127.0.0.1:8083/v1/me \
 
 `api test` 注册两个独立合成账户，通过真实原生 OAuth code+PKCE、密码/MFA 后访问 API；实际成功请求和响应由 OpenAPI JSON Schema 校验，原有 18 个业务操作均须覆盖；另运行 `scripts/console rbac-test` 覆盖新增 8 个操作及真实角色 UI。反例包含 ID token/非法 token/cookie 旁路、scope、错租户、非 owner、非法 JSON/媒体类型/body、最近 MFA、并发 If-Match、邀请重放/错误邮箱/撤销、成员恢复旧授权拒绝、会话归属和审计。专用 Go 检查在验签后递增 fixture User 版本，证明写事务阻止旧证明；也检查事务内 token 到期。
 
-浏览器测试仅把 token/proof 保存在测试进程内，失败只打印阶段/类别；不会录制秘密页面。共享 fixture 清理要求租户全部成员都属于本轮合成账户，按叶到根删除组织，并清理自己的私有通知；拒绝清理包含其他账户的租户。`docs.cjs` 检查实际参考页的 55 项操作、桌面/手机布局、无凭证存储并生成截图。
+浏览器测试仅把 token/proof 保存在测试进程内，失败只打印阶段/类别；不会录制秘密页面。共享 fixture 清理要求租户全部成员都属于本轮合成账户，按叶到根删除组织，并清理自己的私有通知；拒绝清理包含其他账户的租户。`docs.cjs` 检查实际参考页的 57 项操作、桌面/手机布局、无凭证存储并生成截图。
 
 既有回归依次运行 `scripts/m0 test`、`scripts/m1 test`、`scripts/m2 test`、`scripts/sso test`、`scripts/sso network-test`、两个账户/SSO 浏览器脚本。普通 Go 测试明确跳过真实 fixture 案例，不能替代 API 浏览器集成测试。命令会短暂停止自己的通知 worker，不能与浏览器通知流程并发执行。
 
 用 `scripts/sso down` 停止全部本地服务，保留 volume/私有 key。不要修改既有迁移校验和、输出完整 env/Compose/容器 inspect、token/proof、MFA 材料或 SQL 输入。详见 [ADR 0006](adr/0006-public-platform-api.md)。
 
 
-公共 API 0.16.0 共 55 项业务操作，成员 email 由 members.read 授权（无 verified alias 时 null）。新增真实 React 控制台见 [控制台手册](runbooks/console.md)，浏览器边界合同为 `api/console.openapi.yaml`；该合同要求对应 cookie/context/CSRF，不替代公共 Bearer 接入合同。
+公共 API 0.17.0 共 57 项业务操作，成员 email 由 members.read 授权（无 verified alias 时 null）。新增真实 React 控制台见 [控制台手册](runbooks/console.md)，浏览器边界合同为 `api/console.openapi.yaml`；该合同要求对应 cookie/context/CSRF，不替代公共 Bearer 接入合同。
 
 
 #### 角色 API
@@ -453,13 +465,15 @@ curl http://127.0.0.1:8083/v1/me \
 创建使用 `{"code":"auditor","policies":[{"permission":"audit.read","effect":"allow"}]}`；更新使用完整 policies 数组，删除/绑定/解绑提交 `{}`。均需 JSON、最近 MFA 和 authz If-Match。角色 code 不可更名，owner 不可修改/删除；带绑定角色返回 409 role_in_use。解绑最后 active owner 返回 409 last_active_owner。真实变更后旧授权失效，重复绑定/解绑及相同策略替换不改变版本。权限目录、恢复边界、并发与历史审计详见 [ADR 0008](adr/0008-tenant-roles-and-deny.md)。
 
 
-完整字段和示例见 [API 参考](api-reference.md)；运行中 `/docs` 展示同一份合同的参数、请求/响应 schema。控制台 [Playground](playground.md) 使用现有 BFF 发起真实调用，支持写入确认、ETag、MFA/权限错误与凭证脱敏。OpenAPI 0.16.0 提供 55 个业务操作，包括组织生命周期、角色/权限读取 ETag 和写入 JSON 示例；新增同源只读 `/platform-openapi.json` 记录在 BFF 合同。
+完整字段和示例见 [API 参考](api-reference.md)；运行中 `/docs` 展示同一份合同的参数、请求/响应 schema。控制台 [Playground](playground.md) 使用现有 BFF 发起真实调用，支持写入确认、ETag、MFA/权限错误与凭证脱敏。OpenAPI 0.17.0 提供 57 个业务操作，包括组织生命周期、角色/权限读取 ETag 和写入 JSON 示例；新增同源只读 `/platform-openapi.json` 记录在 BFF 合同。
 
 新增 `GET /v1/me/security-events`：platform:read、有效当前租户 grant，仅本人记录；无需 audit.read。支持 limit/after，按时间与 ID 降序，其他用户/隐藏/未知游标统一 404。仅返回 id/action/occurred_at，完整语义见 [个人安全事件](security-events.md)。
 
 组织完整管理新增重命名、空节点删除、直属成员分页及移除关联，权限、版本及撤销边界见 [组织管理](organization-management.md)。
 
 审计导出使用 `GET /v1/tenants/{tenant}/audit-exports?kind=management&limit=50`；platform:read/audit.read，无额外写入 MFA 门槛。响应 `sso.audit.batch.v1` 固定投影，游标限定空间和来源，完整字段/错误/一致性边界见 [审计导出](audit-exports.md)。专用真实 Bearer 验收命令：`scripts/console exports-api-test`；每次测试清理只针对自己注册的封闭夹具。
+
+邀请资源新增详情 GET 与 `/reissue` POST，后者使用空 JSON、当前 `invite-tenant-invitation-revision` 强 ETag、invitations.manage 与最近 MFA。返回一次性新 proof，不发送邮件；旧 proof 在更新提交后无效，closed 不可复活。原生验收：`scripts/console invitations-api-test`，完整合同/未知结果处理见 [邀请生命周期](invitation-lifecycle.md)。
 
 
 ## 06. 完整 API 参考
@@ -468,7 +482,7 @@ curl http://127.0.0.1:8083/v1/me \
 
 ### 完整 API 参考
 
-OpenAPI 0.16.0；公共 Bearer API 共 55 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
+OpenAPI 0.17.0；公共 Bearer API 共 57 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
 
 真实交互入口见 [Playground 手册](playground.md)；外部接入见 [公共 API 手册](runbooks/public-api.md)。JSON/YAML 合同见 [OpenAPI](../api/openapi.yaml)。
 
@@ -512,6 +526,8 @@ OpenAPI 0.16.0；公共 Bearer API 共 55 个业务操作。此文件由 OpenAPI
 | GET | `/v1/tenants/{tenant}/audit-exports` | `exportAuditBatch` |
 | GET | `/v1/tenants/{tenant}/invitations` | `listInvitations` |
 | POST | `/v1/tenants/{tenant}/invitations` | `createInvitation` |
+| GET | `/v1/tenants/{tenant}/invitations/{invitation}` | `getInvitation` |
+| POST | `/v1/tenants/{tenant}/invitations/{invitation}/reissue` | `reissueInvitation` |
 | POST | `/v1/tenants/{tenant}/invitations/{invitation}/revoke` | `revokeInvitation` |
 | GET | `/v1/tenants/{tenant}/machine-events` | `listMachineEvents` |
 | GET | `/v1/tenants/{tenant}/members` | `listMembers` |
@@ -1391,7 +1407,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -1665,7 +1681,7 @@ HTTP 201
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -1789,7 +1805,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -2105,7 +2121,7 @@ HTTP 201
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -2243,7 +2259,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -2400,7 +2416,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -2574,7 +2590,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -2722,7 +2738,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -2865,7 +2881,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -3147,7 +3163,7 @@ HTTP 201
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -3265,7 +3281,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -3584,7 +3600,7 @@ HTTP 201
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -3754,7 +3770,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -3927,7 +3943,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -4100,7 +4116,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -4264,7 +4280,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -4401,7 +4417,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -5087,6 +5103,230 @@ HTTP 201
 错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
 
 
+#### GET /v1/tenants/{tenant}/invitations/{invitation}
+
+Read current invitation metadata and revision
+
+Requires invitations.manage on the token tenant. Explicit deny overrides other allows, including owner operational privileges. User platform:read and current invitations.manage. Tenant-bound primary read; response contains email/state/expiry/revision only, never proof/digest or arbitrary payload. Missing legacy revision metadata is revision 1 without modifying the invitation. ETag binds tenant/invitation/revision. GET has no request body. Closed covers accepted/revoked; closed invitations cannot reopen.
+
+OAuth scope：`platform:read`。权限：`permission:invitations.manage`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "invitation",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+##### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Read current invitation metadata and revision",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted resource or collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "email",
+          "expires_at",
+          "state",
+          "revision"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "expires_at": {
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "expired",
+              "closed"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+#### POST /v1/tenants/{tenant}/invitations/{invitation}/reissue
+
+Replace a lost or expired invitation proof once
+
+Requires invitations.manage on the token tenant. Explicit deny overrides other allows, including owner operational privileges. User platform:write, current invitations.manage and recent MFA. Empty JSON body; exact resource ETag. Only pending/expired invitations; closed returns 409 invalid_invitation_state with a current revision. Replaces proof digest and expiry for 24 hours, leaves tenant/resource/target email fixed, and makes the current manager responsible for subsequent acceptance. Revision and controlled audit/outbox commit atomically; no tenant authorization version change. Concurrent same-revision updates allow one success, other 412. Acceptance/revocation also increase revision and serialize with updates; old proof cannot join afterward. Secret returned once, never recoverable or automatically replayed. On uncertain result read metadata and explicitly update again if necessary. No invitation email is sent. Generic Playground redacts proof; use the dedicated invitation dialog for secure handoff.
+
+OAuth scope：`platform:write`。权限：`permission:invitations.manage`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "invitation",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Exact current invitation detail revision, bound to tenant and invitation. Missing 428, malformed 400, stale/other resource 412. Acceptance, revocation and reissue invalidate earlier revisions.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"invite-[a-f0-9]{32}-[a-f0-9]{32}-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+##### 请求示例
+
+```json
+{}
+```
+
+##### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
+```
+
+##### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Replace a lost or expired invitation proof once",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted resource or collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "token",
+          "expires_in",
+          "revision"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "token": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "readOnly": true,
+            "description": "New one-time bearer proof. Replaces the old proof; never restored by metadata/GET. Unknown response: read current revision before explicitly updating again. No automatic email transport."
+          },
+          "expires_in": {
+            "type": "integer",
+            "const": 86400
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
 #### POST /v1/tenants/{tenant}/invitations/{invitation}/revoke
 
 Close an invitation so its proof cannot be accepted
@@ -5351,7 +5591,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -5561,7 +5801,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -5976,7 +6216,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -6122,7 +6362,7 @@ HTTP 201
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -6232,7 +6472,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -6337,7 +6577,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -6812,7 +7052,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -6888,7 +7128,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -7028,7 +7268,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -7242,7 +7482,7 @@ HTTP 201
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -7525,7 +7765,7 @@ BFF 会话错误还可能返回 `{ "code": "session_unavailable" }`。两类边�
 
 body 上限 4096 字节；ID 使用 32 位小写十六进制。列表默认 50，limit 为 1–100；after 使用 next_cursor，不保证分页快照。请求仅接受 JSON、受控字段和有限策略数组。禁止额外 JSON 文档、重复键、超深结构和非法 UTF-8。
 
-If-Match 使用带双引号的 authz-N / org-N。权限版本变更使旧 grant 失效，包括执行者；refresh 不更新权限或认证时间。重新授权后由调用者决定是否再次提交。没有通用 Idempotency-Key，创建或网络中断后须核对结果，不能盲目重试。
+If-Match 使用对应读取返回的完整强 ETag：authz-N / org-N 集合版本与 app/client/sp/cred/invite 的租户/资源版本不可混用。资源修订不等同于租户授权版本；后者变更使对应旧 grant 失效，包括执行者。refresh 不更新权限或认证时间。重新授权后由调用者决定是否再次提交。没有通用 Idempotency-Key，创建或网络中断后须核对结果，不能盲目重试。
 
 
 ## 07. API Playground
@@ -7534,7 +7774,7 @@ If-Match 使用带双引号的 authz-N / org-N。权限版本变更使旧 grant 
 
 ### API Playground
 
-Playground 是登录后的真实 API 客户端。它读取与公共服务相同的 OpenAPI 0.16.0，通过控制台 BFF 展示现有 55 项 User 管理操作，除一次性 SK 创建外，其余 54 项可真实执行。它使用真实 Hydra/主库授权，不创建演示身份或伪造 token。
+Playground 是登录后的真实 API 客户端。它读取与公共服务相同的 OpenAPI 0.17.0，通过控制台 BFF 展示现有 57 项 User 管理操作，除一次性 SK 创建外，其余 56 项可真实执行。它使用真实 Hydra/主库授权，不创建演示身份或伪造 token。
 
 #### 启动与使用
 
@@ -7581,7 +7821,9 @@ GCP、公网域名、TLS 和部署由 SRE 负责。本地验收不代表生产�
 
 一次性凭证创建 `createMachineCredential` 使用 x-playground-execute=false；它保留完整可读合同、输入示例和安全提示，但禁用通用执行。请在「应用接入 → 机器身份」专用页创建并保存 SK。机器资源和引擎 token 端点使用独立 machine.openapi.yaml，不经 User BFF，Playground 不接受机器 token。
 
-0.16.0 增加 `exportAuditBatch`：在 Playground 选择该读取操作，可填写 kind（management/machine）、limit 和 after；空 kind 使用 management 默认值。审计下载页面另有当前资格复查、固定字段校验与安全文件名，操作见 [审计导出](audit-exports.md)。Playground 的响应预览沿用通用脱敏策略。
+0.17.0 增加 `exportAuditBatch`：在 Playground 选择该读取操作，可填写 kind（management/machine）、limit 和 after；空 kind 使用 management 默认值。审计下载页面另有当前资格复查、固定字段校验与安全文件名，操作见 [审计导出](audit-exports.md)。Playground 的响应预览沿用通用脱敏策略。
+
+0.17.0 新增 `getInvitation` / `reissueInvitation`。后者先填 invitation ID，再读取资源 ETag；预览/确认后发一次，响应 token 仍隐藏。需要实际保存并转交新 proof 时使用邀请页专用对话框，关闭后不能从 GET/Playground 找回秘密。
 
 
 ## 08. 个人账户安全
@@ -7736,7 +7978,7 @@ GCP、公网域名、TLS 和部署由 SRE 负责。本地验收不代表生产�
 | limit | 1–100，默认 50 |
 | after | 上批 next_cursor；必须是当前空间与类型的已有事件 ID |
 
-重复/未知参数、不合法类型/limit/cursor、GET body 为 400；未知/外空间/跨类型游标为 404；身份失效 401、权限/scope 不足 403、权威暂不可用 503。以带原空间 token 请求其他空间仍返回 404，即使账号属于两处。完整字段和错误见 [公共 OpenAPI](../api/openapi.yaml) 与 [API 参考](api-reference.md)。User 合同现在 55 项，Playground 可执行其中 54 项；一次性 SK 创建仍使用专用页面。
+重复/未知参数、不合法类型/limit/cursor、GET body 为 400；未知/外空间/跨类型游标为 404；身份失效 401、权限/scope 不足 403、权威暂不可用 503。以带原空间 token 请求其他空间仍返回 404，即使账号属于两处。完整字段和错误见 [公共 OpenAPI](../api/openapi.yaml) 与 [API 参考](api-reference.md)。User 合同现在 57 项，Playground 可执行其中 56 项；一次性 SK 创建仍使用专用页面。
 
 响应 format 固定为 `sso.audit.batch.v1`，包含 kind、tenant_id、generated_at、authz_version、items 与 next_cursor。items 为空时是 []；存在下一批时 next_cursor 为本批最后一条 ID。
 
@@ -7749,7 +7991,26 @@ GCP、公网域名、TLS 和部署由 SRE 负责。本地验收不代表生产�
 批次记录单次主库读取的资格版本和时间，分页按 UUID keyset，后续新事件可能继续追加。连续批次用于受控读取；持久归档、签名存证、完整历史保留及审计消费仍是独立后续能力。本地验收、模拟错误/迟到响应与实际角色/空间隔离结果分别记录在 validation.md。
 
 
-## 12. 周五演示与彩排
+## 12. 邀请凭证更新
+
+来源：[invitation-lifecycle.md](invitation-lifecycle.md)。
+
+### 邀请凭证更新
+
+0.17.0 已实现邀请生命周期的受控凭证更新，验收证据见 validation.md。新增 invitation detail 和一次性 proof 更新，管理者可处理凭证遗失或过期；目标邮箱和资源 ID 固定，旧 proof 在更新提交后失效，已接受/撤销的邀请不能重新开启。当前没有正式邀请邮件投递，安全转交仍由调用者负责。
+
+公共接口：`GET /v1/tenants/{tenant}/invitations/{invitation}` 返回当前 email/state/expiry/revision 及资源 ETag；`POST .../reissue` 需要空 JSON、精确 If-Match、platform:write、当前 invitations.manage 与最近 300 秒 MFA。读取需要 platform:read/invitations.manage。同一版本并发仅一项成功，其他 412；已关闭且使用当前版本时 409。响应只一次返回新 token、id、expires_in=86400、revision；读取不恢复 proof。遇到未知结果先读取当前状态，再显式决定是否重新更新，不能自动重试。
+
+migration 010 的独立 invitation_revisions 以全局唯一 invitation ID 关联原记录；缺少辅助记录视为 revision 1，保留原邀请行。后续成功接受、撤销或更新递增 revision；辅助行随父邀请删除级联清理，所有访问先检查父邀请所属空间/当前资格。更新将责任管理者改为当前操作成员，接受仍重新验证该管理者当前资格。proof digest、期限、revision 和审计/outbox 同事务，不改变租户授权版本。已应用 001–009 不改动。
+
+控制台「成员邀请」对待接受/过期条目提供「更新邀请凭证」。先读当前元数据与版本，再明确确认旧 proof 失效。成功后新 proof 只在专用对话框显示一次；关闭、切换空间、取消和迟到响应清除结果。写入丢包不重发、不恢复秘密；重新读取后可再次显式更新。Playground 可查看/调用合同，其通用响应仍脱敏 proof，安全转交请使用专用界面。
+
+实际原生 API/浏览器、主库并发、近期 MFA、丢包和秘密排除验收记录在 validation.md；实施前约束保留于 progress/invitation-reissue-next.md。本地运行不等于正式邮件、审计归档、互联网部署或受控 MFA 恢复已经交付。
+
+实际界面：[桌面](ui/invitation-reissue-desktop.png) / [手机](ui/invitation-reissue-mobile.png)。截图只包含确认表单，未包含一次性 proof。验收命令：`scripts/console invitations-api-test`、`scripts/console invitations-test`；主库 `scripts/m1 test`，前端边界 `node --test tests/invitations/model.test.mjs`。
+
+
+## 13. 周五演示与彩排
 
 来源：[runbooks/friday-demo.md](runbooks/friday-demo.md)。
 
@@ -7859,7 +8120,7 @@ reset 使用封闭账户集合检查：如果演示空间中出现了清单之�
 普通测试清理工具会先读取本地演示清单，拒绝受保护邮箱/空间，即使邮箱也符合 browser-* 合成格式。只有显式 scripts/demo reset 才携带匹配当前清单与环境的重置上下文；不要按邮箱前缀批量选择数据清理。此保护用于防止误操作，不替代独立备份；2026-11-11 清理事故与原行恢复的实际记录见 validation.md。
 
 
-## 13. 应用接入管理
+## 14. 应用接入管理
 
 来源：[application-management.md](application-management.md)。
 
@@ -7898,7 +8159,7 @@ reset 使用封闭账户集合检查：如果演示空间中出现了清单之�
 后续 OpenAPI 0.12.0 保留上述应用合同并增加组织管理，现共 38 个业务操作。Playground 的“读取最新 ETag”对应用操作须先填目标 application ID，读取该应用的详情版本，支持完整对象绑定 ETag；不会误用空间 authz 版本。
 
 
-## 14. 自有应用与公开客户端
+## 15. 自有应用与公开客户端
 
 来源：[managed-clients.md](managed-clients.md)。
 
@@ -7961,7 +8222,7 @@ client path 仅接受此功能生成的 32-hex ID；旧的字符串 client_id �
 本页的无 secret 约束仅适用于公开 PKCE 客户端。自有应用的 SP、一次性 AK/SK、双凭证轮换和独立机器 API 已另列 [机器凭证手册](machine-credentials.md) 与 ADR 0016；不复用公开客户端 reconcile 来恢复秘密或激活未知 pending。
 
 
-## 15. 机器身份与一次性凭证
+## 16. 机器身份与一次性凭证
 
 来源：[machine-credentials.md](machine-credentials.md)。
 
@@ -7981,7 +8242,7 @@ client path 仅接受此功能生成的 32-hex ID；旧的字符串 client_id �
 
 #### 管理 API 与 OpenAPI
 
-[公共 User OpenAPI](../api/openapi.yaml) 0.16.0 共 55 项业务操作，机器身份切片增加 11 项，审计导出增加 1 项；[Console BFF 合同](../api/console.openapi.yaml) 为相同管理操作提供 cookie/context/CSRF 边界。
+[公共 User OpenAPI](../api/openapi.yaml) 0.17.0 共 57 项业务操作，机器身份切片增加 11 项，审计导出增加 1 项；[Console BFF 合同](../api/console.openapi.yaml) 为相同管理操作提供 cookie/context/CSRF 边界。
 
 | 方法 | 路径（前缀 `/v1/tenants/{tenant}`） | 作用 |
 | --- | --- | --- |
@@ -8001,11 +8262,11 @@ client path 仅接受此功能生成的 32-hex ID；旧的字符串 client_id �
 {"name":"nightly-import","expires_in_days":30}
 ```
 
-唯一含 SK 的成功响应为 HTTP 201 `{"credential":{...},"secret_key":"<one-time value>"}`。数据库不保存可恢复 SK 副本，协议引擎保存自己的认证散列；业务元数据、审计与 outbox 不含 SK。公开 Playground 展示全部 55 项管理合同，其中凭证创建仅供查看并引导专用页面，避免通用响应脱敏吞掉唯一 SK；其余 54 项支持现有真实执行流程。
+唯一含 SK 的成功响应为 HTTP 201 `{"credential":{...},"secret_key":"<one-time value>"}`。数据库不保存可恢复 SK 副本，协议引擎保存自己的认证散列；业务元数据、审计与 outbox 不含 SK。公开 Playground 展示全部 57 项管理合同，其中凭证创建仅供查看并引导专用页面，避免通用响应脱敏吞掉唯一 SK；其余 56 项支持现有真实执行流程。
 
 #### 机器换取 token 和访问资源
 
-机器协议与业务资源的合同单列在 [Machine OpenAPI](../api/machine.openapi.yaml)，JSON 版见 [machine.openapi.json](../api/machine.openapi.json)。运行中的匿名只读入口为 `http://api.localhost:8083/machine-openapi.yaml` / `.json`。合同包含一个机器业务资源和引擎 `/oauth2/token`，不计入 55 项 User 管理操作，不加入 User BFF 或 Playground。
+机器协议与业务资源的合同单列在 [Machine OpenAPI](../api/machine.openapi.yaml)，JSON 版见 [machine.openapi.json](../api/machine.openapi.json)。运行中的匿名只读入口为 `http://api.localhost:8083/machine-openapi.yaml` / `.json`。合同包含一个机器业务资源和引擎 `/oauth2/token`，不计入 57 项 User 管理操作，不加入 User BFF 或 Playground。
 
 在服务端进程内，向本地 `http://auth.localhost:4464/oauth2/token` 发送表单：`grant_type=client_credentials`、`scope=machine:invoke`、`audience=urn:sso:application:<application ID>`。HTTP Basic 的用户名为 AK，密码为 SK。不要把 AK/SK 或换得的 token 写入日志、命令行、URL、前端代码或导出文档；使用秘密管理系统或进程内配置注入。
 
@@ -8044,13 +8305,13 @@ API 元数据 revision 与 token security version 分开：轮换只缩短旧凭
 0.15.0 已提供 [Go 在线身份验证 SDK 与独立服务/客户端参考](external-machine-integration.md)。服务每次在线验证机器身份，保留本页的主库撤销语义；业务权限由接入方定义。独立示例的自身 OpenAPI 不增加平台 User 操作或 BFF 白名单。
 
 
-## 16. 外部机器服务与 Go SDK
+## 17. 外部机器服务与 Go SDK
 
 来源：[external-machine-integration.md](external-machine-integration.md)。
 
 ### 外部业务服务：Go SDK 与完整本地示例
 
-0.15.0 增加可复用的 Go 在线机器身份验证器，以及独立业务服务和一次性客户端示例。当前 0.16.0 的 SSO User 管理合同为 55 项；机器协议/主库身份资源合同单列。业务服务示例有自己的合同，不属于平台管理或 User BFF。
+0.15.0 增加可复用的 Go 在线机器身份验证器，以及独立业务服务和一次性客户端示例。当前 0.17.0 的 SSO User 管理合同为 57 项；机器协议/主库身份资源合同单列。业务服务示例有自己的合同，不属于平台管理或 User BFF。
 
 #### Go 服务端接入
 
@@ -8145,7 +8406,7 @@ Go 单元与竞态测试覆盖可信原点、TLS 默认信任、重定向、Cook
 完整导出包含本文、全部合同、SDK/独立服务/客户端最小公开源码和 go.mod/go.sum。解压到独立目录后，可用已有 Go 工具运行 `go test ./pkg/machineidentity ./examples/machine-resource`；这两个包只使用标准库与同包公开合同。文档渲染不访问外部网络，真实业务示例仍需要已运行的本地 SSO。私有 AK/SK 输入与任何恢复资料均不进入导出。
 
 
-## 17. 组织生命周期
+## 18. 组织生命周期
 
 来源：[organization-management.md](organization-management.md)。
 
@@ -8187,7 +8448,7 @@ Go 单元与竞态测试覆盖可信原点、TLS 默认信任、重定向、Cook
 运行 `scripts/console organizations-test` 验证真实登录、BFF→API→MySQL、合同响应、MFA、根/非空保护、跨空间、成员分页及桌面/手机操作。`scripts/m1 test` 包含闭包完整性、停用成员清理、委托读取双权限和并发创建/删除测试；原演示账号和数据不作这些测试的 fixture。周五基线标签 demo-friday-2026-11-13 保持原提交，开发后另跑 scripts/demo check。
 
 
-## 18. React 控制台
+## 19. React 控制台
 
 来源：[runbooks/console.md](runbooks/console.md)。
 
@@ -8248,7 +8509,7 @@ scripts/console enable --email YOUR_LOCAL_ADDRESS --second-tenant
 `rbac-test` 使用三个合成账户，通过真实登录/API/BFF 验收默认拒绝、委托读写、deny 优先、撤销、跨租户对象拒绝、owner 恢复/移交及真实 React 角色管理。新增截图：[角色](ui/rbac-roles.png)、[受委托审计员](ui/rbac-auditor.png)。设计和 API 细节见 [ADR 0008](adr/0008-tenant-roles-and-deny.md)。
 
 
-新增 API Playground 导航，可读取同源 OpenAPI 的 55 项 User 管理合同，真实执行其中 54 项；一次性 SK 创建引导专用机器凭证页面。GET 直接发送，写入预览/确认后发送一次，支持 ETag 读取、HTTP 状态/错误、cURL 模板和凭证字段脱敏；离开页面清空内存并取消在途读取，不自动重发写入。使用及限制见 [Playground 手册](playground.md)。
+新增 API Playground 导航，可读取同源 OpenAPI 的 57 项 User 管理合同，真实执行其中 56 项；一次性 SK 创建引导专用机器凭证页面。GET 直接发送，写入预览/确认后发送一次，支持 ETag 读取、HTTP 状态/错误、cURL 模板和凭证字段脱敏；离开页面清空内存并取消在途读取，不自动重发写入。使用及限制见 [Playground 手册](playground.md)。
 
 
 安全会话页面已增加个人 MFA/恢复码/会话概览及“撤销其他会话”确认流程；同一中央会话的多个标签页保留。恢复码管理和认证器更换跳转可信认证域，不在 BFF/Playground 输入密码或验证码。认证器更换的两阶段/取消/结果不明处理见 [专门手册](authenticator-management.md)，验收 `scripts/console authenticator-test`。见 [个人安全](account-security.md)。
@@ -8257,8 +8518,10 @@ scripts/console enable --email YOUR_LOCAL_ADDRESS --second-tenant
 
 审计页的 [JSON 批次导出](audit-exports.md) 支持管理/机器两类、25/50/100 条与游标续读。点击下载会重新读取当前资格；读取期间可取消，换空间后旧批次和迟到响应被丢弃。实际验收：`scripts/console exports-test`，原生接入验收：`scripts/console exports-api-test`。
 
+邀请页可在待接受/过期条目「更新邀请凭证」，先读取版本再确认一次。新 proof 只显示一次；丢包后先核对，关闭/换空间不会重新显示旧秘密。验收：`scripts/console invitations-test`；过期与 accepted/revoked 的边界见 [邀请生命周期](invitation-lifecycle.md)。
 
-## 19. 可信登录与双应用
+
+## 20. 可信登录与双应用
 
 来源：[runbooks/local-sso.md](runbooks/local-sso.md)。
 
@@ -8317,7 +8580,7 @@ scripts/sso enable --email YOUR_LOCAL_ADDRESS --second-tenant
 生产边界见 [ADR 0005](adr/0005-trusted-login-mfa-bff.md)。这些示范应用使用同一 Application，完整权限控制台、MFA 管理、正式邮件与生产 TLS/KMS 等仍待后续开发。
 
 
-## 20. 账户生命周期
+## 21. 账户生命周期
 
 来源：[runbooks/m2-accounts.md](runbooks/m2-accounts.md)。
 
@@ -8355,7 +8618,7 @@ m2 test 暂停本项目 mail-worker，防止真实 worker 与集成 fixture 争�
 已实现注册邮箱证明、原子个人空间引导、Argon2id 密码、恢复挑战、安全版本递增、通知加密/本地可靠落盘、四个 HTTP API 和真实账户页面。账户接口不提供 token 旁路；可信登录、中央会话、MFA 与 BFF 现由 [本地 SSO 手册](runbooks/local-sso.md) 说明。管理接口仍未公开；M0 合成身份实验继续独立。GCP 部署交由 SRE，对应生产邮箱、密钥托管和分布式限流留作正式集成。
 
 
-## 21. 数据库与组织
+## 22. 数据库与组织
 
 来源：[runbooks/m1.md](runbooks/m1.md)。
 
@@ -8394,7 +8657,7 @@ GCP 部署和云端运维由 SRE 专门负责，不作为后续本地开发前�
 008 新增自有应用/公开客户端管理：本轮共 28 项仓储/配置检查，其中 27 项实际连接主库，另 1 项为纯回调校验。覆盖所有权/共享应用拒绝、pending 拒绝、响应丢失、冲突、不复活、并发核对/撤销和取消 RPC 回滚。业务数据库与真实 Hydra 行为分别验证，不混算 HTTP 注入实验。
 
 
-## 22. 协议实验
+## 23. 协议实验
 
 来源：[runbooks/m0.md](runbooks/m0.md)。
 
@@ -8450,7 +8713,7 @@ Go 的 GOPATH/GOMODCACHE/GOCACHE 全部位于 .local，避免受限 HOME 路径�
 M1 数据仓储的运行方式见 [M1 手册](runbooks/m1.md)。Cloud SQL 按用户要求本轮不验证，不把该项写成通过。
 
 
-## 23. 实施计划与剩余功能
+## 24. 实施计划与剩余功能
 
 来源：[implementation-plan.md](implementation-plan.md)。
 
@@ -8517,8 +8780,12 @@ Go 服务端验证器、独立回环身份服务及私有 stdin 输入客户端�
 
 新增 User/BFF 审计批次读取与 UI JSON 下载，管理/机器来源独立、固定投影、最多 100 条、同空间/来源游标，支持 audit.read 只读委托。User 合同增至 55 项，Playground 可执行 54 项，一次性 SK 创建仍使用专页。实际主库、原生 API、浏览器下载/取消/迟到响应证据见 validation.md / ADR 0018。归档、签名存证及跨批冻结快照仍未实现；后续继续受控对账和邀请生命周期。
 
+#### 2026-11-11：邀请凭证更新 0.17.0
 
-## 24. 架构决策 0001
+增加邀请详情与显式更新一次性凭证、资源 ETag、辅助修订版本，以及当前管理者责任与受控确认 UI。User/BFF 合同 57 项，Playground 可执行 56 项；目标邮箱不变，closed 不复活，旧 proof 失效，未知回包需先核对，实际无自动邮件。遗失设备 MFA 恢复、周期补偿/对账、正式邮件与完整归档仍为后续。见 invitation-lifecycle.md / ADR 0019 / validation.md。
+
+
+## 25. 架构决策 0001
 
 来源：[adr/0001-platform-boundaries.md](adr/0001-platform-boundaries.md)。
 
@@ -8535,7 +8802,7 @@ Go 服务端验证器、独立回环身份服务及私有 stdin 输入客户端�
 实施：先完成可运行 M0 和测试报告，再依次开展 M1–M5。UI 规格先完成，生产控制台后续交付。此次 Git push 是源码/文档交付，不是云部署或生产发布。上传原文保持不变供追溯。
 
 
-## 25. 架构决策 0002
+## 26. 架构决策 0002
 
 来源：[adr/0002-hydra-m0-findings.md](adr/0002-hydra-m0-findings.md)。
 
@@ -8571,7 +8838,7 @@ Hydra Admin 在本地为测试绑定 loopback，HTTP/--dev 仅此实验允许。
 每交易/refresh chain 绑定、logout/remembered consent/prompt=none/max_age、签名 key 轮换的本地真实引擎验证已补充。用户随后明确 Cloud SQL 由其准备且本轮无需验证，因此云端 HA/DR 不作为本轮本地代码推进阻塞项，也不记为通过。镜像漏洞/维护确认及生产部署前的云端验收仍需另行完成。M1 已开始内部数据与仓储切片，未开放生产功能。
 
 
-## 26. 架构决策 0003
+## 27. 架构决策 0003
 
 来源：[adr/0003-transaction-bindings-and-m1.md](adr/0003-transaction-bindings-and-m1.md)。
 
@@ -8614,7 +8881,7 @@ M0 实验资格表与 M1 业务表尚未连通；不把两个独立测试库的�
 用户进一步明确：本轮尽可能完成本地开发和验收，GCP 部署/云端运维由专门 SRE 负责。后续开发不等待 GCP 项目、实例或云凭证；本地迁移、接口合同和运行说明作为交接材料。云端 HA/DR、KMS 与上线 SLO 属于 SRE/联合生产验收，不由本轮代理执行，也不记为本地测试通过。
 
 
-## 27. 架构决策 0004
+## 28. 架构决策 0004
 
 来源：[adr/0004-account-proof-lifecycle.md](adr/0004-account-proof-lifecycle.md)。
 
@@ -8651,7 +8918,7 @@ worker 用 SELECT FOR UPDATE SKIP LOCKED 获取一条待投递记录，仅向私
 尚无 Hydra 可信登录交互、中央会话、MFA、BFF、真实邮件供应商、生产账号恢复审批与通知。M0 合成授权仍与此业务 User 权威状态分离；不能据 security_version 递增宣称现有 M0 JWT/refresh 已全部撤销。下一步必须把账户因素接入受 CSRF/Origin/交易状态保护的 Hydra 登录，再实施 MFA 与会话版本检查，而非新增 password-to-token 路由。
 
 
-## 28. 架构决策 0005
+## 29. 架构决策 0005
 
 来源：[adr/0005-trusted-login-mfa-bff.md](adr/0005-trusted-login-mfa-bff.md)。
 
@@ -8694,7 +8961,7 @@ BFF 会话绝对 8 小时、空闲 30 分钟。refresh 在会话行锁内串行�
 未实现正式 React 控制台、完整 scoped RBAC、MFA 撤销/更换及受控恢复、30 天 refresh 策略、产品级邮件供应商和全部业务事件消费者。GCP 部署、Cloud SQL HA/DR 验证由 SRE 负责；本地通过不代表生产验收。
 
 
-## 29. 架构决策 0006
+## 30. 架构决策 0006
 
 来源：[adr/0006-public-platform-api.md](adr/0006-public-platform-api.md)。
 
@@ -8741,7 +9008,7 @@ Owner 可列出成员、停用/恢复成员，创建组织、预览/执行移动
 本地固定域名/明文/loopback、开发 SQL 账号和单进程限流不得直接当作生产配置。正式域名、TLS、issuer/JWKS 接线、ingress、专用最小权限数据库账号、分布式限流、监控与容量由后续实施和 SRE 验收。没有部署公网、动态第三方 client 注册、通用机器身份凭证或完整控制台；已有 M0 机器 grant 仍是独立实验，不能调用此用户管理 API。
 
 
-## 30. 架构决策 0007
+## 31. 架构决策 0007
 
 来源：[adr/0007-console-bff-contexts.md](adr/0007-console-bff-contexts.md)。
 
@@ -8786,7 +9053,7 @@ BFF SQL 账号不能读取密码、MFA 密文、中央 cookie 摘要、login_ali
 后续实现更新：租户角色/委托见 ADR 0008，个人安全见 ADR 0010，认证器更换见 ADR 0011；本 ADR 的第一切片边界不代表后续能力仍未实现。
 
 
-## 31. 架构决策 0009
+## 32. 架构决策 0009
 
 来源：[adr/0009-api-playground-and-handbook.md](adr/0009-api-playground-and-handbook.md)。
 
@@ -8815,7 +9082,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 验收覆盖真实注册/密码/MFA/Hydra/BFF/API、写入确认/单次发送、ETag/412、普通成员 403、MFA 过期、凭证脱敏、输出转义、导航清理与桌面/手机；离线 HTML 检查目录锚点、无外部请求、无脚本/表单及布局，导出包校验每个摘要。受管 Chromium 禁止 file:// 导航，HTML 测试通过临时 loopback 只读服务加载同一文件，不将该测试描述为云端部署。GCP 部署与运维仍由 SRE 负责。
 
 
-## 32. 架构决策 0010
+## 33. 架构决策 0010
 
 来源：[adr/0010-self-service-account-security.md](adr/0010-self-service-account-security.md)。
 
@@ -8836,7 +9103,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 测试同时验证主库绑定/尝试次数/过期、密码重置竞态、并发仅一次成功，以及真实密码/TOTP/恢复码登录、旧授权失效、当前/其他用户会话隔离。未把普通 Go 中跳过的 fixture 用例当作数据库通过；SSO profile 明确运行新增 TestSSO 用例。生产 TLS/Secure cookie、分布式限流和 KMS 仍须后续由 SRE 实施验收。
 
 
-## 33. 架构决策 0011
+## 34. 架构决策 0011
 
 来源：[adr/0011-staged-authenticator-replacement.md](adr/0011-staged-authenticator-replacement.md)。
 
@@ -8857,7 +9124,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 公共/BFF/security 合同版本统一 0.9.0，公共操作数仍为 28；仅可信合同增加管理页和 start/confirm/cancel。生产 TLS、分布式限流和 KMS 仍按既有边界后续实施。此次不修改 SRE 的 CI 或部署配置。
 
 
-## 34. 架构决策 0012
+## 35. 架构决策 0012
 
 来源：[adr/0012-personal-security-events.md](adr/0012-personal-security-events.md)。
 
@@ -8876,7 +9143,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 本轮不改 CI、部署、既有迁移及 GCP；不可变归档、登录失败/设备监控、正式通知及事件消费者仍需继续实施。
 
 
-## 35. 架构决策 0013
+## 36. 架构决策 0013
 
 来源：[adr/0013-tenant-application-access.md](adr/0013-tenant-application-access.md)。
 
@@ -8895,7 +9162,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 无迁移或 CI/GCP 配置变更。演示基线固定为 demo-friday-2026-11-13 / 5d8b46b，源码/文档已分别备份；变更使用独立合成测试数据，演示账户保留并最后复验。公共/BFF/可信安全合同统一 0.11.0，公共业务 34 操作。
 
 
-## 36. 架构决策 0014
+## 37. 架构决策 0014
 
 来源：[adr/0014-organization-lifecycle.md](adr/0014-organization-lifecycle.md)。
 
@@ -8914,7 +9181,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 本地 DB 和真实浏览器验证隔离、双读取权限、权限委托/显式拒绝、根/非空保护、陈旧/缺失 ETag、近期 MFA、闭包删除、并发创建/删除、其他空间保留、旧授权失效及 UI 晚响应。实际结果写 validation.md。GCP/CI/部署仍由 SRE 负责，本切片不改动。
 
 
-## 37. 架构决策 0015
+## 38. 架构决策 0015
 
 来源：[adr/0015-owned-public-client-registration.md](adr/0015-owned-public-client-registration.md)。
 
@@ -8935,7 +9202,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 业务主库注入响应丢失/冲突并验证回滚、恢复、no-op 和并发；真实 Hydra 独立验证 code/PKCE、scope、refresh/撤销和所有权 metadata；真实浏览器检查 owner/member/错空间/MFA、冲突拒绝恢复、核对/撤销/清理、Playground 和手机布局。演示账号不作可变 fixture。
 
 
-## 38. 架构决策 0016
+## 39. 架构决策 0016
 
 来源：[adr/0016-machine-principals-and-one-time-credentials.md](adr/0016-machine-principals-and-one-time-credentials.md)。
 
@@ -8964,7 +9231,7 @@ SK 使用至少 256-bit 随机，只在首次成功创建响应交付，不存�
 SP 属于租户集体所有者，而非创建者持续个人所有。创建者离开后，新 owner 可以管理；旧 tenant revision 的 JWT 失效，但仍有效凭证可以按当前主库版本换取新 token。没有把创建者 membership 假作机器事件 actor，也没有另行实现命名 SP owner 的转移模型。
 
 
-## 39. 架构决策 0017
+## 40. 架构决策 0017
 
 来源：[adr/0017-external-machine-verifier-sdk.md](adr/0017-external-machine-verifier-sdk.md)。
 
@@ -8981,7 +9248,7 @@ SP 属于租户集体所有者，而非创建者持续个人所有。创建者�
 SDK/独立示例使用各自清晰的合同与错误格式，不向 User Playground 自动加入机器 Bearer。固定周五数据与基线保留，CI/GCP/部署仍由 SRE 对应。Go HTTP/TLS 模拟边界和真实 Hydra、主库、独立服务的验收分别记录；不将真实 SSO 身份资源验证冒充外部任意业务 ACL 验收。
 
 
-## 40. 架构决策 0018
+## 41. 架构决策 0018
 
 来源：[adr/0018-bounded-audit-export.md](adr/0018-bounded-audit-export.md)。
 
@@ -8996,7 +9263,22 @@ User GET 提供管理/机器两类受控 JSON 批次，每批 1–100 条。audi
 这是审计批次读取/下载，持续归档、签名证明和跨批次冻结快照另行建设。完整平台/BFF/OpenAPI/Playground/UI 同步，演示数据与现有稳定节点保留，不介入 CI/GCP/部署。实际主库、原生 Bearer、BFF/浏览器与故障注入证据记录在 validation.md。
 
 
-## 41. 验收证据
+## 42. 架构决策 0019
+
+来源：[adr/0019-invitation-proof-reissue.md](adr/0019-invitation-proof-reissue.md)。
+
+### ADR 0019：显式更新一次性邀请凭证
+
+状态：已接受并实施；真实主库、原生 API 与浏览器专项通过，完整兼容回归与资料记录见 validation.md。
+
+对尚未关闭的邀请增加详情/资源 revision 及显式 proof 更新。依当前 invitations.manage 与最近 MFA/精确 ETag 在主库串行化；旧 proof 立即失效，新 proof 只返回一次。资源/空间/邮箱固定，已接受或撤销不复活；更新后当前操作者负责邀请接受所需的管理者资格。无需撤销无关租户 grant。
+
+辅助版本表按邀请全局唯一 ID 关联原记录，缺省 revision=1，不重写原邀请或旧迁移。接受、撤销和更新的实际转换同事务递增 revision，更新审计/outbox 使用新 revision。更新与接受并发时按主库锁顺序产生单一结果；初始 proof 查找后被替换仍受控拒绝。未知回包不恢复或自动重放。
+
+UI 明确说明旧 proof 失效、24 小时有效期和无自动邮件。秘密只在专用对话框内存/受控 DOM；关闭/空间/页面改变与迟到响应不再显示。公开 API/BFF/OpenAPI/Playground 一致。真实数据库、原生 Bearer、浏览器、故障注入和既有功能回归证据以 validation.md 为准；见 invitation-lifecycle.md / validation.md。
+
+
+## 43. 验收证据
 
 来源：[validation.md](validation.md)。
 
@@ -9281,3 +9563,20 @@ Go test/vet、7 项前端边界模型、spec/YAML/JSON/BFF/手册同步、格式
 | 保留版与清理 | 完整周五彩排后，原账号/数据 ID 私有指纹、未用恢复码、固定 tag/源码/文档备份及 9 项迁移摘要一致 | 主库保留 3 个用户，额外合成用户、自有 fixture 应用/客户端/SP/credential 均为零；私有恢复资料不进入 Git/文档。CI/GCP/部署与原始上传参考未变 |
 
 跨批次按 UUID keyset 延续，每批记录本次读取时间/权限版本；不是冻结全局快照、持久归档或签名存证。下载文件含受控身份标识，已有本地文件不具远程撤销语义。下一项邀请凭证更新仅保留实施约束，尚未交付。当前节点建立在 893c5cc 上，交付 SHA 以包含本节的 Git 提交为准。
+
+#### 2026-11-11：邀请凭证更新与资源修订（0.17.0）
+
+新增邀请详情及显式 proof 更新，User/BFF 合同 57 项，Playground 可执行 56 项；一次性 SK 创建仍走机器凭证专页。migration 010 使用 invitation_revisions 辅助表，缺行视为 revision 1，保留旧邀请行与 001–009 的源码/摘要。原创建/撤销调用方式保持。见 invitation-lifecycle.md / ADR 0019。
+
+| 检查 | 实际结果 | 边界 |
+| --- | --- | --- |
+| 主库与迁移 | 44 项仓储/配置检查通过，无跳过；其中 43 项实际 MySQL、1 项纯回调配置。010 连同既有迁移连续执行两次成功 | 新增 6 项真实检查：旧 proof 失效/邮箱绑定/仅成员资格、过期可更新/closed 不复活/外空间拒绝/撤销 no-op、并发更新只一项成功、当前管理者/显式 deny、修订失败完整回滚且无 proof 响应，以及 10 组接受/更新竞态；版本、audit/outbox 与既有事务一致 |
+| 公开原生 API | 73 个真实响应通过 OpenAPI | 真实 User code+PKCE、详情/强 ETag、缺失/重复/弱/错对象前置条件、GET body/未知查询/未知字段拒绝、一次性更新/旧 proof 拒绝/错误邮箱拒绝/新 proof 接受、并发 200/412、expired/closed、同用户其他空间、权限委托/deny、read/write scope 与旧 MFA 读写分离。没有自动邮件或身份 stub |
+| 浏览器 | 最终代码 21 个合同校验响应及 React/BFF 流程通过 | 实际 proof 转交与接受、关闭重开不可恢复、expired 入口、已提交但回包丢失后不重发/再读取 revision、双击只一项更新、关闭后的迟到元数据与已提交 proof、换空间后的迟到 proof、最近 MFA、空 browser storage 和桌面/手机。只保存无秘密确认表单截图 |
+| 工具与故障边界 | 浏览器故障注入明确与真实权限/协议分开 | Playwright Node 拦截转发初次因 .localhost 的 EAI_AGAIN 失败，回环健康端点为 204；改为固定 127.0.0.1:3003，加原 Host、真实 Cookie/Origin/context/CSRF，禁止重定向后重跑通过。产品域名/来源/权限校验未放宽，旧失败不计为成功；注入丢包前真实服务已提交，秘密只留测试进程内存 |
+| 全部兼容回归 | 20 套依次全部通过 | 新邀请 UI/原生；旧审计导出 UI 43/原生 66；机器 UI 24、SDK 45 检查及原生 69；客户端 30、原公开 API 147、应用 27、组织 43、完整控制台、RBAC 96、57 项 Playground、安全 13、认证器 18、安全事件 16、15 项真实 SSO 主库检查、两组网络隔离、57 操作在线文档与完整 scripts/demo rehearse |
+| 构建与主库防御 | go test ./...、go vet ./...、15 项前端模型、8 项清理保护、格式/差异与所有合同/手册同步通过 | 原公开 API 的真实主库探针新增验证：内部调用者 Recent=false 也不能绕过邀请更新近期 MFA。Playground 实际读邀请资源 ETag、显式更新一次并隐藏返回 token。普通 Go 不冒充数据库 profile；未重跑旧 M0 全协议或云端检查 |
+| 秘密与完整资料 | 两专项实际 proof/JWT 对候选文件与运行日志排除通过；最终已配置/演示材料及完整 ZIP 另经校验 | 只输出受控阶段/类别/数量；元数据/列表/审计无 proof 或 digest。API/UI/安全/实施文档、OpenAPI/Playground、离线手册、SDK/示例最小公开源码及 SHA-256 清单同步；解压后空模块缓存/关闭下载编译 SDK/示例，离线 HTML 桌面/手机无外部请求 |
+| 保留版与清理 | 完整彩排后私有账号/数据 ID 指纹、未消费恢复码、固定标签/源码/文档备份及 10 项迁移摘要一致 | 主库保留 3 个用户，自有 fixture 应用/客户端/SP/credential/revision 辅助行与额外合成用户均为零。原邀请行没有迁移重写；原始上传参考、长期配置/密钥、CI/GCP/部署保留 |
+
+资源 revision 与租户 authz_version 分开；更新邀请 proof 不使其他空间或本空间无关 grant 失效，成功接受仍按原规则改变租户授权版本。正式邮件、持久审计归档、遗失认证器的受控恢复与完整范围授权仍未交付。下一切片协议登记只读核对保留为实施约束，周期补偿 worker 尚未实现。当前节点基于 ac22e66，交付 SHA 以包含本节的 Git 提交为准。

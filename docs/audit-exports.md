@@ -18,7 +18,7 @@
 | limit | 1–100，默认 50 |
 | after | 上批 next_cursor；必须是当前空间与类型的已有事件 ID |
 
-重复/未知参数、不合法类型/limit/cursor、GET body 为 400；未知/外空间/跨类型游标为 404；身份失效 401、权限/scope 不足 403、权威暂不可用 503。以带原空间 token 请求其他空间仍返回 404，即使账号属于两处。完整字段和错误见 [公共 OpenAPI](../api/openapi.yaml) 与 [API 参考](api-reference.md)。User 合同现在 55 项，Playground 可执行其中 54 项；一次性 SK 创建仍使用专用页面。
+重复/未知参数、不合法类型/limit/cursor、GET body 为 400；未知/外空间/跨类型游标为 404；身份失效 401、权限/scope 不足 403、权威暂不可用 503。以带原空间 token 请求其他空间仍返回 404，即使账号属于两处。完整字段和错误见 [公共 OpenAPI](../api/openapi.yaml) 与 [API 参考](api-reference.md)。User 合同现在 57 项，Playground 可执行其中 56 项；一次性 SK 创建仍使用专用页面。
 
 响应 format 固定为 `sso.audit.batch.v1`，包含 kind、tenant_id、generated_at、authz_version、items 与 next_cursor。items 为空时是 []；存在下一批时 next_cursor 为本批最后一条 ID。
 

@@ -235,6 +235,15 @@ export default function Playground({
                     );
                     return;
                   }
+                  const invitationVersion =
+                    match.schema.pattern.includes("invite-");
+                  if (
+                    invitationVersion &&
+                    !/^[a-f0-9]{32}$/.test(values.invitation || "")
+                  ) {
+                    setError("请先填写目标 invitation ID，再读取当前版本。");
+                    return;
+                  }
                   const applicationVersion =
                     match.schema.pattern.includes("app-");
                   if (
@@ -267,9 +276,11 @@ export default function Playground({
                               values.client
                             : applicationVersion
                               ? "/applications/" + values.application
-                              : match.schema.pattern.includes("org-")
-                                ? "/organizations?limit=1"
-                                : ""),
+                              : invitationVersion
+                                ? "/invitations/" + values.invitation
+                                : match.schema.pattern.includes("org-")
+                                  ? "/organizations?limit=1"
+                                  : ""),
                     },
                     true,
                   );

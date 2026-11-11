@@ -86,3 +86,7 @@ Hydra 稳定版本、镜像 digest、Go/SDK 版本、MySQL 8.4 兼容性必须�
 ## 审计导出切片 0.16.0
 
 User/BFF 新增只读 audit-exports 资源，管理与机器来源分别以独立固定 DTO 投影，避免列表模型扩展时静默改变下载字段。每批在主库 publicRead 事务检查当前身份、权限和本空间/来源游标，最多读取 101 行、返回 100 行；不生成审计写入或后台任务。响应明确记录单批权限版本和生成时间，跨批次不承诺冻结快照。见 [审计导出](audit-exports.md) / ADR 0018。
+
+## 邀请生命周期切片 0.17.0
+
+邀请详情/资源 ETag 与显式 proof 更新使用原租户权限/主库事务。migration 010 的辅助版本表仅以全局唯一 invitation ID 关联父邀请，访问先按父记录所属空间检查；旧记录缺少辅助行时视为 revision 1，无需重写原邀请。成功更新、接受及撤销实际转换递增 revision，closed 不可复活；更新 digest/expiry/当前责任管理者与审计/outbox 原子提交，保持目标邮箱/资源不变。见 [邀请生命周期](invitation-lifecycle.md) / ADR 0019。

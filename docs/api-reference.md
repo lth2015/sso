@@ -1,6 +1,6 @@
 # 完整 API 参考
 
-OpenAPI 0.16.0；公共 Bearer API 共 55 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
+OpenAPI 0.17.0；公共 Bearer API 共 57 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
 
 真实交互入口见 [Playground 手册](playground.md)；外部接入见 [公共 API 手册](runbooks/public-api.md)。JSON/YAML 合同见 [OpenAPI](../api/openapi.yaml)。
 
@@ -44,6 +44,8 @@ OpenAPI 0.16.0；公共 Bearer API 共 55 个业务操作。此文件由 OpenAPI
 | GET | `/v1/tenants/{tenant}/audit-exports` | `exportAuditBatch` |
 | GET | `/v1/tenants/{tenant}/invitations` | `listInvitations` |
 | POST | `/v1/tenants/{tenant}/invitations` | `createInvitation` |
+| GET | `/v1/tenants/{tenant}/invitations/{invitation}` | `getInvitation` |
+| POST | `/v1/tenants/{tenant}/invitations/{invitation}/reissue` | `reissueInvitation` |
 | POST | `/v1/tenants/{tenant}/invitations/{invitation}/revoke` | `revokeInvitation` |
 | GET | `/v1/tenants/{tenant}/machine-events` | `listMachineEvents` |
 | GET | `/v1/tenants/{tenant}/members` | `listMembers` |
@@ -923,7 +925,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -1197,7 +1199,7 @@ HTTP 201
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -1321,7 +1323,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -1637,7 +1639,7 @@ HTTP 201
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -1775,7 +1777,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -1932,7 +1934,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -2106,7 +2108,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -2254,7 +2256,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -2397,7 +2399,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -2679,7 +2681,7 @@ HTTP 201
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -2797,7 +2799,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -3116,7 +3118,7 @@ HTTP 201
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -3286,7 +3288,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -3459,7 +3461,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -3632,7 +3634,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -3796,7 +3798,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -3933,7 +3935,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -4619,6 +4621,230 @@ HTTP 201
 错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
 
 
+## GET /v1/tenants/{tenant}/invitations/{invitation}
+
+Read current invitation metadata and revision
+
+Requires invitations.manage on the token tenant. Explicit deny overrides other allows, including owner operational privileges. User platform:read and current invitations.manage. Tenant-bound primary read; response contains email/state/expiry/revision only, never proof/digest or arbitrary payload. Missing legacy revision metadata is revision 1 without modifying the invitation. ETag binds tenant/invitation/revision. GET has no request body. Closed covers accepted/revoked; closed invitations cannot reopen.
+
+OAuth scope：`platform:read`。权限：`permission:invitations.manage`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "invitation",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Read current invitation metadata and revision",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted resource or collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "email",
+          "expires_at",
+          "state",
+          "revision"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "expires_at": {
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "expired",
+              "closed"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## POST /v1/tenants/{tenant}/invitations/{invitation}/reissue
+
+Replace a lost or expired invitation proof once
+
+Requires invitations.manage on the token tenant. Explicit deny overrides other allows, including owner operational privileges. User platform:write, current invitations.manage and recent MFA. Empty JSON body; exact resource ETag. Only pending/expired invitations; closed returns 409 invalid_invitation_state with a current revision. Replaces proof digest and expiry for 24 hours, leaves tenant/resource/target email fixed, and makes the current manager responsible for subsequent acceptance. Revision and controlled audit/outbox commit atomically; no tenant authorization version change. Concurrent same-revision updates allow one success, other 412. Acceptance/revocation also increase revision and serialize with updates; old proof cannot join afterward. Secret returned once, never recoverable or automatically replayed. On uncertain result read metadata and explicitly update again if necessary. No invitation email is sent. Generic Playground redacts proof; use the dedicated invitation dialog for secure handoff.
+
+OAuth scope：`platform:write`。权限：`permission:invitations.manage`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "invitation",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Exact current invitation detail revision, bound to tenant and invitation. Missing 428, malformed 400, stale/other resource 412. Acceptance, revocation and reissue invalidate earlier revisions.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"invite-[a-f0-9]{32}-[a-f0-9]{32}-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+### 请求示例
+
+```json
+{}
+```
+
+### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
+```
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Replace a lost or expired invitation proof once",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted resource or collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "token",
+          "expires_in",
+          "revision"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "token": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "readOnly": true,
+            "description": "New one-time bearer proof. Replaces the old proof; never restored by metadata/GET. Unknown response: read current revision before explicitly updating again. No automatic email transport."
+          },
+          "expires_in": {
+            "type": "integer",
+            "const": 86400
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
 ## POST /v1/tenants/{tenant}/invitations/{invitation}/revoke
 
 Close an invitation so its proof cannot be accepted
@@ -4883,7 +5109,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -5093,7 +5319,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -5508,7 +5734,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -5654,7 +5880,7 @@ HTTP 201
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -5764,7 +5990,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -5869,7 +6095,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -6344,7 +6570,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -6420,7 +6646,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -6560,7 +6786,7 @@ HTTP 200
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -6774,7 +7000,7 @@ HTTP 201
       }
     },
     "ETag": {
-      "description": "Quoted collection version for If-Match.",
+      "description": "Quoted resource or collection version for If-Match.",
       "schema": {
         "type": "string"
       }
@@ -7057,4 +7283,4 @@ BFF 会话错误还可能返回 `{ "code": "session_unavailable" }`。两类边�
 
 body 上限 4096 字节；ID 使用 32 位小写十六进制。列表默认 50，limit 为 1–100；after 使用 next_cursor，不保证分页快照。请求仅接受 JSON、受控字段和有限策略数组。禁止额外 JSON 文档、重复键、超深结构和非法 UTF-8。
 
-If-Match 使用带双引号的 authz-N / org-N。权限版本变更使旧 grant 失效，包括执行者；refresh 不更新权限或认证时间。重新授权后由调用者决定是否再次提交。没有通用 Idempotency-Key，创建或网络中断后须核对结果，不能盲目重试。
+If-Match 使用对应读取返回的完整强 ETag：authz-N / org-N 集合版本与 app/client/sp/cred/invite 的租户/资源版本不可混用。资源修订不等同于租户授权版本；后者变更使对应旧 grant 失效，包括执行者。refresh 不更新权限或认证时间。重新授权后由调用者决定是否再次提交。没有通用 Idempotency-Key，创建或网络中断后须核对结果，不能盲目重试。

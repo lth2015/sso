@@ -2,7 +2,6 @@ package mysql
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
@@ -34,12 +33,10 @@ func (s TenantStore) CreateInvitation(ctx context.Context, email string) (ID, st
 	if err != nil {
 		return ID{}, "", err
 	}
-	secret := make([]byte, 32)
-	if _, err = rand.Read(secret); err != nil {
+	token, digest, err := newInvitationProof()
+	if err != nil {
 		return ID{}, "", err
 	}
-	token := base64.RawURLEncoding.EncodeToString(secret)
-	digest := sha256.Sum256([]byte(token))
 	id, err := NewID()
 	if err != nil {
 		return ID{}, "", err
@@ -107,6 +104,9 @@ func (s Store) acceptInvitation(ctx context.Context, user ID, token string, a *A
 	var expiry int64
 	var consumed sql.NullTime
 	if err = tx.QueryRowContext(ctx, `SELECT id,target_email,expires_at,consumed_at FROM invitations WHERE tenant_id=? AND token_digest=? FOR UPDATE`, tenant, digest[:]).Scan(&invite, &email, &expiry, &consumed); err != nil {
+		if err == sql.ErrNoRows {
+			return ID{}, ErrInvalid
+		}
 		return ID{}, err
 	}
 	if consumed.Valid || expiry <= time.Now().Unix() {
@@ -137,6 +137,9 @@ func (s Store) acceptInvitation(ctx context.Context, user ID, token string, a *A
 	}
 	// Invitation acceptance grants membership only, never owner/admin privilege.
 	if _, err = tx.ExecContext(ctx, `UPDATE invitations SET consumed_at=UTC_TIMESTAMP(6) WHERE id=? AND consumed_at IS NULL`, invite); err != nil {
+		return ID{}, err
+	}
+	if _, err = bumpInvitationRevision(ctx, tx, invite); err != nil {
 		return ID{}, err
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE tenants SET authz_version=authz_version+1 WHERE id=?`, tenant); err != nil {

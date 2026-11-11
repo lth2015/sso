@@ -9,6 +9,7 @@ import ApplicationManagement from "./ApplicationManagement.jsx";
 import OrganizationActions from "./OrganizationActions.jsx";
 import MachineEvents from "./MachineEvents.jsx";
 import AuditExport from "./AuditExport.jsx";
+import InvitationReissue from "./InvitationReissue.jsx";
 
 const tabs = [
   ["overview", "空间概览", "◈"],
@@ -69,6 +70,7 @@ const actionNames = {
   "org.member_unassigned": "移除组织归属",
   "org.member_assigned": "关联组织成员",
   "invitation.revoked": "撤销邀请",
+  "invitation.reissued": "更新邀请凭证",
   "authorization.consented": "确认访问授权",
   "authorization.logout": "退出应用",
   "token.authorization_code": "完成访问授权",
@@ -121,6 +123,7 @@ function App() {
   const [permissions, setPermissions] = useState(null),
     [roleMember, setRoleMember] = useState(null);
   const [orgAction, setOrgAction] = useState(null);
+  const [invitationAction, setInvitationAction] = useState(null);
   const can = (permission) =>
     permissions?.permissions?.includes(permission) || false;
   const [session, setSession] = useState(null),
@@ -172,6 +175,7 @@ function App() {
     setPermissions(null);
     setRoleMember(null);
     setOrgAction(null);
+    setInvitationAction(null);
     setData(null);
     setError(null);
     setAuthNeeded(false);
@@ -342,6 +346,7 @@ function App() {
   }
   function navigate(target) {
     setOrgAction(null);
+    setInvitationAction(null);
     setTab(target);
     setError(null);
     setNotice("");
@@ -855,6 +860,7 @@ function App() {
                   onFailure={fail}
                   onChanged={({ invalidates, message }) => {
                     setOrgAction(null);
+                    setInvitationAction(null);
                     setNotice(message);
                     if (invalidates) {
                       setAuthNeeded(true);
@@ -893,6 +899,14 @@ function App() {
                           </span>
                         </td>
                         <td>
+                          {row.state !== "closed" && (
+                            <button
+                              className="text-button"
+                              onClick={() => setInvitationAction(row)}
+                            >
+                              更新邀请凭证
+                            </button>
+                          )}
                           {row.state === "pending" && (
                             <button
                               className="text-button"
@@ -1074,6 +1088,26 @@ function App() {
           </footer>
         </main>
       </div>
+      {visible &&
+        invitationAction &&
+        me &&
+        tenant &&
+        !authNeeded &&
+        tab === "invitations" && (
+          <InvitationReissue
+            key={context + ":" + invitationAction.id}
+            context={context}
+            tenant={me.tenant_id}
+            csrf={csrf.current}
+            invitation={invitationAction}
+            close={() => {
+              setInvitationAction(null);
+              setRevision((x) => x + 1);
+            }}
+            onChanged={() => setRevision((x) => x + 1)}
+            onFailure={fail}
+          />
+        )}
       {secret && (
         <Dialog title="保存一次性邀请凭证" busy={busy} onClose={close}>
           <p>请通过安全渠道转交给对应邮箱的用户。此凭证只在这里显示一次。</p>

@@ -1041,3 +1041,7 @@ dialog .secret {
 .audit-export > p {
   overflow-wrap: anywhere;
 }
+
+.invitation-reissue strong {
+  overflow-wrap: anywhere;
+}

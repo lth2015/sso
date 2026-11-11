@@ -73,6 +73,10 @@ func verifyApplicationPrimaryChecks(t *testing.T, db *sql.DB, repo store.Store, 
 	if err = db.QueryRow(`SELECT org_id FROM tenant_roots WHERE tenant_id=?`, a.Tenant).Scan(&root); err != nil {
 		t.Fatal("organization root fixture unavailable")
 	}
+	if result, e := repo.ForAuthorization(a).APIReissueInvitation(ctx, root, 1); !errors.Is(e, store.ErrStepUp) || result.Token != "" {
+		t.Fatal("invitation replacement trusted caller Recent flag")
+	}
+
 	if _, err = repo.ForAuthorization(a).RenameOrganization(ctx, root, "Forbidden rename", 1); !errors.Is(err, store.ErrStepUp) {
 		t.Fatal("rename trusted caller Recent flag")
 	}

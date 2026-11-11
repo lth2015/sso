@@ -198,7 +198,11 @@ func (s TenantStore) APIRevokeInvitation(ctx context.Context, id ID) error {
 		if _, e = tx.ExecContext(ctx, `UPDATE invitations SET consumed_at=UTC_TIMESTAMP(6) WHERE tenant_id=? AND id=?`, s.tenant, id); e != nil {
 			return e
 		}
-		return record(ctx, tx, s.tenant, s.actor, "invitation.revoked", id, 1)
+		revision, e := bumpInvitationRevision(ctx, tx, id)
+		if e != nil {
+			return e
+		}
+		return record(ctx, tx, s.tenant, s.actor, "invitation.revoked", id, revision)
 	})
 }
 func (s TenantStore) APIAudit(ctx context.Context, limit int, after ID) (items []AuditSummary, err error) {
