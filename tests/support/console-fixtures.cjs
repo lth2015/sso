@@ -146,6 +146,7 @@ async function login(f, page = f.page, tenant, force = false) {
         .count()
     ) {
       const secret = await page.locator("#secret").textContent();
+      f.totpSecret = secret;
       await page.getByLabel("动态验证码").fill(totp(secret));
     } else {
       await page.locator("#recovery-option summary").click();
@@ -252,6 +253,7 @@ async function createOrg(page, name, parent) {
 }
 module.exports = {
   diagnostics: () => ({ step: stage, rejected: rejected.slice(-5) }),
+  totp,
   fixtures,
   pageErrors,
   leaks,

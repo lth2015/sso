@@ -536,11 +536,11 @@ func (s Store) LogoutAll(ctx context.Context, digest, csrf []byte) (ID, error) {
 }
 func (s Store) SSOReady(ctx context.Context) error {
 	var count int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations WHERE version='004_sso'`).Scan(&count)
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations WHERE version IN ('004_sso','006_account_security')`).Scan(&count)
 	if err != nil {
 		return err
 	}
-	if count != 1 {
+	if count != 2 {
 		return errors.New("SSO schema unavailable")
 	}
 	return nil
@@ -588,6 +588,9 @@ func (s Store) DeliverProtocolLogout(ctx context.Context, send func(string, stri
 
 func (s Store) PruneAuth(ctx context.Context) error {
 	now := time.Now().Unix()
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM security_actions WHERE expires_at<=?`, now); err != nil {
+		return err
+	}
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM bff_transactions WHERE expires_at<=?`, now); err != nil {
 		return err
 	}

@@ -86,7 +86,7 @@ func (f *fixture) cleanup(t *testing.T) {
 		tenants = append(tenants, id)
 	}
 	rows.Close()
-	for _, table := range []string{"protocol_logout_jobs", "bff_sessions", "business_grants", "login_interactions", "sso_sessions", "mfa_recovery_codes", "mfa_factors"} {
+	for _, table := range []string{"security_actions", "protocol_logout_jobs", "bff_sessions", "business_grants", "login_interactions", "sso_sessions", "mfa_recovery_codes", "mfa_factors"} {
 		exec("DELETE FROM "+table+" WHERE user_id=?", user)
 	}
 	for _, tenant := range tenants {

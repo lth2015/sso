@@ -15,7 +15,7 @@ const all = operations(spec),
   tenant = "a".repeat(32);
 const op = (name) => all.find((x) => x.operationId === name);
 test("tenant path is bound to the session; query and resource IDs are constrained", () => {
-  assert.equal(all.length, 26);
+  assert.equal(all.length, 28);
   assert.equal(
     buildCall(
       op("listMembers"),
@@ -64,7 +64,10 @@ test("nested proofs and JWT-shaped strings are hidden without mutating the respo
     password: "private",
     note: "eyJabc.def.ghi",
   };
+  original.recovery_codes_remaining = 9;
+  original.recovery_codes = ["private-code"];
   const safe = JSON.stringify(redact(original));
+  assert.equal(redact(original).recovery_codes_remaining, 9);
   assert(!safe.includes("private"));
   assert(!safe.includes("eyJ"));
   assert.equal(original.items[0].token, "private-proof");

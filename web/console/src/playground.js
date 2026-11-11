@@ -66,7 +66,8 @@ export function redact(value) {
     return Object.fromEntries(
       Object.entries(value).map(([key, child]) => [
         key,
-        /token|password|secret|csrf|recovery|verifier/i.test(key)
+        /token|password|secret|csrf|recovery|verifier/i.test(key) &&
+        !(key === "recovery_codes_remaining" && typeof child === "number")
           ? "[已隐藏]"
           : redact(child),
       ]),

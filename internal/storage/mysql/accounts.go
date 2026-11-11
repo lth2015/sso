@@ -263,3 +263,12 @@ func (s Store) AccountReady(ctx context.Context) error {
 	}
 	return nil
 }
+
+func (s Store) PasswordCredentialForUser(ctx context.Context, user ID) (PasswordCredential, error) {
+	var c PasswordCredential
+	err := s.db.QueryRowContext(ctx, `SELECT u.id,p.password_hash,u.security_version FROM users u JOIN password_credentials p ON p.user_id=u.id WHERE u.id=? AND u.status='active'`, user).Scan(&c.User, &c.Hash, &c.Version)
+	if err == sql.ErrNoRows {
+		return c, ErrDenied
+	}
+	return c, err
+}

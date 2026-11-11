@@ -16,6 +16,7 @@ import (
 
 func (l *Login) Handler() http.Handler {
 	mux := http.NewServeMux()
+	l.mountSecurity(mux)
 	page, err := template.ParseFS(web, "web/login.html")
 	if err != nil {
 		panic("invalid login template")

@@ -51,9 +51,10 @@ async function read(page, operation, code = 200) {
     await s.login(guest, guest.page, me.tenant_id);
     phase = "real-read-and-schema";
     await s.nav(p, "API Playground");
+    await p.getByLabel("选择 API", { exact: true }).waitFor();
     assert.equal(
       await p.getByLabel("选择 API", { exact: true }).locator("option").count(),
-      26,
+      28,
     );
     await read(p, "getMe");
     assert(
@@ -186,7 +187,7 @@ async function read(page, operation, code = 200) {
   }
   if (success)
     console.log(
-      "Playground acceptance passed: 26 live operations, real reads/writes, explicit confirmation, one send per action, ETag/412, member denial, MFA, redaction, escaping, navigation reset and desktop/mobile",
+      "Playground acceptance passed: 28 live operations, real reads/writes, explicit confirmation, one send per action, ETag/412, member denial, MFA, redaction, escaping, navigation reset and desktop/mobile",
     );
 })().catch((e) => {
   console.error(

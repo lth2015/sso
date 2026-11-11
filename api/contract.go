@@ -11,3 +11,6 @@ var PublicJSON []byte
 
 //go:embed console.openapi.yaml
 var ConsoleSpec []byte
+
+//go:embed security.openapi.yaml
+var SecuritySpec []byte

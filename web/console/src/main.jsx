@@ -4,6 +4,7 @@ import { request, errorText, ApiError } from "./api.js";
 import "./style.css";
 import RoleManagement from "./RoleManagement.jsx";
 import Playground from "./Playground.jsx";
+import AccountSecurity from "./AccountSecurity.jsx";
 
 const tabs = [
   ["overview", "空间概览", "◈"],
@@ -397,6 +398,12 @@ function App() {
         base + "/invitations/" + modal.row.id + "/revoke",
         {},
         { message: "邀请已撤销。" },
+      );
+    if (modal.kind === "revoke-others")
+      return mutate(
+        "/v1/sessions/revoke-others",
+        {},
+        { message: "其他现有会话已撤销，当前统一登录保持有效。" },
       );
     if (modal.kind === "revoke-session")
       return mutate(
@@ -868,6 +875,13 @@ function App() {
               )}
               {tab === "sessions" && (
                 <section className="panel">
+                  <AccountSecurity
+                    key={context + ":" + revision}
+                    context={context}
+                    csrf={csrf.current}
+                    onFailure={fail}
+                    onRevoke={() => open({ kind: "revoke-others" })}
+                  />
                   <div className="panel-heading">
                     <h2>我的统一登录会话</h2>
                     <a
@@ -977,6 +991,7 @@ function App() {
                   : "确认恢复成员",
               "revoke-invite": "确认撤销邀请",
               "revoke-session": "确认撤销会话",
+              "revoke-others": "撤销其他统一登录会话",
             }[modal.kind]
           }
           busy={busy}
@@ -1098,6 +1113,11 @@ function App() {
             {modal.kind === "revoke-invite" && (
               <p>
                 将撤销发给 {modal.row.email} 的邀请。撤销后，原凭证无法再接受。
+              </p>
+            )}
+            {modal.kind === "revoke-others" && (
+              <p>
+                将撤销此账户所有其他现有统一登录会话及其应用授权，保留当前统一登录会话。此后新完成的登录仍可创建会话。确认后只发送一次。
               </p>
             )}
             {modal.kind === "revoke-session" && (

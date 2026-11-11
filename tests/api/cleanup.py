@@ -24,7 +24,7 @@ if users:
  for tenant in tenants:
   if not re.fullmatch('[0-9A-F]{32}',tenant):raise SystemExit('Invalid fixture tenant')
   if sql(f"SELECT COUNT(*) FROM memberships WHERE tenant_id=UNHEX('{tenant}') AND user_id NOT IN ({ids});")!='0':raise SystemExit('Refusing cleanup of a tenant containing unrelated accounts')
- for table in ['protocol_logout_jobs','bff_sessions','business_grants','login_interactions','sso_sessions','mfa_recovery_codes','mfa_factors']:
+ for table in ['security_actions','protocol_logout_jobs','bff_sessions','business_grants','login_interactions','sso_sessions','mfa_recovery_codes','mfa_factors']:
   sql(f'DELETE FROM {table} WHERE user_id IN ({ids});')
  for tenant in tenants:
   for table in ['role_binding_changes','role_policies','org_memberships','invitations','outbox_events','audit_events','tenant_applications','role_bindings','roles','org_closure','tenant_roots']:

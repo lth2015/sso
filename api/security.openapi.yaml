@@ -1,0 +1,141 @@
+openapi: 3.1.0
+info:
+  title: Trusted Account Security
+  version: 0.8.0
+  description: Local HTTP reference. Recovery-code management on the trusted auth
+    origin only; existing central session/browser cookie, fresh password and unused
+    TOTP required. No recovery-code or email-proof substitution, no OAuth Bearer access.
+    Five-minute action, five failures and process-local five submissions/user/hour.
+    New codes returned once after commit; all prior user sessions/grants/codes become
+    invalid. Production requires TLS/Secure cookies.
+servers:
+- url: http://auth.localhost:8080
+paths:
+  /sso/security:
+    get:
+      operationId: startRecoveryManagement
+      responses:
+        '200':
+          description: No-store trusted HTML with session/browser-bound action and
+            CSRF
+        '401':
+          description: Login required HTML
+        '400': &id001
+          $ref: '#/components/responses/Error'
+        '403': *id001
+        '409': *id001
+        '413': *id001
+        '415': *id001
+        '429': *id001
+        '503': *id001
+  /v1/sso/recovery/regenerate/{id}:
+    post:
+      operationId: regenerateRecoveryCodes
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+      - in: header
+        name: X-CSRF-Token
+        required: true
+        schema:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+      - in: header
+        name: Origin
+        required: true
+        schema:
+          const: http://auth.localhost:8080
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+              - password
+              - code
+              properties:
+                password:
+                  type: string
+                  maxLength: 128
+                  writeOnly: true
+                code:
+                  type: string
+                  pattern: ^[0-9]{6}$
+                  writeOnly: true
+      responses:
+        '200':
+          description: Codes returned once. Clears central session cookie; all old
+            sessions revoked before protocol cleanup. Ambiguous network failure must
+            be checked, never blindly retried.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - recovery_codes
+                - sessions_revoked
+                properties:
+                  recovery_codes:
+                    type: array
+                    minItems: 10
+                    maxItems: 10
+                    uniqueItems: true
+                    items:
+                      type: string
+                      pattern: ^[a-f0-9]{8}(-[a-f0-9]{8}){3}$
+                  sessions_revoked:
+                    const: true
+        '400': *id001
+        '403': *id001
+        '409': *id001
+        '413': *id001
+        '415': *id001
+        '429': *id001
+        '503': *id001
+  /sso/security/openapi.yaml:
+    get:
+      operationId: readSecurityContract
+      security: []
+      responses:
+        '200':
+          description: Read-only trusted security interaction contract
+          content:
+            application/yaml: {}
+components:
+  responses:
+    Error:
+      description: Controlled error code only; no password/TOTP/codes/input echoed.
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+            - code
+            - request_id
+            additionalProperties: false
+            properties:
+              code:
+                type: string
+              request_id:
+                type: string
+                description: May be empty in the local trusted-login handler; public
+                  Bearer API uses its separate RFC 9457 correlation contract.
+  securitySchemes:
+    CentralSession:
+      type: apiKey
+      in: cookie
+      name: local_sso_session
+    BrowserBinding:
+      type: apiKey
+      in: cookie
+      name: local_sso_browser
+security:
+- CentralSession: []
+  BrowserBinding: []

@@ -5,7 +5,7 @@ from jsonschema import Draft202012Validator,FormatChecker
 try:
  sample=json.load(sys.stdin)
  rootpath=Path(__file__).resolve().parents[2]
- spec=yaml.safe_load((rootpath/'api/console.openapi.yaml').read_text()) if sample.get('contract')=='console' else json.loads((rootpath/'api/openapi.json').read_text())
+ spec=yaml.safe_load((rootpath/'api/security.openapi.yaml').read_text()) if sample.get('contract')=='security' else yaml.safe_load((rootpath/'api/console.openapi.yaml').read_text()) if sample.get('contract')=='console' else json.loads((rootpath/'api/openapi.json').read_text())
  operation=spec['paths'][sample['path']][sample['method'].lower()]
  response=operation['responses'][str(sample['status'])]
  if '$ref' in response:
@@ -21,7 +21,11 @@ try:
   body_schema=operation['requestBody']['content']['application/json']['schema']
   root={'$schema':'https://json-schema.org/draft/2020-12/schema','$ref':'#/request','request':body_schema,'components':spec['components']}
   Draft202012Validator(root,format_checker=FormatChecker()).validate(sample['request_body'])
- if sample['status']>=400 and sample.get('contract')=='console' and sample['content_type'].startswith('application/json'):
+ if sample['status']>=400 and sample.get('contract')=='security':
+  assert sample['content_type'].startswith('application/json')
+  assert set(sample['body'])=={'code','request_id'}
+  assert isinstance(sample['body']['request_id'],str)
+ elif sample['status']>=400 and sample.get('contract')=='console' and sample['content_type'].startswith('application/json'):
   assert sample['body']=={'code':'session_unavailable'}
  elif sample['status']>=400:
   assert sample['content_type'].startswith('application/problem+json')

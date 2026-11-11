@@ -10,6 +10,7 @@ scripts/console up
 scripts/console test
 scripts/console rbac-test
 scripts/console playground-test
+scripts/console security-test
 ```
 
 准备需要 Docker/Compose、Node >=22.12（本次 24.22.1）、npm、Python/PyYAML/jsonschema、Playwright 和 Chromium。prepare 先用 npm ci 安装精确锁定的 React/Vite，构建静态资产，再编译现有 Go 服务/BFF/测试；不运行前端开发服务器。npm cache 在忽略的 `.local/npm-cache`，不能为安装改 HOME、关闭 integrity/TLS 或升级全局 npm。
@@ -54,4 +55,7 @@ scripts/console enable --email YOUR_LOCAL_ADDRESS --second-tenant
 `rbac-test` 使用三个合成账户，通过真实登录/API/BFF 验收默认拒绝、委托读写、deny 优先、撤销、跨租户对象拒绝、owner 恢复/移交及真实 React 角色管理。新增截图：[角色](../ui/rbac-roles.png)、[受委托审计员](../ui/rbac-auditor.png)。设计和 API 细节见 [ADR 0008](../adr/0008-tenant-roles-and-deny.md)。
 
 
-新增 API Playground 导航，可读取同源 OpenAPI 并调用固定的 26 个业务操作。GET 直接发送，写入预览/确认后发送一次，支持 ETag 读取、HTTP 状态/错误、cURL 模板和凭证字段脱敏；离开页面清空内存并取消在途读取，不自动重发写入。使用及限制见 [Playground 手册](../playground.md)。
+新增 API Playground 导航，可读取同源 OpenAPI 并调用固定的 28 个业务操作。GET 直接发送，写入预览/确认后发送一次，支持 ETag 读取、HTTP 状态/错误、cURL 模板和凭证字段脱敏；离开页面清空内存并取消在途读取，不自动重发写入。使用及限制见 [Playground 手册](../playground.md)。
+
+
+安全会话页面已增加个人 MFA/恢复码/会话概览及“撤销其他会话”确认流程；同一中央会话的多个标签页保留。恢复码管理跳转可信认证域，不在 BFF/Playground 输入密码或验证码。见 [个人安全](../account-security.md)。

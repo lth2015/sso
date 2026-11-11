@@ -19,7 +19,7 @@ if user:
     # Shared fixtures need the closed-set cleanup that checks all participants.
     joined=sql(f"SELECT COUNT(*) FROM memberships m WHERE m.user_id=UNHEX('{user}') AND NOT EXISTS(SELECT 1 FROM role_bindings b JOIN roles r ON r.tenant_id=b.tenant_id AND r.id=b.role_id WHERE b.tenant_id=m.tenant_id AND b.membership_id=m.id AND r.code='owner');")
     if joined!='0':raise SystemExit('Refusing shared membership cleanup; use guarded multi-fixture cleanup')
-    for table in ['protocol_logout_jobs','bff_sessions','business_grants','login_interactions','sso_sessions','mfa_recovery_codes','mfa_factors']:
+    for table in ['security_actions','protocol_logout_jobs','bff_sessions','business_grants','login_interactions','sso_sessions','mfa_recovery_codes','mfa_factors']:
         sql(f"DELETE FROM {table} WHERE user_id=UNHEX('{user}');")
     tenants=sql(f"SELECT HEX(tenant_id) FROM memberships WHERE user_id=UNHEX('{user}');").splitlines()
     for tenant in tenants:

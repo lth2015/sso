@@ -31,6 +31,7 @@ func Handler(auth *Authenticator) http.Handler {
 	mux := http.NewServeMux()
 	repo := auth.Store
 	mountRBAC(mux, repo)
+	mountSecurity(mux, repo)
 	limit := identity.NewLimiter()
 	capacity := make(chan struct{}, 32)
 	mux.HandleFunc("GET /openapi.yaml", func(w http.ResponseWriter, r *http.Request) {

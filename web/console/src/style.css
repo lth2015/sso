@@ -885,3 +885,12 @@ dialog .secret {
   background: white;
   padding: 12px 0;
 }
+
+.security-overview {
+  border-bottom: 1px solid #dce5f2;
+  padding-bottom: 26px;
+  margin-bottom: 28px;
+}
+.security-overview .summary-grid {
+  margin: 18px 0;
+}

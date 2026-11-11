@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Identity Console Same-Origin BFF
-  version: 0.7.0
+  version: 0.8.0
   description: Browser cookie+context+CSRF boundary. Proxy paths are restricted to
     the public platform contract and one fixed API destination; caller Authorization
     is rejected. OAuth tokens and verifier remain encrypted server-side. Every tab
@@ -936,6 +936,110 @@ paths:
           headers:
             X-Request-ID:
               $ref: '#/components/headers/RequestID'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-recent-mfa-seconds: 300
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Empty'
+            example: {}
+  /bff/v1/me/security:
+    get:
+      operationId: consoleGetMySecurity
+      summary: Read own MFA/recovery/session metadata
+      description: Current verified user only, across their spaces. Counts and authentication
+        metadata only; no factor secret, code digest, cookie or recovery code. Requires
+        an active current tenant grant. Recovery-code regeneration is a separate trusted-origin
+        password+TOTP interaction, never a Bearer API.
+      tags:
+      - Identity
+      security:
+      - ConsoleCookie: []
+      parameters:
+      - $ref: '#/components/parameters/Context'
+      responses:
+        '200':
+          description: Read own MFA/recovery/session metadata
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecuritySummary'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+  /bff/v1/sessions/revoke-others:
+    post:
+      operationId: consoleRevokeOtherSessions
+      summary: Revoke other central sessions, retaining the current session
+      description: 'Recent MFA required. No user ID input: only current user sessions,
+        across their spaces and applications. Revokes other committed session records
+        and their BFF/grant authority, queuing protocol cleanup in the same transaction.
+        Current session/grants remain valid; authentication completing later may create
+        a new session. No-op returns zero. Does not invalidate the current grant or
+        update auth_time.'
+      tags:
+      - Identity
+      security:
+      - ConsoleCookie: []
+      parameters:
+      - $ref: '#/components/parameters/Context'
+      - $ref: '#/components/parameters/CSRF'
+      - $ref: '#/components/parameters/Origin'
+      responses:
+        '200':
+          description: Revoke other central sessions, retaining the current session
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionsRevoked'
         '400':
           $ref: '#/components/responses/Problem'
         '401':
@@ -2206,6 +2310,40 @@ components:
             - members.write
             - organizations.read
             - organizations.write
+    SecuritySummary:
+      type: object
+      additionalProperties: false
+      required:
+      - mfa_enabled
+      - recovery_codes_remaining
+      - active_sessions
+      - authenticated_at
+      - second_factor
+      properties:
+        mfa_enabled:
+          type: boolean
+        recovery_codes_remaining:
+          type: integer
+          minimum: 0
+          maximum: 10
+        active_sessions:
+          type: integer
+          minimum: 0
+        authenticated_at:
+          type: integer
+        second_factor:
+          enum:
+          - otp
+          - recovery
+    SessionsRevoked:
+      type: object
+      additionalProperties: false
+      required:
+      - revoked_sessions
+      properties:
+        revoked_sessions:
+          type: integer
+          minimum: 0
     BFFError:
       type: object
       additionalProperties: false

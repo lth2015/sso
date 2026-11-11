@@ -1,6 +1,6 @@
 # 完整 API 参考
 
-OpenAPI 0.7.0；公共 Bearer API 共 26 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
+OpenAPI 0.8.0；公共 Bearer API 共 28 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
 
 真实交互入口见 [Playground 手册](playground.md)；外部接入见 [公共 API 手册](runbooks/public-api.md)。JSON/YAML 合同见 [OpenAPI](../api/openapi.yaml)。
 
@@ -12,7 +12,9 @@ OpenAPI 0.7.0；公共 Bearer API 共 26 个业务操作。此文件由 OpenAPI 
 | --- | --- | --- |
 | POST | `/v1/invitations/accept` | `acceptInvitation` |
 | GET | `/v1/me` | `getMe` |
+| GET | `/v1/me/security` | `getMySecurity` |
 | GET | `/v1/sessions` | `listMySessions` |
+| POST | `/v1/sessions/revoke-others` | `revokeOtherSessions` |
 | POST | `/v1/sessions/{session}/revoke` | `revokeMySession` |
 | GET | `/v1/tenants` | `listMyTenants` |
 | POST | `/v1/tenants` | `createTenant` |
@@ -185,6 +187,81 @@ HTTP 200
 错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
 
 
+## GET /v1/me/security
+
+Read own MFA/recovery/session metadata
+
+Current verified user only, across their spaces. Counts and authentication metadata only; no factor secret, code digest, cookie or recovery code. Requires an active current tenant grant. Recovery-code regeneration is a separate trusted-origin password+TOTP interaction, never a Bearer API.
+
+OAuth scope：`platform:read`。权限：`当前有效 User/Session/grant`。
+
+### 参数
+
+```json
+[]
+```
+
+无请求体。
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Read own MFA/recovery/session metadata",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mfa_enabled",
+          "recovery_codes_remaining",
+          "active_sessions",
+          "authenticated_at",
+          "second_factor"
+        ],
+        "properties": {
+          "mfa_enabled": {
+            "type": "boolean"
+          },
+          "recovery_codes_remaining": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10
+          },
+          "active_sessions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "authenticated_at": {
+            "type": "integer"
+          },
+          "second_factor": {
+            "enum": [
+              "otp",
+              "recovery"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
 ## GET /v1/sessions
 
 List central sessions of the current user
@@ -297,6 +374,75 @@ HTTP 200
               "null"
             ],
             "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## POST /v1/sessions/revoke-others
+
+Revoke other central sessions, retaining the current session
+
+Recent MFA required. No user ID input: only current user sessions, across their spaces and applications. Revokes other committed session records and their BFF/grant authority, queuing protocol cleanup in the same transaction. Current session/grants remain valid; authentication completing later may create a new session. No-op returns zero. Does not invalidate the current grant or update auth_time.
+
+OAuth scope：`platform:write`。权限：`当前有效 User/Session/grant`。
+
+### 参数
+
+```json
+[]
+```
+
+### 请求示例
+
+```json
+{}
+```
+
+### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
+```
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Revoke other central sessions, retaining the current session",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revoked_sessions"
+        ],
+        "properties": {
+          "revoked_sessions": {
+            "type": "integer",
+            "minimum": 0
           }
         }
       }
