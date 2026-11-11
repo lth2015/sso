@@ -7,6 +7,7 @@ import Playground from "./Playground.jsx";
 import AccountSecurity from "./AccountSecurity.jsx";
 import ApplicationManagement from "./ApplicationManagement.jsx";
 import OrganizationActions from "./OrganizationActions.jsx";
+import OrganizationAssignment from "./OrganizationAssignment.jsx";
 import MachineEvents from "./MachineEvents.jsx";
 import AuditExport from "./AuditExport.jsx";
 import InvitationReissue from "./InvitationReissue.jsx";
@@ -123,6 +124,7 @@ function App() {
   const [permissions, setPermissions] = useState(null),
     [roleMember, setRoleMember] = useState(null);
   const [orgAction, setOrgAction] = useState(null);
+  const [assignmentOpen, setAssignmentOpen] = useState(false);
   const [invitationAction, setInvitationAction] = useState(null);
   const can = (permission) =>
     permissions?.permissions?.includes(permission) || false;
@@ -175,6 +177,7 @@ function App() {
     setPermissions(null);
     setRoleMember(null);
     setOrgAction(null);
+    setAssignmentOpen(false);
     setInvitationAction(null);
     setData(null);
     setError(null);
@@ -346,6 +349,7 @@ function App() {
   }
   function navigate(target) {
     setOrgAction(null);
+    setAssignmentOpen(false);
     setInvitationAction(null);
     setTab(target);
     setError(null);
@@ -405,16 +409,6 @@ function App() {
         },
       );
     }
-    if (modal.kind === "assign")
-      return mutate(
-        base + "/organizations/" + v.org + "/members/" + v.member,
-        {},
-        {
-          etag: '"authz-' + tenant.authz_version + '"',
-          invalidates: true,
-          message: "组织归属已更新，请重新确认空间授权。",
-        },
-      );
     if (modal.kind === "member")
       return mutate(
         base +
@@ -736,27 +730,11 @@ function App() {
                       {can("organizations.write") && can("members.read") && (
                         <button
                           className="secondary"
-                          onClick={async () => {
-                            const generation = epoch.current;
-                            try {
-                              const response = await request(
-                                context,
-                                csrf.current,
-                                "/bff" + base + "/members?limit=100",
-                              );
-                              if (
-                                generation !== epoch.current ||
-                                current.current !== context ||
-                                activeTab.current !== "organizations"
-                              )
-                                return;
-                              open({
-                                kind: "assign",
-                                members: response.data.items,
-                              });
-                            } catch (error) {
-                              fail(error);
-                            }
+                          disabled={busy}
+                          onClick={() => {
+                            setError(null);
+                            setModal(null);
+                            setAssignmentOpen(true);
                           }}
                         >
                           关联成员
@@ -860,6 +838,7 @@ function App() {
                   onFailure={fail}
                   onChanged={({ invalidates, message }) => {
                     setOrgAction(null);
+                    setAssignmentOpen(false);
                     setInvitationAction(null);
                     setNotice(message);
                     if (invalidates) {
@@ -1137,6 +1116,29 @@ function App() {
           </div>
         </Dialog>
       )}
+      {assignmentOpen &&
+        me &&
+        tenant &&
+        tab === "organizations" &&
+        !authNeeded &&
+        can("organizations.write") &&
+        can("members.read") && (
+          <OrganizationAssignment
+            key={context + me.tenant_id + revision}
+            context={context}
+            csrf={csrf.current}
+            tenant={me.tenant_id}
+            root={tenant.root_id}
+            onClose={() => setAssignmentOpen(false)}
+            onFailure={fail}
+            onChanged={() => {
+              setAssignmentOpen(false);
+              setData(null);
+              setAuthNeeded(true);
+              setNotice("组织归属已更新，请重新确认空间授权。");
+            }}
+          />
+        )}
       {modal && !secret && (
         <Dialog
           title={
@@ -1146,7 +1148,6 @@ function App() {
               invite: "邀请成员",
               accept: "接受成员邀请",
               move: "移动组织",
-              assign: "关联组织成员",
               member:
                 modal.row?.status === "active"
                   ? "确认停用成员"
@@ -1234,33 +1235,6 @@ function App() {
                     {modal.plan.resulting_depth}。
                   </p>
                 )}
-              </>
-            )}
-            {modal.kind === "assign" && (
-              <>
-                <label>
-                  选择成员
-                  <select name="member" required autoFocus>
-                    {modal.members
-                      .filter((row) => row.status === "active")
-                      .map((row) => (
-                        <option key={row.id} value={row.id}>
-                          {row.email || row.user_id}
-                        </option>
-                      ))}
-                  </select>
-                </label>
-                <label>
-                  选择组织
-                  <select name="org" required>
-                    {rows.map((row) => (
-                      <option key={row.id} value={row.id}>
-                        {row.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <p className="muted">组织归属不会授予角色或管理权限。</p>
               </>
             )}
             {modal.kind === "member" && (

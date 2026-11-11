@@ -54,6 +54,7 @@ test("role/member projections reject mismatched versions, duplicate or regressin
     page([member(27), member(26)]),
     page([member(26), member(26)]),
     { etag: '"authz-6"', data: { items: [member(26)], next_cursor: null } },
+    page([{ ...member(26), id: [id(26)] }]),
     page([{ ...member(26), secret_key: "never-display" }]),
     page([member(26)], id(26)),
     page(Array.from({ length: 26 }, (_, i) => member(26 + i))),

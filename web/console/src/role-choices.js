@@ -1,6 +1,7 @@
 // Project only existing role/member metadata; no authorization is cached here.
 import { ApiError } from "./api.js";
 const id = /^[a-f0-9]{32}$/;
+const validID = (value) => typeof value === "string" && id.test(value);
 const permissions = new Set([
   "members.read",
   "members.write",
@@ -36,8 +37,8 @@ function project(row, kind) {
   if (kind === "members") {
     exact(row, ["id", "user_id", "email", "status", "owner"]);
     if (
-      !id.test(row.id) ||
-      !id.test(row.user_id) ||
+      !validID(row.id) ||
+      !validID(row.user_id) ||
       typeof row.owner !== "boolean" ||
       !["active", "invited", "suspended", "left"].includes(row.status) ||
       !(
@@ -59,7 +60,7 @@ function project(row, kind) {
   if (kind !== "roles") invalid();
   exact(row, ["id", "code", "built_in", "scope", "policies", "binding_count"]);
   if (
-    !id.test(row.id) ||
+    !validID(row.id) ||
     typeof row.code !== "string" ||
     !/^[a-z][a-z0-9_-]{0,62}$/.test(row.code) ||
     typeof row.built_in !== "boolean" ||
@@ -117,7 +118,7 @@ export function choicePage(
     next = response.data.next_cursor;
   if (
     next !== null &&
-    (!id.test(next) ||
+    (!validID(next) ||
       items.length !== choiceLimit ||
       next !== items.at(-1)?.id)
   )

@@ -476,6 +476,9 @@ async function createOrg(page, name, parent) {
     const guestMember = memberRows.find((x) => x.email === guest.email).id;
     await p.getByLabel("选择成员").selectOption(guestMember);
     await p.getByLabel("选择组织").selectOption(orgA);
+    await p
+      .getByLabel("我确认关联所选成员与组织，归属不授予角色", { exact: true })
+      .check();
     await submit(p);
     await reauthorize(owner, p, tenantA);
     assert.equal((await bff(shared, "/v1/me")).status, 401);

@@ -73,6 +73,7 @@ export const errorText = (error) =>
     root_cannot_move: "空间根组织不能移动。",
     organization_cycle: "不能把组织移动到它自身或下级组织中。",
     observation_changed: "观察期间登记已变化，请刷新当前记录后重新核对。",
+    invalid_assignment_choices: "关联目录已变化或数据无效，请关闭后重新读取。",
     invalid_role_choices: "成员或角色列表已变化或数据无效，请关闭后重新读取。",
     invalid_protocol_data: "协议观察数据不正确，请刷新当前记录后重新核对。",
     invalid_invitation_data: "邀请数据不正确，请关闭后重新核对。",

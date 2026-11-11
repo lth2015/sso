@@ -1,6 +1,6 @@
 # SSO 完整设计与开发手册
 
-文档版本：0.20.0。本手册整合已维护的架构、UI、安全、API、Playground 和本地验收文档。由 `scripts/docs build` 生成；编辑各源文件后重新生成。
+文档版本：0.21.0。本手册整合已维护的架构、UI、安全、API、Playground 和本地验收文档。由 `scripts/docs build` 生成；编辑各源文件后重新生成。
 
 ## 当前交付边界
 
@@ -133,6 +133,10 @@ User/BFF 新增只读 audit-exports 资源，管理与机器来源分别以独�
 
 控制台复用原有 members/roles/keyset 与完整 member-role 读取，不改变主库授权或 API。每次显式 25 项，按相同 authz ETag 合并受控元数据，主列表后页目标单独固定并去重。最终绑定仍走原 owner/MFA/ETag 一次事务。见 role-choice-pagination.md / ADR 0022。
 
+#### 组织关联目录 0.21.0
+
+独立关联弹窗复用 members/organizations 的 25 项分页；两类投影分别校验 authz/org ETag，写入使用当前成员读取的 authz 版本，主库授权流程不变。既有角色成员投影补强字符串 ID，复用于关联目录。取消/卸载/上下文保护与确认/同步单发约束位于组件内，核心/API/迁移不变，见 organization-assignment.md / ADR 0023。
+
 
 ## 02. 安全设计
 
@@ -242,6 +246,10 @@ User scope/audit.read、会话/grant/角色与 tenant 始终由 API 主库复查
 #### 角色选择器隔离 0.20.0
 
 固定 DTO/升序唯一 ID/推进游标/一致 authz ETag 限定可提交选择；目标切换、读取失败和版本异常先清除旧绑定/角色。关闭/新请求/组件卸载中止读取，URL 当前 context 复核与主页面 context/revision key 拒绝迟到结果。401 回到现有重新授权流程，members.read 被 deny 的 owner 不列举目录，只管理自己。写入仍需服务端当前 owner、近期 MFA、ETag，客户端防双击不替代权威检查。见 role-choice-pagination.md。
+
+#### 组织关联选择边界 0.21.0
+
+目录页是受控选择元数据，authz 与 org ETag 分开且不能互作写入前置条件；最终 PUT 使用成员页 authz ETag，由主库复查有效目标、organizations.write 与近期 MFA。字段/根/字符串 ID/游标/大小/版本异常、依赖故障清除选择；401 重新授权。用户变更目标/新页后需重新确认，提交同步单发、不能关闭；已提交丢包不自动重放，先核对实际直属成员/审计。普通委托不取得角色权限，组织归属不授予角色。见 organization-assignment.md。
 
 
 ## 03. UI 与交互设计
@@ -374,6 +382,10 @@ API Playground 已接入真实控制台授权：接口选择、参数、JSON、I
 #### 角色绑定分页 0.20.0
 
 选择器每次 25 项并显示已加载数量、独立的加载更多成员/角色按钮；已加载数不宣称总量。从主成员后页进入时目标保留且自然翻页不重复；移除项来自该成员完整绑定。读取中允许取消，错误清除本次选择并提示关闭重读，变更资格的 401 转为重新授权；写入中维持禁用和一次提交。owner 确认提示、目录被 deny 时只选择自己等边界保持。截图与操作见 role-choice-pagination.md。
+
+#### 组织关联独立分页 0.21.0
+
+弹窗分别加载成员/组织并显示已加载数，初始目标留空，勾选明确确认后保存；成员选择只提供列表 active 记录。选项独立于主列表，角色归属不隐式变化。读取可关闭，页/目标变化清除确认，异常清空选择；结构变化提示重读，401 转重新授权，写入失败提醒核对实际直属成员且不自动再发。实际普通委托/末页/丢包和截图见 organization-assignment.md。
 
 
 ## 04. 角色绑定选择器分页
@@ -508,7 +520,7 @@ curl http://127.0.0.1:8083/v1/me \
 用 `scripts/sso down` 停止全部本地服务，保留 volume/私有 key。不要修改既有迁移校验和、输出完整 env/Compose/容器 inspect、token/proof、MFA 材料或 SQL 输入。详见 [ADR 0006](adr/0006-public-platform-api.md)。
 
 
-公共 API 0.20.0 共 59 项业务操作，成员 email 由 members.read 授权（无 verified alias 时 null）。新增真实 React 控制台见 [控制台手册](runbooks/console.md)，浏览器边界合同为 `api/console.openapi.yaml`；该合同要求对应 cookie/context/CSRF，不替代公共 Bearer 接入合同。
+公共 API 0.21.0 共 59 项业务操作，成员 email 由 members.read 授权（无 verified alias 时 null）。新增真实 React 控制台见 [控制台手册](runbooks/console.md)，浏览器边界合同为 `api/console.openapi.yaml`；该合同要求对应 cookie/context/CSRF，不替代公共 Bearer 接入合同。
 
 
 #### 角色 API
@@ -518,7 +530,7 @@ curl http://127.0.0.1:8083/v1/me \
 创建使用 `{"code":"auditor","policies":[{"permission":"audit.read","effect":"allow"}]}`；更新使用完整 policies 数组，删除/绑定/解绑提交 `{}`。均需 JSON、最近 MFA 和 authz If-Match。角色 code 不可更名，owner 不可修改/删除；带绑定角色返回 409 role_in_use。解绑最后 active owner 返回 409 last_active_owner。真实变更后旧授权失效，重复绑定/解绑及相同策略替换不改变版本。权限目录、恢复边界、并发与历史审计详见 [ADR 0008](adr/0008-tenant-roles-and-deny.md)。
 
 
-完整字段和示例见 [API 参考](api-reference.md)；运行中 `/docs` 展示同一份合同的参数、请求/响应 schema。控制台 [Playground](playground.md) 使用现有 BFF 发起真实调用，支持写入确认、ETag、MFA/权限错误与凭证脱敏。OpenAPI 0.20.0 提供 59 个业务操作，包括组织生命周期、角色/权限读取 ETag 和写入 JSON 示例；新增同源只读 `/platform-openapi.json` 记录在 BFF 合同。
+完整字段和示例见 [API 参考](api-reference.md)；运行中 `/docs` 展示同一份合同的参数、请求/响应 schema。控制台 [Playground](playground.md) 使用现有 BFF 发起真实调用，支持写入确认、ETag、MFA/权限错误与凭证脱敏。OpenAPI 0.21.0 提供 59 个业务操作，包括组织生命周期、角色/权限读取 ETag 和写入 JSON 示例；新增同源只读 `/platform-openapi.json` 记录在 BFF 合同。
 
 新增 `GET /v1/me/security-events`：platform:read、有效当前租户 grant，仅本人记录；无需 audit.read。支持 limit/after，按时间与 ID 降序，其他用户/隐藏/未知游标统一 404。仅返回 id/action/occurred_at，完整语义见 [个人安全事件](security-events.md)。
 
@@ -537,7 +549,7 @@ curl http://127.0.0.1:8083/v1/me \
 
 ### 完整 API 参考
 
-OpenAPI 0.20.0；公共 Bearer API 共 59 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
+OpenAPI 0.21.0；公共 Bearer API 共 59 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
 
 真实交互入口见 [Playground 手册](playground.md)；外部接入见 [公共 API 手册](runbooks/public-api.md)。JSON/YAML 合同见 [OpenAPI](../api/openapi.yaml)。
 
@@ -8206,7 +8218,7 @@ If-Match 使用对应读取返回的完整强 ETag：authz-N / org-N 集合版�
 
 ### API Playground
 
-Playground 是登录后的真实 API 客户端。它读取与公共服务相同的 OpenAPI 0.20.0，通过控制台 BFF 展示现有 59 项 User 管理操作，除一次性 SK 创建外，其余 58 项可真实执行。它使用真实 Hydra/主库授权，不创建演示身份或伪造 token。
+Playground 是登录后的真实 API 客户端。它读取与公共服务相同的 OpenAPI 0.21.0，通过控制台 BFF 展示现有 59 项 User 管理操作，除一次性 SK 创建外，其余 58 项可真实执行。它使用真实 Hydra/主库授权，不创建演示身份或伪造 token。
 
 #### 启动与使用
 
@@ -8716,7 +8728,7 @@ client path 仅接受此功能生成的 32-hex ID；旧的字符串 client_id �
 
 #### 管理 API 与 OpenAPI
 
-[公共 User OpenAPI](../api/openapi.yaml) 0.20.0 共 59 项业务操作，机器身份切片增加 11 项，审计导出增加 1 项；[Console BFF 合同](../api/console.openapi.yaml) 为相同管理操作提供 cookie/context/CSRF 边界。
+[公共 User OpenAPI](../api/openapi.yaml) 0.21.0 共 59 项业务操作，机器身份切片增加 11 项，审计导出增加 1 项；[Console BFF 合同](../api/console.openapi.yaml) 为相同管理操作提供 cookie/context/CSRF 边界。
 
 | 方法 | 路径（前缀 `/v1/tenants/{tenant}`） | 作用 |
 | --- | --- | --- |
@@ -8785,7 +8797,7 @@ API 元数据 revision 与 token security version 分开：轮换只缩短旧凭
 
 ### 外部业务服务：Go SDK 与完整本地示例
 
-0.15.0 增加可复用的 Go 在线机器身份验证器，以及独立业务服务和一次性客户端示例。当前 0.20.0 的 SSO User 管理合同为 59 项；机器协议/主库身份资源合同单列。业务服务示例有自己的合同，不属于平台管理或 User BFF。
+0.15.0 增加可复用的 Go 在线机器身份验证器，以及独立业务服务和一次性客户端示例。当前 0.21.0 的 SSO User 管理合同为 59 项；机器协议/主库身份资源合同单列。业务服务示例有自己的合同，不属于平台管理或 User BFF。
 
 #### Go 服务端接入
 
@@ -8880,7 +8892,26 @@ Go 单元与竞态测试覆盖可信原点、TLS 默认信任、重定向、Cook
 完整导出包含本文、全部合同、SDK/独立服务/客户端最小公开源码和 go.mod/go.sum。解压到独立目录后，可用已有 Go 工具运行 `go test ./pkg/machineidentity ./examples/machine-resource`；这两个包只使用标准库与同包公开合同。文档渲染不访问外部网络，真实业务示例仍需要已运行的本地 SSO。私有 AK/SK 输入与任何恢复资料均不进入导出。
 
 
-## 21. 组织生命周期
+## 21. 组织成员关联独立分页
+
+来源：[organization-assignment.md](organization-assignment.md)。
+
+### 组织成员关联独立分页
+
+0.21.0 已实现独立关联弹窗，成员和组织各自逐次读取 25 项；可选择第 100 位之后的成员，以及未在主组织列表加载的后页组织。复用现有 59 项 User/BFF 合同，Playground 仍执行其中 58 项，没有新 API、迁移或授权范围。原创建/移动上级选择器的进一步改进仍为后续。
+
+进入「组织 → 关联成员」，显式加载/选择成员与组织，核对目标并勾选「我确认关联所选成员与组织，归属不授予角色」，再保存。初始没有默认目标；更换目标或加载新页清除确认。已加载数量不是总量，成员记录数包括不提供选择的非 active 记录。UI 的 active 选项不证明最终资格，API 仍复查当前有效用户/成员、组织及操作权限。
+
+入口沿用 organizations.read 导航，以及 organizations.write 与 members.read 的按钮要求。普通委托操作员具有这些有效权限时可以使用；角色管理仍保留给 owner。组织关联不授予角色，不增加 API 权力。只持有已知对象 ID 的 API 调用仍遵循原合同权限，UI 的读取要求没有改写服务端授权规则。
+
+成员页的 authz ETag 与组织页的 org ETag 分别校验，不能混用；写入使用本次成员读取得到的 authz ETag，服务端仍检查最近 300 秒 MFA 和主库版本。后续读取观察到结构版本变化、数据异常或依赖失败时会清除选择，需关闭重读；真实 401 回到重新授权。组织只是受控元数据，响应不作为成功权限缓存，也不承诺跨页快照/全文搜索。
+
+读取可以取消/关闭；AbortController、请求代数、当前 URL context 与卸载隔离迟到结果。提交中禁止关闭并用同步标记阻止双发；离开原空间后不展示旧结果。任何写入失败或回包不明都清除表单、不自动重试；关闭后重新确认授权，检查组织直属成员/审计，核对是否已经提交，再显式决定下一步。
+
+验收 `scripts/console organization-assignment-test` 与 `node --test tests/organization-assignment/model.test.mjs`。专项使用真实 owner/普通委托登录、BFF/API 和主库；新建非保留版空间中加入 105 位无 alias/无凭证合成成员、55 个带完整闭包的叶组织及测试角色。人口不是 105 次真实注册/邀请或负载验收；清理限定本轮精确 ID/归属和引用。已配置/本轮秘密排除及真正的 API/界面证据见 validation.md / ADR 0023。截图仅元数据：[桌面](ui/organization-assignment-desktop.png) / [手机](ui/organization-assignment-mobile.png)。
+
+
+## 22. 组织生命周期
 
 来源：[organization-management.md](organization-management.md)。
 
@@ -8897,7 +8928,7 @@ Go 单元与竞态测试覆盖可信原点、TLS 默认信任、重定向、Cook
 | 移除归属 | DELETE `/v1/tenants/{tenant}/organizations/{org}/members/{member}` | organizations.write / `"authz-N"` |
 | 删除空节点 | DELETE `/v1/tenants/{tenant}/organizations/{org}` | organizations.write / `"org-N"` |
 
-公共与 BFF OpenAPI 0.12.0 共 38 个业务操作，Playground 与运行时 API 参考同步。写入需要 platform:write 和最近 300 秒 MFA；读取需要 platform:read。所有有效权限均在主库事务内检查，显式 deny 优先。直属成员沿用 Member schema，包括受 members.read 保护的已验证邮箱；不能仅凭结构读取权限枚举成员资料。
+公共与 BFF OpenAPI 0.21.0 共 59 个业务操作，Playground 与运行时 API 参考同步。写入需要 platform:write 和最近 300 秒 MFA；读取需要 platform:read。所有有效权限均在主库事务内检查，显式 deny 优先。直属成员沿用 Member schema，包括受 members.read 保护的已验证邮箱；不能仅凭结构读取权限枚举成员资料。
 
 重命名 body 为 `{"name":"平台工程组"}`，服务端 trim 后要求非空、有效 UTF-8、最多 128 字节。其余两个写入 body 为 `{}`，包括 DELETE。使用 Node http 等底层客户端时，DELETE 也须正确设置 Content-Length 或传输分块，确保 `{}` 实际发送；服务端不会把空 body 当成有效 JSON。所有资源只能属于 token 指定的空间，另一空间路径或对象不允许借用。对象缺失返回 404；列表 limit 1–100，默认 50，按 membership ID 升序，以 next_cursor 作 after，不承诺快照。
 
@@ -8921,8 +8952,10 @@ Go 单元与竞态测试覆盖可信原点、TLS 默认信任、重定向、Cook
 
 运行 `scripts/console organizations-test` 验证真实登录、BFF→API→MySQL、合同响应、MFA、根/非空保护、跨空间、成员分页及桌面/手机操作。`scripts/m1 test` 包含闭包完整性、停用成员清理、委托读取双权限和并发创建/删除测试；原演示账号和数据不作这些测试的 fixture。周五基线标签 demo-friday-2026-11-13 保持原提交，开发后另跑 scripts/demo check。
 
+0.21 起关联成员使用独立分页/确认弹窗，支持后页成员与组织，普通委托操作员沿用现有权限，写入未知回包不重发。详见 [组织关联分页](organization-assignment.md)；创建/移动上级选项的进一步改进仍待后续。
 
-## 22. React 控制台
+
+## 23. React 控制台
 
 来源：[runbooks/console.md](runbooks/console.md)。
 
@@ -8997,7 +9030,7 @@ scripts/console enable --email YOUR_LOCAL_ADDRESS --second-tenant
 自有客户端专页和机器凭证卡片可「只读核对协议登记」，显示受控字段一致/缺失/差异，读取不会激活或清理记录。父记录刷新、取消、关闭或切换空间会清除观察。使用与限制见 [协议核对](protocol-inspection.md)，验收 `scripts/console protocol-test`。
 
 
-## 23. 可信登录与双应用
+## 24. 可信登录与双应用
 
 来源：[runbooks/local-sso.md](runbooks/local-sso.md)。
 
@@ -9056,7 +9089,7 @@ scripts/sso enable --email YOUR_LOCAL_ADDRESS --second-tenant
 生产边界见 [ADR 0005](adr/0005-trusted-login-mfa-bff.md)。这些示范应用使用同一 Application，完整权限控制台、MFA 管理、正式邮件与生产 TLS/KMS 等仍待后续开发。
 
 
-## 24. 账户生命周期
+## 25. 账户生命周期
 
 来源：[runbooks/m2-accounts.md](runbooks/m2-accounts.md)。
 
@@ -9094,7 +9127,7 @@ m2 test 暂停本项目 mail-worker，防止真实 worker 与集成 fixture 争�
 已实现注册邮箱证明、原子个人空间引导、Argon2id 密码、恢复挑战、安全版本递增、通知加密/本地可靠落盘、四个 HTTP API 和真实账户页面。账户接口不提供 token 旁路；可信登录、中央会话、MFA 与 BFF 现由 [本地 SSO 手册](runbooks/local-sso.md) 说明。管理接口仍未公开；M0 合成身份实验继续独立。GCP 部署交由 SRE，对应生产邮箱、密钥托管和分布式限流留作正式集成。
 
 
-## 25. 数据库与组织
+## 26. 数据库与组织
 
 来源：[runbooks/m1.md](runbooks/m1.md)。
 
@@ -9133,7 +9166,7 @@ GCP 部署和云端运维由 SRE 专门负责，不作为后续本地开发前�
 008 新增自有应用/公开客户端管理：本轮共 28 项仓储/配置检查，其中 27 项实际连接主库，另 1 项为纯回调校验。覆盖所有权/共享应用拒绝、pending 拒绝、响应丢失、冲突、不复活、并发核对/撤销和取消 RPC 回滚。业务数据库与真实 Hydra 行为分别验证，不混算 HTTP 注入实验。
 
 
-## 26. 协议实验
+## 27. 协议实验
 
 来源：[runbooks/m0.md](runbooks/m0.md)。
 
@@ -9189,7 +9222,7 @@ Go 的 GOPATH/GOMODCACHE/GOCACHE 全部位于 .local，避免受限 HOME 路径�
 M1 数据仓储的运行方式见 [M1 手册](runbooks/m1.md)。Cloud SQL 按用户要求本轮不验证，不把该项写成通过。
 
 
-## 27. 实施计划与剩余功能
+## 28. 实施计划与剩余功能
 
 来源：[implementation-plan.md](implementation-plan.md)。
 
@@ -9272,8 +9305,12 @@ Go 服务端验证器、独立回环身份服务及私有 stdin 输入客户端�
 
 复用现有合同，选择器显式加载 25 项，支持第 100 位之后成员及主成员后页直接进入；完整解绑列表、取消/迟到响应、异常清空和被 deny 的 owner 自身恢复入口保持。无新 API 或迁移，角色配额仍 100，不宣称全文搜索/冻结快照或正式 scoped RBAC 已完成。见 role-choice-pagination.md / validation.md。
 
+#### 2026-11-11：组织关联分页 0.21.0
 
-## 28. 架构决策 0001
+组织关联独立加载成员与组织、明确确认、普通委托流程和未知写入结果核对已实现，复用原 59 项 User API/58 项 Playground；不改变授权/迁移或赋予角色。真实专项与文档见 organization-assignment.md / validation.md。创建/移动上级选择、全文搜索和跨页快照仍为后续。
+
+
+## 29. 架构决策 0001
 
 来源：[adr/0001-platform-boundaries.md](adr/0001-platform-boundaries.md)。
 
@@ -9290,7 +9327,7 @@ Go 服务端验证器、独立回环身份服务及私有 stdin 输入客户端�
 实施：先完成可运行 M0 和测试报告，再依次开展 M1–M5。UI 规格先完成，生产控制台后续交付。此次 Git push 是源码/文档交付，不是云部署或生产发布。上传原文保持不变供追溯。
 
 
-## 29. 架构决策 0002
+## 30. 架构决策 0002
 
 来源：[adr/0002-hydra-m0-findings.md](adr/0002-hydra-m0-findings.md)。
 
@@ -9326,7 +9363,7 @@ Hydra Admin 在本地为测试绑定 loopback，HTTP/--dev 仅此实验允许。
 每交易/refresh chain 绑定、logout/remembered consent/prompt=none/max_age、签名 key 轮换的本地真实引擎验证已补充。用户随后明确 Cloud SQL 由其准备且本轮无需验证，因此云端 HA/DR 不作为本轮本地代码推进阻塞项，也不记为通过。镜像漏洞/维护确认及生产部署前的云端验收仍需另行完成。M1 已开始内部数据与仓储切片，未开放生产功能。
 
 
-## 30. 架构决策 0003
+## 31. 架构决策 0003
 
 来源：[adr/0003-transaction-bindings-and-m1.md](adr/0003-transaction-bindings-and-m1.md)。
 
@@ -9369,7 +9406,7 @@ M0 实验资格表与 M1 业务表尚未连通；不把两个独立测试库的�
 用户进一步明确：本轮尽可能完成本地开发和验收，GCP 部署/云端运维由专门 SRE 负责。后续开发不等待 GCP 项目、实例或云凭证；本地迁移、接口合同和运行说明作为交接材料。云端 HA/DR、KMS 与上线 SLO 属于 SRE/联合生产验收，不由本轮代理执行，也不记为本地测试通过。
 
 
-## 31. 架构决策 0004
+## 32. 架构决策 0004
 
 来源：[adr/0004-account-proof-lifecycle.md](adr/0004-account-proof-lifecycle.md)。
 
@@ -9406,7 +9443,7 @@ worker 用 SELECT FOR UPDATE SKIP LOCKED 获取一条待投递记录，仅向私
 尚无 Hydra 可信登录交互、中央会话、MFA、BFF、真实邮件供应商、生产账号恢复审批与通知。M0 合成授权仍与此业务 User 权威状态分离；不能据 security_version 递增宣称现有 M0 JWT/refresh 已全部撤销。下一步必须把账户因素接入受 CSRF/Origin/交易状态保护的 Hydra 登录，再实施 MFA 与会话版本检查，而非新增 password-to-token 路由。
 
 
-## 32. 架构决策 0005
+## 33. 架构决策 0005
 
 来源：[adr/0005-trusted-login-mfa-bff.md](adr/0005-trusted-login-mfa-bff.md)。
 
@@ -9449,7 +9486,7 @@ BFF 会话绝对 8 小时、空闲 30 分钟。refresh 在会话行锁内串行�
 未实现正式 React 控制台、完整 scoped RBAC、MFA 撤销/更换及受控恢复、30 天 refresh 策略、产品级邮件供应商和全部业务事件消费者。GCP 部署、Cloud SQL HA/DR 验证由 SRE 负责；本地通过不代表生产验收。
 
 
-## 33. 架构决策 0006
+## 34. 架构决策 0006
 
 来源：[adr/0006-public-platform-api.md](adr/0006-public-platform-api.md)。
 
@@ -9496,7 +9533,7 @@ Owner 可列出成员、停用/恢复成员，创建组织、预览/执行移动
 本地固定域名/明文/loopback、开发 SQL 账号和单进程限流不得直接当作生产配置。正式域名、TLS、issuer/JWKS 接线、ingress、专用最小权限数据库账号、分布式限流、监控与容量由后续实施和 SRE 验收。没有部署公网、动态第三方 client 注册、通用机器身份凭证或完整控制台；已有 M0 机器 grant 仍是独立实验，不能调用此用户管理 API。
 
 
-## 34. 架构决策 0007
+## 35. 架构决策 0007
 
 来源：[adr/0007-console-bff-contexts.md](adr/0007-console-bff-contexts.md)。
 
@@ -9541,7 +9578,7 @@ BFF SQL 账号不能读取密码、MFA 密文、中央 cookie 摘要、login_ali
 后续实现更新：租户角色/委托见 ADR 0008，个人安全见 ADR 0010，认证器更换见 ADR 0011；本 ADR 的第一切片边界不代表后续能力仍未实现。
 
 
-## 35. 架构决策 0009
+## 36. 架构决策 0009
 
 来源：[adr/0009-api-playground-and-handbook.md](adr/0009-api-playground-and-handbook.md)。
 
@@ -9570,7 +9607,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 验收覆盖真实注册/密码/MFA/Hydra/BFF/API、写入确认/单次发送、ETag/412、普通成员 403、MFA 过期、凭证脱敏、输出转义、导航清理与桌面/手机；离线 HTML 检查目录锚点、无外部请求、无脚本/表单及布局，导出包校验每个摘要。受管 Chromium 禁止 file:// 导航，HTML 测试通过临时 loopback 只读服务加载同一文件，不将该测试描述为云端部署。GCP 部署与运维仍由 SRE 负责。
 
 
-## 36. 架构决策 0010
+## 37. 架构决策 0010
 
 来源：[adr/0010-self-service-account-security.md](adr/0010-self-service-account-security.md)。
 
@@ -9591,7 +9628,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 测试同时验证主库绑定/尝试次数/过期、密码重置竞态、并发仅一次成功，以及真实密码/TOTP/恢复码登录、旧授权失效、当前/其他用户会话隔离。未把普通 Go 中跳过的 fixture 用例当作数据库通过；SSO profile 明确运行新增 TestSSO 用例。生产 TLS/Secure cookie、分布式限流和 KMS 仍须后续由 SRE 实施验收。
 
 
-## 37. 架构决策 0011
+## 38. 架构决策 0011
 
 来源：[adr/0011-staged-authenticator-replacement.md](adr/0011-staged-authenticator-replacement.md)。
 
@@ -9612,7 +9649,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 公共/BFF/security 合同版本统一 0.9.0，公共操作数仍为 28；仅可信合同增加管理页和 start/confirm/cancel。生产 TLS、分布式限流和 KMS 仍按既有边界后续实施。此次不修改 SRE 的 CI 或部署配置。
 
 
-## 38. 架构决策 0012
+## 39. 架构决策 0012
 
 来源：[adr/0012-personal-security-events.md](adr/0012-personal-security-events.md)。
 
@@ -9631,7 +9668,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 本轮不改 CI、部署、既有迁移及 GCP；不可变归档、登录失败/设备监控、正式通知及事件消费者仍需继续实施。
 
 
-## 39. 架构决策 0013
+## 40. 架构决策 0013
 
 来源：[adr/0013-tenant-application-access.md](adr/0013-tenant-application-access.md)。
 
@@ -9650,7 +9687,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 无迁移或 CI/GCP 配置变更。演示基线固定为 demo-friday-2026-11-13 / 5d8b46b，源码/文档已分别备份；变更使用独立合成测试数据，演示账户保留并最后复验。公共/BFF/可信安全合同统一 0.11.0，公共业务 34 操作。
 
 
-## 40. 架构决策 0014
+## 41. 架构决策 0014
 
 来源：[adr/0014-organization-lifecycle.md](adr/0014-organization-lifecycle.md)。
 
@@ -9669,7 +9706,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 本地 DB 和真实浏览器验证隔离、双读取权限、权限委托/显式拒绝、根/非空保护、陈旧/缺失 ETag、近期 MFA、闭包删除、并发创建/删除、其他空间保留、旧授权失效及 UI 晚响应。实际结果写 validation.md。GCP/CI/部署仍由 SRE 负责，本切片不改动。
 
 
-## 41. 架构决策 0015
+## 42. 架构决策 0015
 
 来源：[adr/0015-owned-public-client-registration.md](adr/0015-owned-public-client-registration.md)。
 
@@ -9690,7 +9727,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 业务主库注入响应丢失/冲突并验证回滚、恢复、no-op 和并发；真实 Hydra 独立验证 code/PKCE、scope、refresh/撤销和所有权 metadata；真实浏览器检查 owner/member/错空间/MFA、冲突拒绝恢复、核对/撤销/清理、Playground 和手机布局。演示账号不作可变 fixture。
 
 
-## 42. 架构决策 0016
+## 43. 架构决策 0016
 
 来源：[adr/0016-machine-principals-and-one-time-credentials.md](adr/0016-machine-principals-and-one-time-credentials.md)。
 
@@ -9719,7 +9756,7 @@ SK 使用至少 256-bit 随机，只在首次成功创建响应交付，不存�
 SP 属于租户集体所有者，而非创建者持续个人所有。创建者离开后，新 owner 可以管理；旧 tenant revision 的 JWT 失效，但仍有效凭证可以按当前主库版本换取新 token。没有把创建者 membership 假作机器事件 actor，也没有另行实现命名 SP owner 的转移模型。
 
 
-## 43. 架构决策 0017
+## 44. 架构决策 0017
 
 来源：[adr/0017-external-machine-verifier-sdk.md](adr/0017-external-machine-verifier-sdk.md)。
 
@@ -9736,7 +9773,7 @@ SP 属于租户集体所有者，而非创建者持续个人所有。创建者�
 SDK/独立示例使用各自清晰的合同与错误格式，不向 User Playground 自动加入机器 Bearer。固定周五数据与基线保留，CI/GCP/部署仍由 SRE 对应。Go HTTP/TLS 模拟边界和真实 Hydra、主库、独立服务的验收分别记录；不将真实 SSO 身份资源验证冒充外部任意业务 ACL 验收。
 
 
-## 44. 架构决策 0018
+## 45. 架构决策 0018
 
 来源：[adr/0018-bounded-audit-export.md](adr/0018-bounded-audit-export.md)。
 
@@ -9751,7 +9788,7 @@ User GET 提供管理/机器两类受控 JSON 批次，每批 1–100 条。audi
 这是审计批次读取/下载，持续归档、签名证明和跨批次冻结快照另行建设。完整平台/BFF/OpenAPI/Playground/UI 同步，演示数据与现有稳定节点保留，不介入 CI/GCP/部署。实际主库、原生 Bearer、BFF/浏览器与故障注入证据记录在 validation.md。
 
 
-## 45. 架构决策 0019
+## 46. 架构决策 0019
 
 来源：[adr/0019-invitation-proof-reissue.md](adr/0019-invitation-proof-reissue.md)。
 
@@ -9766,7 +9803,7 @@ User GET 提供管理/机器两类受控 JSON 批次，每批 1–100 条。audi
 UI 明确说明旧 proof 失效、24 小时有效期和无自动邮件。秘密只在专用对话框内存/受控 DOM；关闭/空间/页面改变与迟到响应不再显示。公开 API/BFF/OpenAPI/Playground 一致。真实数据库、原生 Bearer、浏览器、故障注入和既有功能回归证据以 validation.md 为准；见 invitation-lifecycle.md / validation.md。
 
 
-## 46. 架构决策 0020
+## 47. 架构决策 0020
 
 来源：[adr/0020-readonly-protocol-profile-observation.md](adr/0020-readonly-protocol-profile-observation.md)。
 
@@ -9783,7 +9820,7 @@ API/BFF/OpenAPI/Playground 与控制台一致；资源/空间变化及取消清�
 观察正文的 resource_etag 表示本地登记资源的写入前置条件；观察响应不发送 ETag。观察时间/远端字段可变化，不能把资源版本当作整份观察表示的缓存校验值。所有响应继续 no-store。
 
 
-## 47. 架构决策 0021
+## 48. 架构决策 0021
 
 来源：[adr/0021-user-audit-client.md](adr/0021-user-audit-client.md)。
 
@@ -9798,7 +9835,7 @@ API/BFF/OpenAPI/Playground 与控制台一致；资源/空间变化及取消清�
 模拟传输/JSON 边界与真实 OAuth/Bearer/主库委托/撤销/机器 realm 分开验收。版本化批次不是完整归档，SDK 不负责后续数据保存或业务 ACL。见 user-audit-client.md / validation.md。
 
 
-## 48. 架构决策 0022
+## 49. 架构决策 0022
 
 来源：[adr/0022-role-choice-pagination.md](adr/0022-role-choice-pagination.md)。
 
@@ -9813,7 +9850,24 @@ API/BFF/OpenAPI/Playground 与控制台一致；资源/空间变化及取消清�
 无新 API、scope、schema 或服务端权限变化。大人口夹具没有登录凭证，先核验新空间 owner/演示保护，清理使用生成的精确记录；原始实施约束见 progress/role-choice-pagination-next.md。此选择器不提供跨页冻结快照、全文搜索或浏览器数据缓存。
 
 
-## 49. 验收证据
+## 50. 架构决策 0023
+
+来源：[adr/0023-organization-assignment-pagination.md](adr/0023-organization-assignment-pagination.md)。
+
+### ADR 0023：组织关联使用独立分页与当前成员版本
+
+状态：已接受，0.21.0；实际验收见 validation.md。
+
+旧弹窗只读取前 100 位成员，组织选项来自主列表已加载页，目标不可完整选择。改为独立弹窗，成员和组织各自显式加载 25 项，初始留空、目标/新页改变后重新确认；不新增 API、迁移或权限。
+
+成员复用固定投影/authz ETag，组织固定投影/org ETag 与已知根 ID；页数据严格保持字符串 ID、唯一递增游标、大小与版本。最终 PUT 用成员读取的 authz ETag，不能使用结构版本或主页面旧快照；服务器维持原 organizations.write、有效成员/组织、近期 MFA 与事务检查。UI 导航/列举要求不改变 API 权限。
+
+取消读取、当前 context/代数/卸载隔离迟到结果，写入中同步防双发且禁止关闭；失效/结构变化/网络失败清除选择。已经提交但回包丢失不自动重发，调用者先重新授权并核对直属成员/审计。组织归属不授予角色，普通委托操作员流程单独验收。
+
+大人口/组织夹具只有合成元数据、完整闭包，无身份签发/凭证伪造；保护演示并按闭集 ID/引用清理。复用角色选择器的成员投影同时补强 ID 字符串类型，角色功能保持。原创建/移动上级选项、全文搜索与跨页快照仍属后续，见 progress/organization-assignment-next.md。
+
+
+## 51. 验收证据
 
 来源：[validation.md](validation.md)。
 
@@ -10158,8 +10212,23 @@ Go test/vet、7 项前端边界模型、spec/YAML/JSON/BFF/手册同步、格式
 | 验收 | 实际结果 | 证据与边界 |
 | --- | --- | --- |
 | Go/前端模型 | go test ./...、go vet ./...，共 25 项前端模型（6 项新选择器）和 8 项夹具保护测试通过 | 固定 DTO、强 ETag、升序唯一/推进 ID、游标/页大小、角色配额、策略/owner 元数据与完整绑定独立于角色页。首轮真实浏览器揭示 Member DTO 包含 owner 而新投影漏列，按原合同补齐后重新验收通过 |
-| 真实浏览器 | scripts/console role-choices-test：68 个真实 BFF 合同响应通过 | 真实 owner 登录、106 位成员/31 个角色、末页真实绑定与解绑、第二页角色、后页行目标/去重、读取中关闭/重开/换空间、畸形页与绑定依赖失败清空选择、真实权限版本变化要求重新授权、目录被 deny 的 owner 只读自身且不枚举；实际桌面/手机宽度检查与元数据截图 |
+| 真实浏览器 | scripts/console role-choices-test：68 次真实 BFF 合同校验通过（旧统计含部分路由/调用重复，非独立响应数） | 真实 owner 登录、106 位成员/31 个角色、末页真实绑定与解绑、第二页角色、后页行目标/去重、读取中关闭/重开/换空间、畸形页与绑定依赖失败清空选择、真实权限版本变化要求重新授权、目录被 deny 的 owner 只读自身且不枚举；实际桌面/手机宽度检查与元数据截图 |
 | 兼容回归 | 7 套按序全部通过 | 新选择器专项、RBAC 96 响应、完整控制台、59 项 Playground（58 项可执行）、59 操作在线文档桌面/手机、15 项真实 SSO 主库检查与完整 scripts/demo rehearse。沿用 0.19 的审计客户端/SDK 与 0.18/0.17 已完成的其他专项，不将未重跑套件记为本轮重新通过 |
 | 夹具与资料 | 新人口夹具在新建、核验所有权且非演示空间创建 105 位无 alias/无凭证用户和 30 个空策略角色，按本轮精确 ID 复核/清理 | 这不是 105 次真实注册/邀请或负载测试。主库用户回到保留集合，演示资料/未用恢复码/基线标签与源码文档备份指纹及 001–010 摘要一致。实际密码/TOTP 双应用完整彩排通过；已配置/本轮秘密排除、最终 ZIP 清单、四宽度离线浏览器与解压空缓存/关闭下载编译四包在导出门槛再次复核 |
 
 UI 不缓存授权、自动写重试或提供全文搜索/跨页快照。写入仍需当前 owner、最近 MFA、绑定读取 ETag 与服务端事务检查；读取错误清除选择不表示服务器写入已撤销。实际接入/页面/架构安全说明见 role-choice-pagination.md / ADR 0022，Git SHA 与完整包摘要以本节点提交/同名 sha256 文件为准。marketstars 未实际联调，CI/GCP/部署仍由 SRE 负责。
+
+#### 2026-11-11：组织成员关联独立分页（0.21.0）
+
+成员和组织选择器各自 25 项分页，支持前 100 位之后成员和主列表未加载的后页组织；显式目标/确认、普通委托、取消与未知结果核对。不新增 API/权限/迁移，公共/BFF 59 项、Playground 执行 58 项；四类合同除 info.version 外与 1df29b3 相同，核心/SDK/001–010/CI/部署不变。共享成员投影补强 ID 字符串类型，避免数组等类型被正则隐式转换接受。
+
+| 验收 | 实际结果 | 证据与边界 |
+| --- | --- | --- |
+| Go/模型 | go test ./...、go vet ./...，30 项前端模型（5 项新关联目录）、8 项夹具保护测试通过 | 独立 authz/org ETag、已知根、完整固定字段、字符串 ID/升序唯一/游标/页大小/名称字节边界；写入使用成员页原始 authz ETag，不拼接主页面缓存版本 |
+| 新真实 UI | scripts/console organization-assignment-test：64 份真实来源 BFF 响应逐份验证，通过后再次复验 | 106 位成员/56 个组织、末页实际关联、目标改变清除确认、提交中不可关闭/同步防双发、不授予角色、真实普通委托操作员/审计 actor、读中关闭/重开/换空间、后续读取检测到结构变更、真实授权变更 401、畸形/依赖失败清空，以及已提交丢包只产生一次关联/审计。故障注入与真实来源响应分开，不把模拟故障当成服务成功 |
+| 全部受影响回归 | 9 套依次全部通过 | 新关联专项 64、角色选择器 60、组织生命周期 43、RBAC 96、完整控制台、59 项 Playground、59 操作在线文档桌面/手机、15 项真实 SSO 主库检查和完整 scripts/demo rehearse。沿用之前已验收的 SDK/其他独立专项，未记为本轮全部重新执行 |
+| 数据/秘密/资料 | 人口与组织仅新建非演示空间的合成元数据，真实身份/委托/API 无伪造，按精确 ID/闭包/引用清理 | 105 位无 alias/无凭证合成成员与 55 个完整闭包叶节点；不是 105 次真实注册/邀请或负载测试。仅保留用户集合，原始演示/未用恢复码/基线和 10 项迁移摘要一致，完整真实密码/TOTP 双应用彩排通过。实际 token/proof/本轮凭证对候选文件及 identity-api/platform-api/hydra-login/console 日志排除；最终配置/演示材料、ZIP 摘要/四尺寸/无外部请求、解压空缓存/禁止下载编译四个 SDK/示例包再验收 |
+
+统计修正：0.20 的 68 是校验次数，部分来源响应在路由与直接调用各验证一次，不能解释为 68 个独立请求。此轮两选择器改为逐份来源响应只统计一次，原角色场景全部保持并以 60 份响应重新通过；新关联专项首次末端误把设置操作员角色算入组织关联写次数，修正为只计三次实际关联后完整重跑通过。没有通过放宽业务断言改变资格或写入规则。
+
+没有全文搜索、跨页冻结快照、自动关联重试、角色授予或创建/移动上级选择的扩展；未知写入后先核对实际直属成员/审计。见 organization-assignment.md / ADR 0023。marketstars 未实际联调，CI/GCP/部署仍由 SRE 负责。Git SHA/最终包摘要以本节点提交/同名 sha256 文件为准。

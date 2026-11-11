@@ -102,3 +102,7 @@ User/BFF 新增只读 audit-exports 资源，管理与机器来源分别以独�
 ## 角色绑定选择器 0.20.0
 
 控制台复用原有 members/roles/keyset 与完整 member-role 读取，不改变主库授权或 API。每次显式 25 项，按相同 authz ETag 合并受控元数据，主列表后页目标单独固定并去重。最终绑定仍走原 owner/MFA/ETag 一次事务。见 role-choice-pagination.md / ADR 0022。
+
+## 组织关联目录 0.21.0
+
+独立关联弹窗复用 members/organizations 的 25 项分页；两类投影分别校验 authz/org ETag，写入使用当前成员读取的 authz 版本，主库授权流程不变。既有角色成员投影补强字符串 ID，复用于关联目录。取消/卸载/上下文保护与确认/同步单发约束位于组件内，核心/API/迁移不变，见 organization-assignment.md / ADR 0023。

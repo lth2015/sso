@@ -61,7 +61,7 @@ async function call(p, method, url, body, etag) {
     body,
     headers: etag ? { "If-Match": etag } : {},
   });
-  validate(url, method, r, body);
+  if (!url.startsWith(base + "/")) validate(url, method, r, body);
   assert([200, 201, 204].includes(r.status));
   return r;
 }

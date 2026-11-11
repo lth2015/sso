@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Independent Machine Business Resource Example",
-    "version": "0.20.0",
+    "version": "0.21.0",
     "description": "One reference business operation, plus anonymous contract metadata. Go SDK integration example; no User BFF or platform-management authority."
   },
   "servers": [

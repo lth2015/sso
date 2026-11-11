@@ -102,3 +102,7 @@ User scope/audit.read、会话/grant/角色与 tenant 始终由 API 主库复查
 ## 角色选择器隔离 0.20.0
 
 固定 DTO/升序唯一 ID/推进游标/一致 authz ETag 限定可提交选择；目标切换、读取失败和版本异常先清除旧绑定/角色。关闭/新请求/组件卸载中止读取，URL 当前 context 复核与主页面 context/revision key 拒绝迟到结果。401 回到现有重新授权流程，members.read 被 deny 的 owner 不列举目录，只管理自己。写入仍需服务端当前 owner、近期 MFA、ETag，客户端防双击不替代权威检查。见 role-choice-pagination.md。
+
+## 组织关联选择边界 0.21.0
+
+目录页是受控选择元数据，authz 与 org ETag 分开且不能互作写入前置条件；最终 PUT 使用成员页 authz ETag，由主库复查有效目标、organizations.write 与近期 MFA。字段/根/字符串 ID/游标/大小/版本异常、依赖故障清除选择；401 重新授权。用户变更目标/新页后需重新确认，提交同步单发、不能关闭；已提交丢包不自动重放，先核对实际直属成员/审计。普通委托不取得角色权限，组织归属不授予角色。见 organization-assignment.md。
