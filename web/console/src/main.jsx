@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { request, errorText, ApiError } from "./api.js";
 import "./style.css";
 import RoleManagement from "./RoleManagement.jsx";
+import Playground from "./Playground.jsx";
 
 const tabs = [
   ["overview", "空间概览", "◈"],
@@ -12,6 +13,7 @@ const tabs = [
   ["audit", "审计", "≡"],
   ["roles", "角色与权限", "⚿"],
   ["sessions", "安全会话", "◉"],
+  ["playground", "API Playground", "⌘"],
 ];
 const tabPermissions = {
   members: "members.read",
@@ -259,7 +261,7 @@ function App() {
     }
   }
   useEffect(() => {
-    if (!me || !tenant || authNeeded) return;
+    if (!me || !tenant || authNeeded || tab === "playground") return;
     const abort = new AbortController();
     setError(null);
     loadList(abort.signal);
@@ -523,9 +525,11 @@ function App() {
               <p className="muted">
                 {tab === "overview"
                   ? "查看你的空间，并选择要管理的团队。"
-                  : tab === "sessions"
-                    ? "查看并撤销自己的登录会话。"
-                    : "仅在当前空间内管理，操作将记录到审计日志。"}
+                  : tab === "playground"
+                    ? "依据 OpenAPI 选择接口，在当前空间内发起真实请求。"
+                    : tab === "sessions"
+                      ? "查看并撤销自己的登录会话。"
+                      : "仅在当前空间内管理，操作将记录到审计日志。"}
               </p>
             </div>
             {!authNeeded && me && (
@@ -803,6 +807,18 @@ function App() {
                     )}
                   />
                 </section>
+              )}
+              {tab === "playground" && (
+                <Playground
+                  key={context}
+                  context={context}
+                  csrf={csrf.current}
+                  me={me}
+                  tenant={tenant}
+                  onUnauthorized={() =>
+                    fail(new ApiError(401, "invalid_token"))
+                  }
+                />
               )}
               {tab === "roles" && (
                 <RoleManagement

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "SSO Public Platform API",
-    "version": "0.6.0",
+    "version": "0.7.0",
     "description": "External server/native-client contract. Local reference server only; production requires TLS and configured public origins. OAuth code+S256 PKCE, platform audience https://api.sso.local. No cookie authentication or wildcard CORS; browser integrations use a BFF. All writes require MFA authenticated within 300 seconds; refresh does not update auth_time. Tenant-scoped roles grant separate member/organization/invitation/audit permissions; explicit deny wins. Only active owners manage roles and owner bindings; roles.manage cannot be delegated or denied via custom policies. Resource/subtree scopes are not implemented. Delegated member operators cannot suspend/restore owner bindings. Authorization is checked against the business primary inside each operation transaction. Tenant-version mutations invalidate prior tenant grants, requiring new authorization. JSON objects reject duplicate keys, unknown fields, invalid UTF-8 and extra documents. Only role policy requests admit typed nested rules, with depth/work and policy-count limits. Request body limit 4096 bytes. UUIDs are lowercase 32-hex strings. List limit 1–100, default 50; after is previous next_cursor. No pagination snapshot guarantee. Error format follows RFC 9457. All responses no-store. Invitation proofs never appear in lists/audit."
   },
   "servers": [
@@ -240,6 +240,10 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/TenantInput"
+              },
+              "example": {
+                "slug": "example-team",
+                "name": "示例团队"
               }
             }
           }
@@ -480,7 +484,8 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/Empty"
-              }
+              },
+              "example": {}
             }
           }
         }
@@ -563,7 +568,8 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/Empty"
-              }
+              },
+              "example": {}
             }
           }
         }
@@ -733,6 +739,10 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/OrganizationInput"
+              },
+              "example": {
+                "parent_id": "00000000000000000000000000000000",
+                "name": "示例组织"
               }
             }
           }
@@ -823,6 +833,10 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/MoveInput"
+              },
+              "example": {
+                "parent_id": "00000000000000000000000000000000",
+                "dry_run": true
               }
             }
           }
@@ -909,7 +923,8 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/Empty"
-              }
+              },
+              "example": {}
             }
           }
         }
@@ -1070,6 +1085,9 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/InvitationInput"
+              },
+              "example": {
+                "email": "teammate@example.invalid"
               }
             }
           }
@@ -1150,7 +1168,8 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/Empty"
-              }
+              },
+              "example": {}
             }
           }
         }
@@ -1229,6 +1248,9 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/InvitationProof"
+              },
+              "example": {
+                "token": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
               }
             }
           }
@@ -1459,7 +1481,8 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/Empty"
-              }
+              },
+              "example": {}
             }
           }
         }
@@ -1491,6 +1514,9 @@
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestID"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
               }
             },
             "content": {
@@ -1569,6 +1595,9 @@
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestID"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
               }
             },
             "content": {
@@ -1643,6 +1672,9 @@
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestID"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
               }
             },
             "content": {
@@ -1695,6 +1727,15 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/RoleInput"
+              },
+              "example": {
+                "code": "auditor",
+                "policies": [
+                  {
+                    "permission": "audit.read",
+                    "effect": "allow"
+                  }
+                ]
               }
             }
           }
@@ -1778,6 +1819,14 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/RoleUpdate"
+              },
+              "example": {
+                "policies": [
+                  {
+                    "permission": "audit.read",
+                    "effect": "allow"
+                  }
+                ]
               }
             }
           }
@@ -1859,7 +1908,8 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/Empty"
-              }
+              },
+              "example": {}
             }
           }
         }
@@ -1894,6 +1944,9 @@
             "headers": {
               "X-Request-ID": {
                 "$ref": "#/components/headers/RequestID"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
               }
             },
             "content": {
@@ -2021,7 +2074,8 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/Empty"
-              }
+              },
+              "example": {}
             }
           }
         }
@@ -2105,7 +2159,8 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/Empty"
-              }
+              },
+              "example": {}
             }
           }
         }
@@ -2363,7 +2418,7 @@
               "null"
             ],
             "format": "email",
-            "description": "Verified alias visible only to authorized tenant owners."
+            "description": "Verified alias requires members.read on the token tenant."
           },
           "status": {
             "enum": [

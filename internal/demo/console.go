@@ -96,6 +96,10 @@ func (a *App) mountConsole(mux *http.ServeMux, load func(http.ResponseWriter, *h
 		w.Header().Set("Content-Type", "application/yaml")
 		w.Write(contract.ConsoleSpec)
 	})
+	mux.HandleFunc("GET /platform-openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(contract.PublicJSON)
+	})
 	mux.HandleFunc("GET /health/ready", func(w http.ResponseWriter, r *http.Request) {
 		if !consoleui.Ready() {
 			fail(w, 503)

@@ -1,0 +1,2908 @@
+# 完整 API 参考
+
+OpenAPI 0.7.0；公共 Bearer API 共 26 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
+
+真实交互入口见 [Playground 手册](playground.md)；外部接入见 [公共 API 手册](runbooks/public-api.md)。JSON/YAML 合同见 [OpenAPI](../api/openapi.yaml)。
+
+示例 ID 和 proof 只表示格式，不是有效资源或登录材料。API 的 authority 来自真实 OAuth code+PKCE、已验证账户、MFA、会话与租户资格。写权限不隐含读权限；所有写入需最近 300 秒 MFA。
+
+## 操作目录
+
+| 方法 | 路径 | operationId |
+| --- | --- | --- |
+| POST | `/v1/invitations/accept` | `acceptInvitation` |
+| GET | `/v1/me` | `getMe` |
+| GET | `/v1/sessions` | `listMySessions` |
+| POST | `/v1/sessions/{session}/revoke` | `revokeMySession` |
+| GET | `/v1/tenants` | `listMyTenants` |
+| POST | `/v1/tenants` | `createTenant` |
+| GET | `/v1/tenants/{tenant}` | `getTenant` |
+| GET | `/v1/tenants/{tenant}/audit-events` | `listAuditEvents` |
+| GET | `/v1/tenants/{tenant}/invitations` | `listInvitations` |
+| POST | `/v1/tenants/{tenant}/invitations` | `createInvitation` |
+| POST | `/v1/tenants/{tenant}/invitations/{invitation}/revoke` | `revokeInvitation` |
+| GET | `/v1/tenants/{tenant}/members` | `listMembers` |
+| POST | `/v1/tenants/{tenant}/members/{member}/restore` | `restoreMember` |
+| GET | `/v1/tenants/{tenant}/members/{member}/roles` | `listMemberRoles` |
+| PUT | `/v1/tenants/{tenant}/members/{member}/roles/{role}` | `bindRole` |
+| DELETE | `/v1/tenants/{tenant}/members/{member}/roles/{role}` | `unbindRole` |
+| POST | `/v1/tenants/{tenant}/members/{member}/suspend` | `suspendMember` |
+| GET | `/v1/tenants/{tenant}/organizations` | `listOrganizations` |
+| POST | `/v1/tenants/{tenant}/organizations` | `createOrganization` |
+| PUT | `/v1/tenants/{tenant}/organizations/{org}/members/{member}` | `assignOrganization` |
+| POST | `/v1/tenants/{tenant}/organizations/{org}/move` | `moveOrganization` |
+| GET | `/v1/tenants/{tenant}/permissions` | `getMyPermissions` |
+| GET | `/v1/tenants/{tenant}/roles` | `listRoles` |
+| POST | `/v1/tenants/{tenant}/roles` | `createRole` |
+| PUT | `/v1/tenants/{tenant}/roles/{role}` | `replaceRole` |
+| DELETE | `/v1/tenants/{tenant}/roles/{role}` | `deleteRole` |
+
+## POST /v1/invitations/accept
+
+Consume an invitation for the verified user
+
+Recent MFA required. The proof selects the destination tenant. Verified email must match; membership only, no implicit role. Consumed/expired/revoked proofs are invalid. Acceptance increments destination tenant authorization version.
+
+OAuth scope：`platform:write`。权限：`当前有效 User/Session/grant`。
+
+### 参数
+
+```json
+[]
+```
+
+### 请求示例
+
+```json
+{
+  "token": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+}
+```
+
+### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "token"
+  ],
+  "properties": {
+    "token": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$",
+      "writeOnly": true
+    }
+  }
+}
+```
+
+### 成功响应
+
+HTTP 201
+
+```json
+{
+  "description": "Consume an invitation for the verified user",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "membership_id"
+        ],
+        "properties": {
+          "membership_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## GET /v1/me
+
+Get the verified current principal
+
+Requires current User, MFA session and tenant-bound grant.
+
+OAuth scope：`platform:read`。权限：`当前有效 User/Session/grant`。
+
+### 参数
+
+```json
+[]
+```
+
+无请求体。
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Get the verified current principal",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "user_id",
+          "tenant_id",
+          "membership_id",
+          "session_id"
+        ],
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "tenant_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "membership_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "session_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## GET /v1/sessions
+
+List central sessions of the current user
+
+Requires current User, MFA session and tenant-bound grant.
+
+OAuth scope：`platform:read`。权限：`当前有效 User/Session/grant`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "query",
+    "name": "limit",
+    "description": "Bounded keyset page size.",
+    "schema": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 50
+    }
+  },
+  {
+    "in": "query",
+    "name": "after",
+    "description": "Previous next_cursor; ascending UUID keyset, not a snapshot or timestamp ordering guarantee.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "List central sessions of the current user",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "current",
+                "active",
+                "authenticated_at",
+                "second_factor",
+                "idle_expires_at",
+                "absolute_expires_at"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "current": {
+                  "type": "boolean"
+                },
+                "active": {
+                  "type": "boolean"
+                },
+                "authenticated_at": {
+                  "type": "integer"
+                },
+                "second_factor": {
+                  "enum": [
+                    "otp",
+                    "recovery"
+                  ]
+                },
+                "idle_expires_at": {
+                  "type": "integer"
+                },
+                "absolute_expires_at": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## POST /v1/sessions/{session}/revoke
+
+Revoke one central session owned by the current user
+
+Recent MFA required. Revokes business authority before queued Hydra cleanup. Revoking the current session invalidates this access token. Session cookie digests, CSRF values, factor secrets and tokens are never returned.
+
+OAuth scope：`platform:write`。权限：`当前有效 User/Session/grant`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "session",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+### 请求示例
+
+```json
+{}
+```
+
+### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
+```
+
+### 成功响应
+
+HTTP 204
+
+```json
+{
+  "description": "Revoke one central session owned by the current user",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## GET /v1/tenants
+
+List active spaces of the current user
+
+Requires current User, MFA session and tenant-bound grant.
+
+OAuth scope：`platform:read`。权限：`当前有效 User/Session/grant`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "query",
+    "name": "limit",
+    "description": "Bounded keyset page size.",
+    "schema": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 50
+    }
+  },
+  {
+    "in": "query",
+    "name": "after",
+    "description": "Previous next_cursor; ascending UUID keyset, not a snapshot or timestamp ordering guarantee.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "List active spaces of the current user",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "name",
+                "slug",
+                "membership_id",
+                "owner",
+                "authz_version",
+                "org_version",
+                "root_id"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "slug": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
+                },
+                "membership_id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "owner": {
+                  "type": "boolean"
+                },
+                "authz_version": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "org_version": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "root_id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                }
+              }
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## POST /v1/tenants
+
+Create a space and initial owner atomically
+
+Recent MFA required. Maximum 20 active owned spaces. The first-party platform is enabled in the new space; unrelated applications are not enabled. Duplicate slug is 409; no automatic retry or idempotency-key guarantee.
+
+OAuth scope：`platform:write`。权限：`当前有效 User/Session/grant`。
+
+### 参数
+
+```json
+[]
+```
+
+### 请求示例
+
+```json
+{
+  "slug": "example-team",
+  "name": "示例团队"
+}
+```
+
+### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "slug",
+    "name"
+  ],
+  "properties": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Nonblank, trimmed, at most 128 UTF-8 bytes."
+    }
+  }
+}
+```
+
+### 成功响应
+
+HTTP 201
+
+```json
+{
+  "description": "Create a space and initial owner atomically",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "Location": {
+      "description": "Created tenant path; obtain a new tenant-bound authorization before using it.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "membership_id",
+          "root_id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "membership_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "root_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## GET /v1/tenants/{tenant}
+
+Get the token-bound space and versions
+
+Requires current User, MFA session and tenant-bound grant.
+
+OAuth scope：`platform:read`。权限：`当前有效 User/Session/grant`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Get the token-bound space and versions",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "membership_id",
+          "owner",
+          "authz_version",
+          "org_version",
+          "root_id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
+          },
+          "membership_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "owner": {
+            "type": "boolean"
+          },
+          "authz_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "org_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "root_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## GET /v1/tenants/{tenant}/audit-events
+
+List controlled space audit metadata
+
+Requires audit.read on the token tenant. Explicit deny overrides other allows, including owner operational privileges.
+
+OAuth scope：`platform:read`。权限：`permission:audit.read`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "query",
+    "name": "limit",
+    "description": "Bounded keyset page size.",
+    "schema": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 50
+    }
+  },
+  {
+    "in": "query",
+    "name": "after",
+    "description": "Previous next_cursor; ascending UUID keyset, not a snapshot or timestamp ordering guarantee.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "List controlled space audit metadata",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "actor_membership_id",
+                "action",
+                "target_id",
+                "occurred_at"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "actor_membership_id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "action": {
+                  "type": "string"
+                },
+                "target_id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "occurred_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "role_id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "membership_id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "role_code": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## GET /v1/tenants/{tenant}/invitations
+
+List invitation metadata without bearer secrets
+
+Requires invitations.manage on the token tenant. Explicit deny overrides other allows, including owner operational privileges.
+
+OAuth scope：`platform:read`。权限：`permission:invitations.manage`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "query",
+    "name": "limit",
+    "description": "Bounded keyset page size.",
+    "schema": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 50
+    }
+  },
+  {
+    "in": "query",
+    "name": "after",
+    "description": "Previous next_cursor; ascending UUID keyset, not a snapshot or timestamp ordering guarantee.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "List invitation metadata without bearer secrets",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "email",
+                "expires_at",
+                "state"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "email": {
+                  "type": "string",
+                  "format": "email"
+                },
+                "expires_at": {
+                  "type": "integer"
+                },
+                "state": {
+                  "enum": [
+                    "pending",
+                    "expired",
+                    "closed"
+                  ],
+                  "description": "Closed covers accepted or revoked; audit events distinguish the transition."
+                }
+              }
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## POST /v1/tenants/{tenant}/invitations
+
+Create an email-bound one-time invitation
+
+Requires invitations.manage on the token tenant. Explicit deny overrides other allows, including owner operational privileges. Recent MFA required. Token is returned once, stored only as a digest and never in audit/outbox. The caller delivers it securely; no external email is sent. Invitations grant membership only.
+
+OAuth scope：`platform:write`。权限：`permission:invitations.manage`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+### 请求示例
+
+```json
+{
+  "email": "teammate@example.invalid"
+}
+```
+
+### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "email"
+  ],
+  "properties": {
+    "email": {
+      "type": "string",
+      "format": "email",
+      "maxLength": 254
+    }
+  }
+}
+```
+
+### 成功响应
+
+HTTP 201
+
+```json
+{
+  "description": "Create an email-bound one-time invitation",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "token",
+          "expires_in"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "token": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "readOnly": true,
+            "description": "One-time bearer invitation returned only here; keep out of logs. No automatic email transport."
+          },
+          "expires_in": {
+            "type": "integer",
+            "const": 86400
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## POST /v1/tenants/{tenant}/invitations/{invitation}/revoke
+
+Close an invitation so its proof cannot be accepted
+
+Requires invitations.manage on the token tenant. Explicit deny overrides other allows, including owner operational privileges. Recent MFA required. Idempotently closes the proof; already closed proofs stay closed. Audit records the first revocation; closed includes accepted or revoked.
+
+OAuth scope：`platform:write`。权限：`permission:invitations.manage`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "invitation",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+### 请求示例
+
+```json
+{}
+```
+
+### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
+```
+
+### 成功响应
+
+HTTP 204
+
+```json
+{
+  "description": "Close an invitation so its proof cannot be accepted",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## GET /v1/tenants/{tenant}/members
+
+List space memberships
+
+Requires members.read on the token tenant. Explicit deny overrides other allows, including owner operational privileges.
+
+OAuth scope：`platform:read`。权限：`permission:members.read`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "query",
+    "name": "limit",
+    "description": "Bounded keyset page size.",
+    "schema": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 50
+    }
+  },
+  {
+    "in": "query",
+    "name": "after",
+    "description": "Previous next_cursor; ascending UUID keyset, not a snapshot or timestamp ordering guarantee.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "List space memberships",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "user_id",
+                "email",
+                "status",
+                "owner"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "user_id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "email": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "email",
+                  "description": "Verified alias requires members.read on the token tenant."
+                },
+                "status": {
+                  "enum": [
+                    "active",
+                    "invited",
+                    "suspended",
+                    "left"
+                  ]
+                },
+                "owner": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## POST /v1/tenants/{tenant}/members/{member}/restore
+
+Restore a membership
+
+Requires members.write on the token tenant. Explicit deny overrides other allows, including owner operational privileges. Recent MFA required. Last active owner cannot be suspended. Changes increment membership and tenant versions, invalidating existing tenant grants; restoration never revives old grants.
+
+OAuth scope：`platform:write`。权限：`permission:members.write`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "member",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Latest tenant/members ETag. Missing: 428; stale: 412.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"authz-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+### 请求示例
+
+```json
+{}
+```
+
+### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
+```
+
+### 成功响应
+
+HTTP 204
+
+```json
+{
+  "description": "Restore a membership",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## GET /v1/tenants/{tenant}/members/{member}/roles
+
+List one tenant membership role bindings
+
+Active tenant owner required.
+
+OAuth scope：`platform:read`。权限：`reserved_owner:roles.manage`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "member",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "List one tenant membership role bindings",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "code",
+                "built_in",
+                "scope",
+                "policies",
+                "binding_count"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "code": {
+                  "type": "string"
+                },
+                "built_in": {
+                  "type": "boolean"
+                },
+                "scope": {
+                  "const": "tenant"
+                },
+                "policies": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "permission",
+                      "effect"
+                    ],
+                    "properties": {
+                      "permission": {
+                        "enum": [
+                          "audit.read",
+                          "invitations.manage",
+                          "members.read",
+                          "members.write",
+                          "organizations.read",
+                          "organizations.write"
+                        ]
+                      },
+                      "effect": {
+                        "enum": [
+                          "allow",
+                          "deny"
+                        ]
+                      }
+                    }
+                  }
+                },
+                "binding_count": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## PUT /v1/tenants/{tenant}/members/{member}/roles/{role}
+
+Bind a tenant role to a membership
+
+Owner and recent MFA required. Both objects must belong to the token tenant. Owner grants/revocations are explicit reserved-role operations; last active owner cannot be removed. Repeating the same binding state with the current ETag is a no-op. A real change increments tenant authz_version; old grants must reauthorize. Audit preserves member and role metadata even after role deletion.
+
+OAuth scope：`platform:write`。权限：`reserved_owner:roles.manage`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "member",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "role",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Latest tenant/members ETag. Missing: 428; stale: 412.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"authz-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+### 请求示例
+
+```json
+{}
+```
+
+### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
+```
+
+### 成功响应
+
+HTTP 204
+
+```json
+{
+  "description": "Bind a tenant role to a membership",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## DELETE /v1/tenants/{tenant}/members/{member}/roles/{role}
+
+Unbind a tenant role to a membership
+
+Owner and recent MFA required. Both objects must belong to the token tenant. Owner grants/revocations are explicit reserved-role operations; last active owner cannot be removed. Repeating the same binding state with the current ETag is a no-op. A real change increments tenant authz_version; old grants must reauthorize. Audit preserves member and role metadata even after role deletion.
+
+OAuth scope：`platform:write`。权限：`reserved_owner:roles.manage`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "member",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "role",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Latest tenant/members ETag. Missing: 428; stale: 412.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"authz-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+### 请求示例
+
+```json
+{}
+```
+
+### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
+```
+
+### 成功响应
+
+HTTP 204
+
+```json
+{
+  "description": "Unbind a tenant role to a membership",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## POST /v1/tenants/{tenant}/members/{member}/suspend
+
+Suspend a membership
+
+Requires members.write on the token tenant. Explicit deny overrides other allows, including owner operational privileges. Recent MFA required. Last active owner cannot be suspended. Changes increment membership and tenant versions, invalidating existing tenant grants; restoration never revives old grants.
+
+OAuth scope：`platform:write`。权限：`permission:members.write`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "member",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Latest tenant/members ETag. Missing: 428; stale: 412.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"authz-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+### 请求示例
+
+```json
+{}
+```
+
+### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
+```
+
+### 成功响应
+
+HTTP 204
+
+```json
+{
+  "description": "Suspend a membership",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## GET /v1/tenants/{tenant}/organizations
+
+List space organization nodes
+
+Requires organizations.read on the token tenant. Explicit deny overrides other allows, including owner operational privileges.
+
+OAuth scope：`platform:read`。权限：`permission:organizations.read`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "query",
+    "name": "limit",
+    "description": "Bounded keyset page size.",
+    "schema": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 50
+    }
+  },
+  {
+    "in": "query",
+    "name": "after",
+    "description": "Previous next_cursor; ascending UUID keyset, not a snapshot or timestamp ordering guarantee.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "List space organization nodes",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "parent_id",
+                "name"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "parent_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "name": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## POST /v1/tenants/{tenant}/organizations
+
+Create an organization under an existing parent
+
+Requires organizations.write on the token tenant. Explicit deny overrides other allows, including owner operational privileges.
+
+OAuth scope：`platform:write`。权限：`permission:organizations.write`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Latest organizations ETag. Missing: 428; stale: 412.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"org-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+### 请求示例
+
+```json
+{
+  "parent_id": "00000000000000000000000000000000",
+  "name": "示例组织"
+}
+```
+
+### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "parent_id",
+    "name"
+  ],
+  "properties": {
+    "parent_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Nonblank, trimmed, at most 128 UTF-8 bytes."
+    }
+  }
+}
+```
+
+### 成功响应
+
+HTTP 201
+
+```json
+{
+  "description": "Create an organization under an existing parent",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "org_version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "org_version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## PUT /v1/tenants/{tenant}/organizations/{org}/members/{member}
+
+Associate a membership with an organization
+
+Requires organizations.write on the token tenant. Explicit deny overrides other allows, including owner operational privileges. Association does not grant owner or other roles. Changes tenant authorization version; obtain a new authorization afterwards.
+
+OAuth scope：`platform:write`。权限：`permission:organizations.write`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "member",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "org",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Latest tenant/members ETag. Missing: 428; stale: 412.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"authz-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+### 请求示例
+
+```json
+{}
+```
+
+### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
+```
+
+### 成功响应
+
+HTTP 204
+
+```json
+{
+  "description": "Associate a membership with an organization",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## POST /v1/tenants/{tenant}/organizations/{org}/move
+
+Preview or execute an organization move
+
+Requires organizations.write on the token tenant. Explicit deny overrides other allows, including owner operational privileges. Recent MFA required, including preview. Root/cycle/depth checks apply. Preview changes no state. Executing changes organization and tenant authorization versions; obtain a new authorization afterwards.
+
+OAuth scope：`platform:write`。权限：`permission:organizations.write`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "org",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Latest organizations ETag. Missing: 428; stale: 412.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"org-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+### 请求示例
+
+```json
+{
+  "parent_id": "00000000000000000000000000000000",
+  "dry_run": true
+}
+```
+
+### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "parent_id",
+    "dry_run"
+  ],
+  "properties": {
+    "parent_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    },
+    "dry_run": {
+      "type": "boolean",
+      "description": "Required; false executes the move and invalidates old tenant grants."
+    }
+  }
+}
+```
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Preview or execute an organization move",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "subtree_nodes",
+          "resulting_depth",
+          "org_version",
+          "dry_run"
+        ],
+        "properties": {
+          "subtree_nodes": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "resulting_depth": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 16
+          },
+          "org_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "dry_run": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## GET /v1/tenants/{tenant}/permissions
+
+Get the current membership effective permissions
+
+Any current member may inspect their own effective set. Explicit deny wins across tenant-scoped roles. Reserved owner roles.manage is retained for recovery and cannot be expressed in custom policies.
+
+OAuth scope：`platform:read`。权限：`当前有效 User/Session/grant`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Get the current membership effective permissions",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "permissions",
+          "denied",
+          "owner",
+          "authz_version",
+          "catalog"
+        ],
+        "properties": {
+          "permissions": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "audit.read",
+                "invitations.manage",
+                "members.read",
+                "members.write",
+                "organizations.read",
+                "organizations.write",
+                "roles.manage"
+              ]
+            }
+          },
+          "denied": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "audit.read",
+                "invitations.manage",
+                "members.read",
+                "members.write",
+                "organizations.read",
+                "organizations.write"
+              ]
+            }
+          },
+          "owner": {
+            "type": "boolean"
+          },
+          "authz_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "catalog": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "audit.read",
+                "invitations.manage",
+                "members.read",
+                "members.write",
+                "organizations.read",
+                "organizations.write"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## GET /v1/tenants/{tenant}/roles
+
+List tenant roles and rules
+
+Active tenant owner required.
+
+OAuth scope：`platform:read`。权限：`reserved_owner:roles.manage`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "query",
+    "name": "limit",
+    "description": "Bounded keyset page size.",
+    "schema": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 50
+    }
+  },
+  {
+    "in": "query",
+    "name": "after",
+    "description": "Previous next_cursor; ascending UUID keyset, not a snapshot or timestamp ordering guarantee.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "List tenant roles and rules",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "code",
+                "built_in",
+                "scope",
+                "policies",
+                "binding_count"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "code": {
+                  "type": "string"
+                },
+                "built_in": {
+                  "type": "boolean"
+                },
+                "scope": {
+                  "const": "tenant"
+                },
+                "policies": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "permission",
+                      "effect"
+                    ],
+                    "properties": {
+                      "permission": {
+                        "enum": [
+                          "audit.read",
+                          "invitations.manage",
+                          "members.read",
+                          "members.write",
+                          "organizations.read",
+                          "organizations.write"
+                        ]
+                      },
+                      "effect": {
+                        "enum": [
+                          "allow",
+                          "deny"
+                        ]
+                      }
+                    }
+                  }
+                },
+                "binding_count": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## POST /v1/tenants/{tenant}/roles
+
+Create a tenant-scoped custom role
+
+Active tenant owner required.
+
+OAuth scope：`platform:write`。权限：`reserved_owner:roles.manage`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Latest tenant/members ETag. Missing: 428; stale: 412.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"authz-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+### 请求示例
+
+```json
+{
+  "code": "auditor",
+  "policies": [
+    {
+      "permission": "audit.read",
+      "effect": "allow"
+    }
+  ]
+}
+```
+
+### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "code",
+    "policies"
+  ],
+  "properties": {
+    "code": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,62}$",
+      "not": {
+        "const": "owner"
+      }
+    },
+    "policies": {
+      "type": "array",
+      "maxItems": 12,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "permission",
+          "effect"
+        ],
+        "properties": {
+          "permission": {
+            "enum": [
+              "audit.read",
+              "invitations.manage",
+              "members.read",
+              "members.write",
+              "organizations.read",
+              "organizations.write"
+            ]
+          },
+          "effect": {
+            "enum": [
+              "allow",
+              "deny"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### 成功响应
+
+HTTP 201
+
+```json
+{
+  "description": "Create a tenant-scoped custom role",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "authz_version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "authz_version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## PUT /v1/tenants/{tenant}/roles/{role}
+
+Replace all custom role rules
+
+Owner and recent MFA required. Reserved owner is immutable. Duplicate rules and reserved permissions are invalid. Changed policies increment tenant authorization version and invalidate prior tenant grants; identical rules are a no-op.
+
+OAuth scope：`platform:write`。权限：`reserved_owner:roles.manage`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "role",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Latest tenant/members ETag. Missing: 428; stale: 412.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"authz-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+### 请求示例
+
+```json
+{
+  "policies": [
+    {
+      "permission": "audit.read",
+      "effect": "allow"
+    }
+  ]
+}
+```
+
+### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "policies"
+  ],
+  "properties": {
+    "policies": {
+      "type": "array",
+      "maxItems": 12,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "permission",
+          "effect"
+        ],
+        "properties": {
+          "permission": {
+            "enum": [
+              "audit.read",
+              "invitations.manage",
+              "members.read",
+              "members.write",
+              "organizations.read",
+              "organizations.write"
+            ]
+          },
+          "effect": {
+            "enum": [
+              "allow",
+              "deny"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### 成功响应
+
+HTTP 204
+
+```json
+{
+  "description": "Replace all custom role rules",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## DELETE /v1/tenants/{tenant}/roles/{role}
+
+Delete an unbound custom role
+
+Owner and recent MFA required. Built-in owner cannot be deleted; roles with bindings return role_in_use. Changed state invalidates tenant grants.
+
+OAuth scope：`platform:write`。权限：`reserved_owner:roles.manage`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "role",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Latest tenant/members ETag. Missing: 428; stale: 412.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"authz-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+### 请求示例
+
+```json
+{}
+```
+
+### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
+```
+
+### 成功响应
+
+HTTP 204
+
+```json
+{
+  "description": "Delete an unbound custom role",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## 公共错误合同
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "type",
+    "title",
+    "status",
+    "code",
+    "request_id"
+  ],
+  "properties": {
+    "type": {
+      "type": "string",
+      "format": "uri"
+    },
+    "title": {
+      "type": "string"
+    },
+    "status": {
+      "type": "integer",
+      "minimum": 400,
+      "maximum": 599
+    },
+    "code": {
+      "type": "string"
+    },
+    "request_id": {
+      "type": "string"
+    }
+  }
+}
+```
+
+401：授权无效/已撤销；403：scope/权限不足或 recent_mfa_required；404：当前空间资源不存在；409：already_exists、last_active_owner、reserved_role、role_in_use、组织环/root 保护；412：版本冲突；428：缺少前置条件；429：限流，按 Retry-After 等待；503：权威服务暂不可用。
+
+BFF 会话错误还可能返回 `{ "code": "session_unavailable" }`。两类边界合同不可混用。
+
+## 请求与重试规则
+
+body 上限 4096 字节；ID 使用 32 位小写十六进制。列表默认 50，limit 为 1–100；after 使用 next_cursor，不保证分页快照。请求仅接受 JSON、受控字段和有限策略数组。禁止额外 JSON 文档、重复键、超深结构和非法 UTF-8。
+
+If-Match 使用带双引号的 authz-N / org-N。权限版本变更使旧 grant 失效，包括执行者；refresh 不更新权限或认证时间。重新授权后由调用者决定是否再次提交。没有通用 Idempotency-Key，创建或网络中断后须核对结果，不能盲目重试。

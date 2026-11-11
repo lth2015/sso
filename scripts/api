@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 case "${1:-}" in
- prepare) python3 scripts/generate_public_spec.py --check; python3 scripts/generate_console_spec.py --check; scripts/sso prepare ;;
+ prepare) python3 scripts/generate_public_spec.py --check; python3 scripts/generate_console_spec.py --check; scripts/docs check; scripts/sso prepare ;;
  up) scripts/sso up ;;
  test) python3 scripts/generate_public_spec.py --check; node tests/api/browser.cjs ;;
  verify-race) docker compose --env-file .local/m0.env -f deploy/local/compose.yml run --rm -T --no-deps api-tests ;;

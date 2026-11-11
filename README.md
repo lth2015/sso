@@ -92,7 +92,10 @@ scripts/console up
 scripts/console test
 ```
 
-见 [控制台手册](docs/runbooks/console.md)、[ADR 0007](docs/adr/0007-console-bff-contexts.md)、[浏览器 BFF OpenAPI](api/console.openapi.yaml) 和 [界面截图](docs/ui/console-overview.png)。React/Vite 用精确 npm lockfile 构建并嵌入 Go 服务，实际运行不需要 Vite 开发服务器。公共 API 0.6.0 共 26 个业务操作，包含租户角色与成员绑定；成员邮箱读取需要 members.read。
+见 [控制台手册](docs/runbooks/console.md)、[ADR 0007](docs/adr/0007-console-bff-contexts.md)、[浏览器 BFF OpenAPI](api/console.openapi.yaml) 和 [界面截图](docs/ui/console-overview.png)。React/Vite 用精确 npm lockfile 构建并嵌入 Go 服务，实际运行不需要 Vite 开发服务器。公共 API 0.7.0 共 26 个业务操作，包含租户角色与成员绑定；成员邮箱读取需要 members.read。
 
 
 租户角色与权限已接入真实 API 和控制台：可分别委托成员、组织、邀请和审计能力，显式拒绝优先；owner 保留角色管理恢复能力。支持角色创建/编辑/删除、成员绑定/解绑和 owner 移交，最后 owner 受并发保护。角色变更使旧授权失效，需重新确认空间。见 [ADR 0008](docs/adr/0008-tenant-roles-and-deny.md)、[角色界面](docs/ui/rbac-roles.png)，验收运行 `scripts/console rbac-test`。当前范围为整个租户，组织子树、应用/资源范围授权仍待实现。
+
+
+完整文档入口：[设计与开发手册](docs/handbook.md)、[逐接口 API 参考](docs/api-reference.md)、[API Playground](docs/playground.md)。控制台登录后选择 API Playground，可执行 26 个真实接口，支持写入前确认、ETag、MFA/权限错误和响应凭证脱敏。公开 `/docs` 现提供逐接口参数、示例、schema 与响应。`scripts/docs export` 构建离线 HTML 和完整 ZIP，详见 [文档目录](docs/README.md)。

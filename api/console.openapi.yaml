@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Identity Console Same-Origin BFF
-  version: 0.6.0
+  version: 0.7.0
   description: Browser cookie+context+CSRF boundary. Proxy paths are restricted to
     the public platform contract and one fixed API destination; caller Authorization
     is rejected. OAuth tokens and verifier remain encrypted server-side. Every tab
@@ -159,6 +159,9 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/TenantInput'
+            example:
+              slug: example-team
+              name: 示例团队
   /bff/v1/tenants/{tenant}:
     get:
       operationId: consoleGetTenant
@@ -311,6 +314,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
+            example: {}
   /bff/v1/tenants/{tenant}/members/{member}/restore:
     post:
       operationId: consoleRestoreMember
@@ -367,6 +371,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
+            example: {}
   /bff/v1/tenants/{tenant}/organizations:
     get:
       operationId: consoleListOrganizations
@@ -474,6 +479,9 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/OrganizationInput'
+            example:
+              parent_id: '00000000000000000000000000000000'
+              name: 示例组织
   /bff/v1/tenants/{tenant}/organizations/{org}/move:
     post:
       operationId: consoleMoveOrganization
@@ -534,6 +542,9 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/MoveInput'
+            example:
+              parent_id: '00000000000000000000000000000000'
+              dry_run: true
   /bff/v1/tenants/{tenant}/organizations/{org}/members/{member}:
     put:
       operationId: consoleAssignOrganization
@@ -590,6 +601,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
+            example: {}
   /bff/v1/tenants/{tenant}/invitations:
     get:
       operationId: consoleListInvitations
@@ -695,6 +707,8 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/InvitationInput'
+            example:
+              email: teammate@example.invalid
   /bff/v1/tenants/{tenant}/invitations/{invitation}/revoke:
     post:
       operationId: consoleRevokeInvitation
@@ -749,6 +763,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
+            example: {}
   /bff/v1/invitations/accept:
     post:
       operationId: consoleAcceptInvitation
@@ -804,6 +819,8 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/InvitationProof'
+            example:
+              token: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
   /bff/v1/tenants/{tenant}/audit-events:
     get:
       operationId: consoleListAuditEvents
@@ -948,6 +965,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
+            example: {}
   /bff/v1/tenants/{tenant}/permissions:
     get:
       operationId: consoleGetMyPermissions
@@ -968,6 +986,8 @@ paths:
           headers:
             X-Request-ID:
               $ref: '#/components/headers/RequestID'
+            ETag:
+              $ref: '#/components/headers/ETag'
           content:
             application/json:
               schema:
@@ -1014,6 +1034,8 @@ paths:
           headers:
             X-Request-ID:
               $ref: '#/components/headers/RequestID'
+            ETag:
+              $ref: '#/components/headers/ETag'
           content:
             application/json:
               schema:
@@ -1061,6 +1083,8 @@ paths:
           headers:
             X-Request-ID:
               $ref: '#/components/headers/RequestID'
+            ETag:
+              $ref: '#/components/headers/ETag'
           content:
             application/json:
               schema:
@@ -1095,6 +1119,11 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/RoleInput'
+            example:
+              code: auditor
+              policies:
+              - permission: audit.read
+                effect: allow
   /bff/v1/tenants/{tenant}/roles/{role}:
     put:
       operationId: consoleReplaceRole
@@ -1150,6 +1179,10 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/RoleUpdate'
+            example:
+              policies:
+              - permission: audit.read
+                effect: allow
     delete:
       operationId: consoleDeleteRole
       summary: Delete an unbound custom role
@@ -1202,6 +1235,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
+            example: {}
   /bff/v1/tenants/{tenant}/members/{member}/roles:
     get:
       operationId: consoleListMemberRoles
@@ -1221,6 +1255,8 @@ paths:
           headers:
             X-Request-ID:
               $ref: '#/components/headers/RequestID'
+            ETag:
+              $ref: '#/components/headers/ETag'
           content:
             application/json:
               schema:
@@ -1306,6 +1342,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
+            example: {}
     delete:
       operationId: consoleUnbindRole
       summary: Unbind a tenant role to a membership
@@ -1363,6 +1400,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
+            example: {}
   /session:
     get:
       operationId: getConsoleSession
@@ -1520,6 +1558,16 @@ paths:
           description: This same-origin browser API contract
           content:
             application/yaml: {}
+  /platform-openapi.json:
+    get:
+      operationId: getPlaygroundContract
+      security: []
+      responses:
+        '200':
+          description: Public platform OpenAPI, same origin for the authenticated
+            Playground; no credentials
+          content:
+            application/json: {}
 components:
   securitySchemes:
     ConsoleCookie:
@@ -1662,7 +1710,7 @@ components:
           - string
           - 'null'
           format: email
-          description: Verified alias visible only to authorized tenant owners.
+          description: Verified alias requires members.read on the token tenant.
         status:
           enum:
           - active

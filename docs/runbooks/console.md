@@ -9,6 +9,7 @@ scripts/console prepare
 scripts/console up
 scripts/console test
 scripts/console rbac-test
+scripts/console playground-test
 ```
 
 准备需要 Docker/Compose、Node >=22.12（本次 24.22.1）、npm、Python/PyYAML/jsonschema、Playwright 和 Chromium。prepare 先用 npm ci 安装精确锁定的 React/Vite，构建静态资产，再编译现有 Go 服务/BFF/测试；不运行前端开发服务器。npm cache 在忽略的 `.local/npm-cache`，不能为安装改 HOME、关闭 integrity/TLS 或升级全局 npm。
@@ -51,3 +52,6 @@ scripts/console enable --email YOUR_LOCAL_ADDRESS --second-tenant
 角色与权限页面可创建/编辑/删除租户角色、绑定或解绑成员角色。规则为未设置/允许/拒绝，显式拒绝覆盖其他角色允许；members.read 包含已验证邮箱。owner 绑定额外要求勾选确认，最后 owner 无法移除。先授予新 owner，再移除旧 owner。变更后需重新授权，不自动重放表单。若 owner 拒绝了自己的成员读取权限，角色管理仍提供自己的绑定用于恢复。成员选择目前限前 100 人。
 
 `rbac-test` 使用三个合成账户，通过真实登录/API/BFF 验收默认拒绝、委托读写、deny 优先、撤销、跨租户对象拒绝、owner 恢复/移交及真实 React 角色管理。新增截图：[角色](../ui/rbac-roles.png)、[受委托审计员](../ui/rbac-auditor.png)。设计和 API 细节见 [ADR 0008](../adr/0008-tenant-roles-and-deny.md)。
+
+
+新增 API Playground 导航，可读取同源 OpenAPI 并调用固定的 26 个业务操作。GET 直接发送，写入预览/确认后发送一次，支持 ETag 读取、HTTP 状态/错误、cURL 模板和凭证字段脱敏；离开页面清空内存并取消在途读取，不自动重发写入。使用及限制见 [Playground 手册](../playground.md)。

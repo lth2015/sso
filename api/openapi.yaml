@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SSO Public Platform API
-  version: 0.6.0
+  version: 0.7.0
   description: External server/native-client contract. Local reference server only;
     production requires TLS and configured public origins. OAuth code+S256 PKCE, platform
     audience https://api.sso.local. No cookie authentication or wildcard CORS; browser
@@ -134,7 +134,7 @@ paths:
             Location:
               description: Created tenant path; obtain a new tenant-bound authorization
                 before using it.
-              schema: &id001
+              schema: &id002
                 type: string
           content:
             application/json:
@@ -169,6 +169,9 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/TenantInput'
+            example:
+              slug: example-team
+              name: 示例团队
   /v1/tenants/{tenant}:
     get:
       operationId: getTenant
@@ -319,6 +322,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
+            example: &id001 {}
   /v1/tenants/{tenant}/members/{member}/restore:
     post:
       operationId: restoreMember
@@ -373,6 +377,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
+            example: *id001
   /v1/tenants/{tenant}/organizations:
     get:
       operationId: listOrganizations
@@ -478,6 +483,9 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/OrganizationInput'
+            example:
+              parent_id: '00000000000000000000000000000000'
+              name: 示例组织
   /v1/tenants/{tenant}/organizations/{org}/move:
     post:
       operationId: moveOrganization
@@ -536,6 +544,9 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/MoveInput'
+            example:
+              parent_id: '00000000000000000000000000000000'
+              dry_run: true
   /v1/tenants/{tenant}/organizations/{org}/members/{member}:
     put:
       operationId: assignOrganization
@@ -590,6 +601,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
+            example: *id001
   /v1/tenants/{tenant}/invitations:
     get:
       operationId: listInvitations
@@ -693,6 +705,8 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/InvitationInput'
+            example:
+              email: teammate@example.invalid
   /v1/tenants/{tenant}/invitations/{invitation}/revoke:
     post:
       operationId: revokeInvitation
@@ -745,6 +759,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
+            example: *id001
   /v1/invitations/accept:
     post:
       operationId: acceptInvitation
@@ -798,6 +813,8 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/InvitationProof'
+            example:
+              token: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
   /v1/tenants/{tenant}/audit-events:
     get:
       operationId: listAuditEvents
@@ -940,6 +957,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
+            example: *id001
   /v1/tenants/{tenant}/permissions:
     get:
       operationId: getMyPermissions
@@ -960,6 +978,8 @@ paths:
           headers:
             X-Request-ID:
               $ref: '#/components/headers/RequestID'
+            ETag:
+              $ref: '#/components/headers/ETag'
           content:
             application/json:
               schema:
@@ -1006,6 +1026,8 @@ paths:
           headers:
             X-Request-ID:
               $ref: '#/components/headers/RequestID'
+            ETag:
+              $ref: '#/components/headers/ETag'
           content:
             application/json:
               schema:
@@ -1051,6 +1073,8 @@ paths:
           headers:
             X-Request-ID:
               $ref: '#/components/headers/RequestID'
+            ETag:
+              $ref: '#/components/headers/ETag'
           content:
             application/json:
               schema:
@@ -1085,6 +1109,11 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/RoleInput'
+            example:
+              code: auditor
+              policies:
+              - permission: audit.read
+                effect: allow
   /v1/tenants/{tenant}/roles/{role}:
     put:
       operationId: replaceRole
@@ -1138,6 +1167,10 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/RoleUpdate'
+            example:
+              policies:
+              - permission: audit.read
+                effect: allow
     delete:
       operationId: deleteRole
       summary: Delete an unbound custom role
@@ -1188,6 +1221,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
+            example: *id001
   /v1/tenants/{tenant}/members/{member}/roles:
     get:
       operationId: listMemberRoles
@@ -1207,6 +1241,8 @@ paths:
           headers:
             X-Request-ID:
               $ref: '#/components/headers/RequestID'
+            ETag:
+              $ref: '#/components/headers/ETag'
           content:
             application/json:
               schema:
@@ -1290,6 +1326,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
+            example: *id001
     delete:
       operationId: unbindRole
       summary: Unbind a tenant role to a membership
@@ -1345,6 +1382,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
+            example: *id001
   /openapi.yaml:
     get:
       operationId: getOpenapiyaml
@@ -1412,13 +1450,13 @@ components:
         type:
           type: string
           format: uri
-        title: *id001
+        title: *id002
         status:
           type: integer
           minimum: 400
           maximum: 599
-        code: *id001
-        request_id: *id001
+        code: *id002
+        request_id: *id002
     Me:
       type: object
       additionalProperties: false
@@ -1428,12 +1466,12 @@ components:
       - membership_id
       - session_id
       properties:
-        user_id: &id002
+        user_id: &id003
           type: string
           pattern: ^[a-f0-9]{32}$
-        tenant_id: *id002
-        membership_id: *id002
-        session_id: *id002
+        tenant_id: *id003
+        membership_id: *id003
+        session_id: *id003
     Tenant:
       type: object
       additionalProperties: false
@@ -1447,19 +1485,19 @@ components:
       - org_version
       - root_id
       properties:
-        id: *id002
-        name: *id001
+        id: *id003
+        name: *id002
         slug:
           type: string
           pattern: ^[a-z0-9][a-z0-9-]{0,62}$
-        membership_id: *id002
+        membership_id: *id003
         owner:
           type: boolean
-        authz_version: &id003
+        authz_version: &id004
           type: integer
           minimum: 1
-        org_version: *id003
-        root_id: *id002
+        org_version: *id004
+        root_id: *id003
     TenantInput:
       type: object
       additionalProperties: false
@@ -1483,9 +1521,9 @@ components:
       - membership_id
       - root_id
       properties:
-        id: *id002
-        membership_id: *id002
-        root_id: *id002
+        id: *id003
+        membership_id: *id003
+        root_id: *id003
     Member:
       type: object
       additionalProperties: false
@@ -1496,14 +1534,14 @@ components:
       - status
       - owner
       properties:
-        id: *id002
-        user_id: *id002
+        id: *id003
+        user_id: *id003
         email:
           type:
           - string
           - 'null'
           format: email
-          description: Verified alias visible only to authorized tenant owners.
+          description: Verified alias requires members.read on the token tenant.
         status:
           enum:
           - active
@@ -1520,13 +1558,13 @@ components:
       - parent_id
       - name
       properties:
-        id: *id002
-        parent_id: &id004
+        id: *id003
+        parent_id: &id005
           type:
           - string
           - 'null'
           pattern: ^[a-f0-9]{32}$
-        name: *id001
+        name: *id002
     OrganizationInput:
       type: object
       additionalProperties: false
@@ -1534,7 +1572,7 @@ components:
       - parent_id
       - name
       properties:
-        parent_id: *id002
+        parent_id: *id003
         name:
           type: string
           minLength: 1
@@ -1547,8 +1585,8 @@ components:
       - id
       - org_version
       properties:
-        id: *id002
-        org_version: *id003
+        id: *id003
+        org_version: *id004
     MoveInput:
       type: object
       additionalProperties: false
@@ -1556,7 +1594,7 @@ components:
       - parent_id
       - dry_run
       properties:
-        parent_id: *id002
+        parent_id: *id003
         dry_run:
           type: boolean
           description: Required; false executes the move and invalidates old tenant
@@ -1577,7 +1615,7 @@ components:
           type: integer
           minimum: 0
           maximum: 16
-        org_version: *id003
+        org_version: *id004
         dry_run:
           type: boolean
     Invitation:
@@ -1589,7 +1627,7 @@ components:
       - expires_at
       - state
       properties:
-        id: *id002
+        id: *id003
         email:
           type: string
           format: email
@@ -1620,7 +1658,7 @@ components:
       - token
       - expires_in
       properties:
-        id: *id002
+        id: *id003
         token:
           type: string
           pattern: ^[A-Za-z0-9_-]{43}$
@@ -1646,7 +1684,7 @@ components:
       required:
       - membership_id
       properties:
-        membership_id: *id002
+        membership_id: *id003
     AuditEvent:
       type: object
       additionalProperties: false
@@ -1657,16 +1695,16 @@ components:
       - target_id
       - occurred_at
       properties:
-        id: *id002
-        actor_membership_id: *id002
-        action: *id001
-        target_id: *id002
+        id: *id003
+        actor_membership_id: *id003
+        action: *id002
+        target_id: *id003
         occurred_at:
           type: string
           format: date-time
-        role_id: *id002
-        membership_id: *id002
-        role_code: *id001
+        role_id: *id003
+        membership_id: *id003
+        role_code: *id002
     Session:
       type: object
       additionalProperties: false
@@ -1679,7 +1717,7 @@ components:
       - idle_expires_at
       - absolute_expires_at
       properties:
-        id: *id002
+        id: *id003
         current:
           type: boolean
         active:
@@ -1711,7 +1749,7 @@ components:
           maxItems: 100
           items:
             $ref: '#/components/schemas/Tenant'
-        next_cursor: *id004
+        next_cursor: *id005
     MemberPage:
       type: object
       additionalProperties: false
@@ -1724,7 +1762,7 @@ components:
           maxItems: 100
           items:
             $ref: '#/components/schemas/Member'
-        next_cursor: *id004
+        next_cursor: *id005
     OrganizationPage:
       type: object
       additionalProperties: false
@@ -1737,7 +1775,7 @@ components:
           maxItems: 100
           items:
             $ref: '#/components/schemas/Organization'
-        next_cursor: *id004
+        next_cursor: *id005
     InvitationPage:
       type: object
       additionalProperties: false
@@ -1750,7 +1788,7 @@ components:
           maxItems: 100
           items:
             $ref: '#/components/schemas/Invitation'
-        next_cursor: *id004
+        next_cursor: *id005
     AuditEventPage:
       type: object
       additionalProperties: false
@@ -1763,7 +1801,7 @@ components:
           maxItems: 100
           items:
             $ref: '#/components/schemas/AuditEvent'
-        next_cursor: *id004
+        next_cursor: *id005
     SessionPage:
       type: object
       additionalProperties: false
@@ -1776,7 +1814,7 @@ components:
           maxItems: 100
           items:
             $ref: '#/components/schemas/Session'
-        next_cursor: *id004
+        next_cursor: *id005
     RolePolicy:
       type: object
       additionalProperties: false
@@ -1785,7 +1823,7 @@ components:
       - effect
       properties:
         permission:
-          enum: &id006
+          enum: &id007
           - audit.read
           - invitations.manage
           - members.read
@@ -1808,7 +1846,7 @@ components:
           pattern: ^[a-z][a-z0-9_-]{0,62}$
           not:
             const: owner
-        policies: &id005
+        policies: &id006
           type: array
           maxItems: 12
           uniqueItems: true
@@ -1820,7 +1858,7 @@ components:
       required:
       - policies
       properties:
-        policies: *id005
+        policies: *id006
     Role:
       type: object
       additionalProperties: false
@@ -1832,8 +1870,8 @@ components:
       - policies
       - binding_count
       properties:
-        id: *id002
-        code: *id001
+        id: *id003
+        code: *id002
         built_in:
           type: boolean
         scope:
@@ -1857,7 +1895,7 @@ components:
           maxItems: 100
           items:
             $ref: '#/components/schemas/Role'
-        next_cursor: *id004
+        next_cursor: *id005
     RoleCreated:
       type: object
       additionalProperties: false
@@ -1865,8 +1903,8 @@ components:
       - id
       - authz_version
       properties:
-        id: *id002
-        authz_version: *id003
+        id: *id003
+        authz_version: *id004
     MemberRoles:
       type: object
       additionalProperties: false
@@ -1904,14 +1942,14 @@ components:
           type: array
           uniqueItems: true
           items:
-            enum: *id006
+            enum: *id007
         owner:
           type: boolean
-        authz_version: *id003
+        authz_version: *id004
         catalog:
           type: array
           items:
-            enum: *id006
+            enum: *id007
   parameters:
     TenantID:
       in: path
@@ -1919,7 +1957,7 @@ components:
       required: true
       description: Must equal the access token tenant; another tenant returns 404,
         even if the user also belongs to it.
-      schema: *id002
+      schema: *id003
     Limit:
       in: query
       name: limit
@@ -1934,7 +1972,7 @@ components:
       name: after
       description: Previous next_cursor; ascending UUID keyset, not a snapshot or
         timestamp ordering guarantee.
-      schema: *id002
+      schema: *id003
     AuthzMatch:
       in: header
       name: If-Match
@@ -1955,27 +1993,27 @@ components:
       in: path
       name: member
       required: true
-      schema: *id002
+      schema: *id003
     orgID:
       in: path
       name: org
       required: true
-      schema: *id002
+      schema: *id003
     invitationID:
       in: path
       name: invitation
       required: true
-      schema: *id002
+      schema: *id003
     sessionID:
       in: path
       name: session
       required: true
-      schema: *id002
+      schema: *id003
     roleID:
       in: path
       name: role
       required: true
-      schema: *id002
+      schema: *id003
   responses:
     Problem:
       description: RFC 9457 problem. Fixed code only; no input, token or SQL echoed.
@@ -1997,13 +2035,13 @@ components:
   headers:
     RequestID:
       description: Server-generated request correlation ID.
-      schema: *id001
+      schema: *id002
     ETag:
       description: Quoted collection version for If-Match.
-      schema: *id001
+      schema: *id002
     Authenticate:
       description: Bearer challenge, including invalid_token or insufficient_scope.
-      schema: *id001
+      schema: *id002
     RetryAfter:
       description: Seconds before retrying.
       schema:

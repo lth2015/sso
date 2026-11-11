@@ -10,6 +10,72 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
+.playground fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.playground textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid #bfcde1;
+  border-radius: 6px;
+  padding: 12px;
+  font:
+    13px/1.6 ui-monospace,
+    monospace;
+  color: #233852;
+}
+.playground pre {
+  max-height: 420px;
+  overflow: auto;
+  padding: 16px;
+  background: #f3f6fb;
+  border: 1px solid #dce5f2;
+  border-radius: 7px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font:
+    12px/1.7 ui-monospace,
+    monospace;
+}
+.playground code,
+.playground dd {
+  overflow-wrap: anywhere;
+}
+.playground-meta,
+.playground-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 18px 0;
+}
+.playground-review {
+  border: 1px solid #d5b87b;
+  background: #fffaf0;
+  border-radius: 8px;
+  padding: 18px;
+  margin: 24px 0;
+}
+.playground-result {
+  margin-top: 28px;
+  border-top: 1px solid #dce5f2;
+  padding-top: 16px;
+}
+.playground-result dl {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  gap: 8px;
+  font-size: 13px;
+}
+.playground-result dd {
+  margin: 0;
+}
+.playground summary {
+  cursor: pointer;
+  font-size: 14px;
+}
 * {
   box-sizing: border-box;
 }
