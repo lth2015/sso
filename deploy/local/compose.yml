@@ -70,7 +70,7 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
   platform-api:
-    networks: [core]
+    networks: [core,console]
     profiles: [sso]
     image: ${COMPOSE_PROJECT_NAME:-sso-m0}-platform-api
     pull_policy: never
@@ -87,7 +87,7 @@ services:
       - 127.0.0.1:8083:8083
   protocol-public:
     <<: *demo
-    networks: [core,app_a,app_b]
+    networks: [core,app_a,app_b,console]
     entrypoint: [/protocol-public]
   hydra-sso-migrate:
     <<: *hydra-sso
@@ -101,6 +101,19 @@ services:
     depends_on:
       hydra-sso-migrate:
         condition: service_completed_successfully
+  console:
+    <<: *demo
+    networks: [console]
+    depends_on: [protocol-public,platform-api]
+    environment:
+      SSO_MODE: local-accounts
+      LOCAL_DB_KIND: console
+      DEMO_DB_PASSWORD: ${CONSOLE_DB_PASSWORD:-}
+      SSO_BFF_KEY: ${CONSOLE_BFF_KEY:-}
+      DEMO_CLIENT_ID: local-console
+      DEMO_CLIENT_SECRET: ${CONSOLE_SECRET:-}
+    ports:
+      - 127.0.0.1:3003:3000
   demo-a:
     <<: *demo
     networks: [app_a]
@@ -162,11 +175,24 @@ services:
       DEMO_B_BFF_KEY: ${DEMO_B_BFF_KEY:-}
       DEMO_A_DB_PASSWORD: ${DEMO_A_DB_PASSWORD:-}
       DEMO_B_DB_PASSWORD: ${DEMO_B_DB_PASSWORD:-}
+      CONSOLE_DB_PASSWORD: ${CONSOLE_DB_PASSWORD:-}
+      CONSOLE_BFF_KEY: ${CONSOLE_BFF_KEY:-}
+      CONSOLE_SECRET: ${CONSOLE_SECRET:-}
     volumes:
       - ../../.local/demo-tests:/demo-tests:ro
   demo-network-tests:
     <<: *demo
     networks: [app_a]
+    profiles: [testing]
+    entrypoint: [/demo-tests]
+    command: [-test.v, -test.run, TestDemoNetworkBoundary]
+    environment:
+      SSO_DEMO_NETWORK_TEST: 'true'
+    volumes:
+      - ../../.local/demo-tests:/demo-tests:ro
+  console-network-tests:
+    <<: *demo
+    networks: [console]
     profiles: [testing]
     entrypoint: [/demo-tests]
     command: [-test.v, -test.run, TestDemoNetworkBoundary]
@@ -215,7 +241,7 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
   mysql:
-    networks: [core,app_a,app_b]
+    networks: [core,app_a,app_b,console]
     image: mysql@sha256:a81d043930e51745522bd5c430961cf8286f0a23f0a9a2a6e0108f7ea71b0902
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
@@ -270,4 +296,7 @@ networks:
   app_a:
     driver: bridge
   app_b:
+    driver: bridge
+
+  console:
     driver: bridge

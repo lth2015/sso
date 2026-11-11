@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "SSO Public Platform API",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "description": "External server/native-client contract. Local reference server only; production requires TLS and configured public origins. OAuth code+S256 PKCE, platform audience https://api.sso.local. No cookie authentication or wildcard CORS; browser integrations use a BFF. All writes require MFA authenticated within 300 seconds; refresh does not update auth_time. Active owners manage tenant resources; this slice does not implement arbitrary scoped RBAC. Authorization is checked against the business primary inside each operation transaction. Tenant-version mutations invalidate prior tenant grants, requiring new authorization. JSON objects reject duplicates, unknown fields, nested objects/arrays, invalid UTF-8 and extra documents. Request body limit 4096 bytes. UUIDs are lowercase 32-hex strings. List limit 1–100, default 50; after is previous next_cursor. No pagination snapshot guarantee. Error format follows RFC 9457. All responses no-store. Invitation proofs never appear in lists/audit."
   },
   "servers": [
@@ -1608,6 +1608,7 @@
         "additionalProperties": false,
         "required": [
           "id",
+          "name",
           "slug",
           "membership_id",
           "owner",
@@ -1619,6 +1620,9 @@
           "id": {
             "type": "string",
             "pattern": "^[a-f0-9]{32}$"
+          },
+          "name": {
+            "type": "string"
           },
           "slug": {
             "type": "string",
@@ -1694,6 +1698,7 @@
         "required": [
           "id",
           "user_id",
+          "email",
           "status",
           "owner"
         ],
@@ -1705,6 +1710,14 @@
           "user_id": {
             "type": "string",
             "pattern": "^[a-f0-9]{32}$"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "email",
+            "description": "Verified alias visible only to authorized tenant owners."
           },
           "status": {
             "enum": [

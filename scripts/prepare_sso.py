@@ -6,7 +6,7 @@ env=root/'.local/m0.env'
 values=dict(line.split('=',1) for line in env.read_text().splitlines())
 marker=root/'.local/sso-key.id'
 previous=json.loads(marker.read_text()) if marker.exists() else {}
-names=['SSO_FLOW_KEY','SSO_MFA_KEY','SSO_BFF_KEY','DEMO_A_SECRET','DEMO_B_SECRET','BUSINESS_HYDRA_DB_PASSWORD','BUSINESS_HYDRA_SYSTEM_SECRET','BUSINESS_HOOK_KEY','DEMO_A_DB_PASSWORD','DEMO_B_DB_PASSWORD','DEMO_A_BFF_KEY','DEMO_B_BFF_KEY']
+names=['SSO_FLOW_KEY','SSO_MFA_KEY','SSO_BFF_KEY','DEMO_A_SECRET','DEMO_B_SECRET','BUSINESS_HYDRA_DB_PASSWORD','BUSINESS_HYDRA_SYSTEM_SECRET','BUSINESS_HOOK_KEY','DEMO_A_DB_PASSWORD','DEMO_B_DB_PASSWORD','DEMO_A_BFF_KEY','DEMO_B_BFF_KEY','CONSOLE_SECRET','CONSOLE_DB_PASSWORD','CONSOLE_BFF_KEY']
 fingerprints={}
 for name in names:
     if name not in values:
@@ -42,9 +42,9 @@ readonly={
  'applications':'SELECT id,active,security_version FROM sso_business.applications',
  'tenant_applications':'SELECT tenant_id,application_id,active,security_version FROM sso_business.tenant_applications',
 }
-for letter in ['a','b']:
- db='local_demo_'+letter+'_state';user='demo_'+letter;client='local-demo-'+letter
- statements += [f"CREATE DATABASE IF NOT EXISTS {db};",f"CREATE USER IF NOT EXISTS '{user}'@'%' IDENTIFIED BY '{values['DEMO_'+letter.upper()+'_DB_PASSWORD']}';"]
+bff_roles=[('local_demo_a_state','demo_a','local-demo-a','DEMO_A_DB_PASSWORD'),('local_demo_b_state','demo_b','local-demo-b','DEMO_B_DB_PASSWORD'),('local_console_state','console_bff','local-console','CONSOLE_DB_PASSWORD')]
+for db,user,client,password_name in bff_roles:
+ statements += [f"CREATE DATABASE IF NOT EXISTS {db};",f"CREATE USER IF NOT EXISTS '{user}'@'%' IDENTIFIED BY '{values[password_name]}';"]
  definitions=dict(readonly)
  definitions['oauth_clients']=f"SELECT client_id,application_id,active,security_version FROM sso_business.oauth_clients WHERE client_id='{client}'"
  definitions['login_interactions']=f"SELECT id,state FROM sso_business.login_interactions WHERE client_id='{client}'"
@@ -56,8 +56,7 @@ for letter in ['a','b']:
   statements.append(f"GRANT {permissions} ON {db}.{table} TO '{user}'@'%';")
 # Append audit/outbox through a client-bound definer routine. The BFF cannot
 # insert arbitrary tenant actors or modify existing audit records.
-for letter in ['a','b']:
- db='local_demo_'+letter+'_state';user='demo_'+letter;client='local-demo-'+letter
+for db,user,client,password_name in bff_roles:
  scoped={
   'users':f"SELECT u.id,u.status,u.security_version FROM sso_business.users u WHERE EXISTS(SELECT 1 FROM sso_business.business_grants g WHERE g.client_id='{client}' AND g.user_id=u.id)",
   'mfa_factors':f"SELECT f.user_id,f.active,f.security_version FROM sso_business.mfa_factors f WHERE EXISTS(SELECT 1 FROM sso_business.business_grants g WHERE g.client_id='{client}' AND g.user_id=f.user_id)",

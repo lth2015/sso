@@ -14,12 +14,14 @@ type TenantSummary struct {
 	AuthzVersion int64  `json:"authz_version"`
 	OrgVersion   int64  `json:"org_version"`
 	Root         string `json:"root_id"`
+	Name         string `json:"name"`
 }
 type MemberSummary struct {
-	ID     string `json:"id"`
-	User   string `json:"user_id"`
-	Status string `json:"status"`
-	Owner  bool   `json:"owner"`
+	ID     string  `json:"id"`
+	User   string  `json:"user_id"`
+	Status string  `json:"status"`
+	Owner  bool    `json:"owner"`
+	Email  *string `json:"email"`
 }
 type InvitationSummary struct {
 	ID      string `json:"id"`
@@ -47,14 +49,14 @@ type SessionSummary struct {
 func (s Store) APITenants(ctx context.Context, a Authorization, limit int, after ID) (items []TenantSummary, err error) {
 	items = []TenantSummary{}
 	err = s.APITransaction(ctx, a, func(tx *sql.Tx) error {
-		rows, e := tx.QueryContext(ctx, `SELECT LOWER(HEX(t.id)),t.slug,LOWER(HEX(m.id)),EXISTS(SELECT 1 FROM role_bindings b JOIN roles r ON r.tenant_id=b.tenant_id AND r.id=b.role_id WHERE b.tenant_id=t.id AND b.membership_id=m.id AND r.code='owner'),t.authz_version,t.org_version,LOWER(HEX(tr.org_id)) FROM tenants t JOIN memberships m ON m.tenant_id=t.id JOIN tenant_roots tr ON tr.tenant_id=t.id WHERE m.user_id=? AND m.status='active' AND t.status='active' AND t.id>? ORDER BY t.id LIMIT ?`, a.User, after, limit)
+		rows, e := tx.QueryContext(ctx, `SELECT LOWER(HEX(t.id)),t.slug,LOWER(HEX(m.id)),EXISTS(SELECT 1 FROM role_bindings b JOIN roles r ON r.tenant_id=b.tenant_id AND r.id=b.role_id WHERE b.tenant_id=t.id AND b.membership_id=m.id AND r.code='owner'),t.authz_version,t.org_version,LOWER(HEX(tr.org_id)),root.name FROM tenants t JOIN memberships m ON m.tenant_id=t.id JOIN tenant_roots tr ON tr.tenant_id=t.id JOIN org_nodes root ON root.tenant_id=t.id AND root.id=tr.org_id WHERE m.user_id=? AND m.status='active' AND t.status='active' AND t.id>? ORDER BY t.id LIMIT ?`, a.User, after, limit)
 		if e != nil {
 			return e
 		}
 		defer rows.Close()
 		for rows.Next() {
 			var v TenantSummary
-			if e = rows.Scan(&v.ID, &v.Slug, &v.Membership, &v.Owner, &v.AuthzVersion, &v.OrgVersion, &v.Root); e != nil {
+			if e = rows.Scan(&v.ID, &v.Slug, &v.Membership, &v.Owner, &v.AuthzVersion, &v.OrgVersion, &v.Root, &v.Name); e != nil {
 				return e
 			}
 			items = append(items, v)
@@ -110,15 +112,19 @@ func (s TenantStore) APIMembers(ctx context.Context, limit int, after ID) (items
 	items = []MemberSummary{}
 	err = s.publicRead(ctx, func(tx *sql.Tx, av, ov int64) error {
 		version = av
-		rows, e := tx.QueryContext(ctx, `SELECT LOWER(HEX(m.id)),LOWER(HEX(m.user_id)),m.status,EXISTS(SELECT 1 FROM role_bindings b JOIN roles r ON r.tenant_id=b.tenant_id AND r.id=b.role_id WHERE b.tenant_id=m.tenant_id AND b.membership_id=m.id AND r.code='owner') FROM memberships m WHERE m.tenant_id=? AND m.id>? ORDER BY m.id LIMIT ?`, s.tenant, after, limit)
+		rows, e := tx.QueryContext(ctx, `SELECT LOWER(HEX(m.id)),LOWER(HEX(m.user_id)),m.status,EXISTS(SELECT 1 FROM role_bindings b JOIN roles r ON r.tenant_id=b.tenant_id AND r.id=b.role_id WHERE b.tenant_id=m.tenant_id AND b.membership_id=m.id AND r.code='owner'),(SELECT normalized_email FROM login_aliases a WHERE a.user_id=m.user_id AND a.verified_at IS NOT NULL ORDER BY normalized_email LIMIT 1) FROM memberships m WHERE m.tenant_id=? AND m.id>? ORDER BY m.id LIMIT ?`, s.tenant, after, limit)
 		if e != nil {
 			return e
 		}
 		defer rows.Close()
 		for rows.Next() {
 			var v MemberSummary
-			if e = rows.Scan(&v.ID, &v.User, &v.Status, &v.Owner); e != nil {
+			var email sql.NullString
+			if e = rows.Scan(&v.ID, &v.User, &v.Status, &v.Owner, &email); e != nil {
 				return e
+			}
+			if email.Valid {
+				v.Email = &email.String
 			}
 			items = append(items, v)
 		}

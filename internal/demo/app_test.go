@@ -190,13 +190,17 @@ func TestDemoDatabaseRolesCannotReadCredentialsOrOtherClientState(t *testing.T) 
 	if os.Getenv("SSO_DEMO_TEST") != "true" {
 		t.Skip("requires real scoped BFF database roles")
 	}
-	for _, letter := range []string{"a", "b"} {
+	for _, role := range []struct{ User, Database, Client, Password string }{
+		{"demo_a", "local_demo_a_state", "local-demo-a", "DEMO_A_DB_PASSWORD"},
+		{"demo_b", "local_demo_b_state", "local-demo-b", "DEMO_B_DB_PASSWORD"},
+		{"console_bff", "local_console_state", "local-console", "CONSOLE_DB_PASSWORD"},
+	} {
 		cfg := driver.NewConfig()
-		cfg.User = "demo_" + letter
-		cfg.Passwd = os.Getenv("DEMO_" + strings.ToUpper(letter) + "_DB_PASSWORD")
+		cfg.User = role.User
+		cfg.Passwd = os.Getenv(role.Password)
 		cfg.Net = "tcp"
 		cfg.Addr = "mysql:3306"
-		cfg.DBName = "local_demo_" + letter + "_state"
+		cfg.DBName = role.Database
 		db, err := sql.Open("mysql", cfg.FormatDSN())
 		if err != nil {
 			t.Fatal(err)
@@ -205,7 +209,7 @@ func TestDemoDatabaseRolesCannotReadCredentialsOrOtherClientState(t *testing.T) 
 		if err = db.Ping(); err != nil {
 			t.Fatal("BFF database role unavailable")
 		}
-		for _, query := range []string{`SELECT password_hash FROM sso_business.password_credentials LIMIT 1`, `SELECT encrypted_secret FROM sso_business.mfa_factors LIMIT 1`, `SELECT token_digest FROM sso_business.sso_sessions LIMIT 1`, `SELECT encrypted_tokens FROM sso_business.bff_sessions LIMIT 1`} {
+		for _, query := range []string{`SELECT normalized_email FROM sso_business.login_aliases LIMIT 1`, `SELECT password_hash FROM sso_business.password_credentials LIMIT 1`, `SELECT encrypted_secret FROM sso_business.mfa_factors LIMIT 1`, `SELECT token_digest FROM sso_business.sso_sessions LIMIT 1`, `SELECT encrypted_tokens FROM sso_business.bff_sessions LIMIT 1`} {
 			rows, err := db.Query(query)
 			if err == nil {
 				rows.Close()
@@ -217,7 +221,7 @@ func TestDemoDatabaseRolesCannotReadCredentialsOrOtherClientState(t *testing.T) 
 			}
 		}
 		var others int
-		if err = db.QueryRow(`SELECT COUNT(*) FROM bff_sessions WHERE client_id<>?`, "local-demo-"+letter).Scan(&others); err != nil || others != 0 {
+		if err = db.QueryRow(`SELECT COUNT(*) FROM bff_sessions WHERE client_id<>?`, role.Client).Scan(&others); err != nil || others != 0 {
 			t.Fatal("BFF state view leaked another client")
 		}
 		if _, err = db.Exec(`INSERT INTO bff_transactions VALUES(?,? ,?,?,FALSE,?)`, make([]byte, 32), "not-this-client", make([]byte, 32), []byte("invalid-cross-client-fixture"), time.Now().Unix()+60); err == nil {

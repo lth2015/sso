@@ -44,3 +44,22 @@ statement="""INSERT IGNORE INTO applications(id,code,name) VALUES(UNHEX('019a6d0
 INSERT IGNORE INTO oauth_clients(client_id,application_id,redirect_uri,scopes,audience) SELECT 'local-platform-cli',id,'http://127.0.0.1:9876/callback','openid offline_access platform:read platform:write','https://api.sso.local' FROM applications WHERE code='local-platform';"""
 if subprocess.run(command,input=statement.encode(),capture_output=True).returncode:raise SystemExit('Platform registry initialization failed')
 print('PKCE-only platform client registered; existing tenants require explicit enablement')
+
+# Confidential first-party console uses its own key and exact browser callback.
+client='local-console'
+redirect='http://console.localhost:3003/oidc/callback'
+body={'client_id':client,'client_secret':values['CONSOLE_SECRET'],'grant_types':['authorization_code','refresh_token'],'response_types':['code'],'redirect_uris':[redirect],'scope':'openid offline_access platform:read platform:write','audience':['https://api.sso.local'],'token_endpoint_auth_method':'client_secret_basic'}
+try:
+    with urllib.request.urlopen('http://127.0.0.1:4465/admin/clients/'+client,timeout=5) as r:existing=json.load(r)
+    for field in ['grant_types','response_types','redirect_uris','scope','audience','token_endpoint_auth_method']:
+        if existing.get(field)!=body[field]:raise SystemExit('Owned console client differs from the contract; refusing overwrite')
+except urllib.error.HTTPError as e:
+    if e.code!=404:raise SystemExit('Console client lookup failed')
+    request=urllib.request.Request('http://127.0.0.1:4465/admin/clients',data=json.dumps(body).encode(),headers={'Content-Type':'application/json'},method='POST')
+    try:
+        with urllib.request.urlopen(request,timeout=5) as r:
+            if r.status!=201:raise SystemExit('Console client creation failed')
+    except urllib.error.URLError:raise SystemExit('Console client creation failed (details withheld)')
+statement="INSERT IGNORE INTO oauth_clients(client_id,application_id,redirect_uri,scopes,audience) SELECT 'local-console',id,'http://console.localhost:3003/oidc/callback','openid offline_access platform:read platform:write','https://api.sso.local' FROM applications WHERE code='local-platform';"
+if subprocess.run(command,input=statement.encode(),capture_output=True).returncode:raise SystemExit('Console registry initialization failed')
+print('First-party console client registered')

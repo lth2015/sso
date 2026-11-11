@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+export npm_config_cache="$PWD/.local/npm-cache"
+npm ci --prefix web/console --no-audit --no-fund
+# Remove only generated outputs; retain the tracked embed placeholder.
+node --input-type=module -e 'import {rmSync} from "node:fs"; rmSync("internal/consoleui/static/assets",{recursive:true,force:true}); rmSync("internal/consoleui/static/index.html",{force:true});'
+npm run --prefix web/console build

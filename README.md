@@ -17,7 +17,7 @@
 
 ## 当前代码交付
 
-已提供 Go token-policy-hook、本地 MySQL + Hydra、固定镜像/工具链、真实协议测试；运行方式见 [M0 运行手册](docs/runbooks/m0.md)，具体适配发现与未通过的生产门槛见 [ADR 0002](docs/adr/0002-hydra-m0-findings.md)。M0 协议实验与 M1 内部仓储继续保留；真实账户登录见下方可信 SSO 切片。React 控制台和后续生产功能仍待实现。
+已提供 Go token-policy-hook、本地 MySQL + Hydra、固定镜像/工具链、真实协议测试；运行方式见 [M0 运行手册](docs/runbooks/m0.md)，具体适配发现与未通过的生产门槛见 [ADR 0002](docs/adr/0002-hydra-m0-findings.md)。M0 协议实验与 M1 内部仓储继续保留；真实账户登录见下方可信 SSO 切片。React 控制台第一切片见下文，后续生产能力按阶段实现。
 
 ```sh
 scripts/install-go
@@ -65,7 +65,7 @@ node tests/sso/browser.cjs
 
 见 [SSO 运行手册](docs/runbooks/local-sso.md)、[ADR 0005](docs/adr/0005-trusted-login-mfa-bff.md)、[SSO OpenAPI](api/sso.openapi.yaml) 和 [本地验收记录](docs/validation.md)。浏览器测试自动创建和清理自己的合成账户，通过真实 Hydra code+PKCE、双应用/双租户、MFA/恢复/续期/撤销，并验证 BFF 数据库与网络权限。
 
-当前是本地 HTTP 参考实现。两个 client 共用一个示范 Application；正式 React 控制台、完整 scoped RBAC、MFA 管理、正式邮件和生产 TLS/KMS 等仍待开发。GCP 部署及云端运维继续由 SRE 负责。
+当前是本地 HTTP 参考实现。两个 client 共用一个示范 Application；控制台的客户端/凭证管理、完整 scoped RBAC、MFA 管理、正式邮件和生产 TLS/KMS 等仍待开发。GCP 部署及云端运维继续由 SRE 负责。
 
 
 ## 公共业务 API 与 OpenAPI
@@ -80,3 +80,16 @@ node tests/api/docs.cjs
 ```
 
 公共合同：[OpenAPI 3.1 YAML](api/openapi.yaml)、[JSON](api/openapi.json)。服务提供 `/docs`、`/openapi.yaml` 和 `/openapi.json`；参考页从合同生成全部操作列表。接入、分页/ETag、错误和授权行为见 [公共 API 手册](docs/runbooks/public-api.md) 及 [ADR 0006](docs/adr/0006-public-platform-api.md)。此前同名 M0 内部合同保留为 [m0-internal.openapi.yaml](api/m0-internal.openapi.yaml)。
+
+
+## 真实 React 管理控制台
+
+新增通过独立 BFF 调用公共 API 的控制台，覆盖空间创建、成员停用/恢复、组织创建/移动/归属、一次性邀请、审计和自己的会话管理。同一浏览器不同标签页各有独立空间授权，OAuth token 留在服务端；敏感写入过期时要求重新 MFA，权限变更后需重新授权。
+
+```sh
+scripts/console prepare
+scripts/console up
+scripts/console test
+```
+
+见 [控制台手册](docs/runbooks/console.md)、[ADR 0007](docs/adr/0007-console-bff-contexts.md)、[浏览器 BFF OpenAPI](api/console.openapi.yaml) 和 [界面截图](docs/ui/console-overview.png)。React/Vite 用精确 npm lockfile 构建并嵌入 Go 服务，实际运行不需要 Vite 开发服务器。公共 API 0.5.0 增加空间可读名称和 owner 可见的成员邮箱，仍为 18 个业务操作。

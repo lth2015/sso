@@ -30,3 +30,6 @@ M2 可信 SSO 已实现本地密码/TOTP/一次性恢复码、中央会话、独
 
 
 公共业务 API 第一批已实现 18 个操作及 OpenAPI 3.1 YAML/JSON，覆盖身份/空间、owner 成员与组织管理、一次性邀请、审计和自己的会话。正式 React 控制台、任意 scoped RBAC、动态第三方 client/机器凭证管理、MFA 更换/恢复管理仍待后续交付。外部客户端必须通过受权 OAuth token 调用，不将 Cookie 或内部仓储直接当成公共接口。见 ADR 0006 与最新验证记录。
+
+
+M3 控制台第一切片已交付：真实 React 页面经独立 BFF 使用公共 API，包含空间、成员、组织、邀请、审计、会话管理及多标签页空间隔离。OAuth token 留在服务端，资格/最近 MFA/版本仍由 API 事务检查；控件可见性不能代替授权。该切片不完成 M3 的动态 client/SP/credential 管理；完整 RBAC、MFA 更换和受控恢复仍待后续实现。见 ADR 0007。

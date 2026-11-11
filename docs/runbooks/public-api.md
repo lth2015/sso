@@ -64,3 +64,6 @@ curl http://127.0.0.1:8083/v1/me \
 既有回归依次运行 `scripts/m0 test`、`scripts/m1 test`、`scripts/m2 test`、`scripts/sso test`、`scripts/sso network-test`、两个账户/SSO 浏览器脚本。普通 Go 测试明确跳过真实 fixture 案例，不能替代 API 浏览器集成测试。命令会短暂停止自己的通知 worker，不能与浏览器通知流程并发执行。
 
 用 `scripts/sso down` 停止全部本地服务，保留 volume/私有 key。不要修改既有迁移校验和、输出完整 env/Compose/容器 inspect、token/proof、MFA 材料或 SQL 输入。详见 [ADR 0006](../adr/0006-public-platform-api.md)。
+
+
+公共 API 0.5.0 增加空间 name 与 owner 可见的成员 email（无 verified alias 时 null），业务方法/路径仍为 18 项。新增真实 React 控制台见 [控制台手册](console.md)，浏览器边界合同为 `api/console.openapi.yaml`；该合同要求对应 cookie/context/CSRF，不替代公共 Bearer 接入合同。

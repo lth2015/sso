@@ -22,6 +22,10 @@ func Database() (*sql.DB, error) {
 		user = "demo_b"
 		dbname = "local_demo_b_state"
 		password = os.Getenv("DEMO_DB_PASSWORD")
+	case "console":
+		user = "console_bff"
+		dbname = "local_console_state"
+		password = os.Getenv("DEMO_DB_PASSWORD")
 	case "":
 	default:
 		return nil, errors.New("unknown local database role")

@@ -8,3 +8,6 @@ var PublicSpec []byte
 
 //go:embed openapi.json
 var PublicJSON []byte
+
+//go:embed console.openapi.yaml
+var ConsoleSpec []byte

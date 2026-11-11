@@ -7,3 +7,6 @@ dist/
 coverage/
 __pycache__/
 *.pyc
+# Generated console bundle; built before compiling the local BFF.
+internal/consoleui/static/index.html
+internal/consoleui/static/assets/

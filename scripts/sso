@@ -6,6 +6,7 @@ export GOPATH="$PWD/.local/go" GOCACHE="$PWD/.local/go-cache" GOMODCACHE="$PWD/.
 compose() { docker compose --env-file .local/m0.env -f deploy/local/compose.yml "$@"; }
 case "${1:-}" in
  prepare)
+  scripts/build-console
   scripts/m2 prepare
   python3 scripts/prepare_sso.py
   CGO_ENABLED=0 go build -trimpath -o .local/demo-app ./cmd/demo-app
@@ -37,10 +38,10 @@ PY
   python3 scripts/seed_sso.py
   compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot' < .local/bff-init.sql
   compose build demo-a platform-api
-  compose up -d protocol-public demo-a demo-b platform-api
+  compose up -d protocol-public demo-a demo-b platform-api console
   python3 - <<'READY'
 import time,urllib.request
-for port,host,path,status in [(8080,'auth.localhost:8080','/sso/health/ready',204),(3001,'app-a.localhost:3001','/',200),(3002,'app-b.localhost:3002','/',200),(8083,'api.localhost:8083','/health/ready',204)]:
+for port,host,path,status in [(8080,'auth.localhost:8080','/sso/health/ready',204),(3001,'app-a.localhost:3001','/',200),(3002,'app-b.localhost:3002','/',200),(8083,'api.localhost:8083','/health/ready',204),(3003,'console.localhost:3003','/health/ready',204)]:
  for attempt in range(30):
   try:
    request=urllib.request.Request(f'http://127.0.0.1:{port}{path}',headers={'Host':host})
@@ -49,7 +50,7 @@ for port,host,path,status in [(8080,'auth.localhost:8080','/sso/health/ready',20
   except Exception:
    if attempt==29:raise SystemExit('Local SSO functional readiness failed')
    time.sleep(1)
-print('Trusted login and both BFF origins ready')
+print('Trusted login, public API and all BFF origins ready')
 READY
   ;;
  network-test)
@@ -59,6 +60,7 @@ READY
   identity_ip=$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$identity_id")
   [[ "$hydra_ip" =~ ^[0-9.]+$ && "$identity_ip" =~ ^[0-9.]+$ ]] || exit 2
   compose run --rm --no-deps -e "CORE_HYDRA_IP=$hydra_ip" -e "CORE_IDENTITY_IP=$identity_ip" demo-network-tests
+  compose run --rm --no-deps -e "CORE_HYDRA_IP=$hydra_ip" -e "CORE_IDENTITY_IP=$identity_ip" console-network-tests
   ;;
  test)
   compose stop mail-worker

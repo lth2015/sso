@@ -13,10 +13,12 @@ import (
 	"errors"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/lth2015/sso/internal/adapter/hydra"
+	"github.com/lth2015/sso/internal/consoleui"
 	store "github.com/lth2015/sso/internal/storage/mysql"
 	"golang.org/x/oauth2"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 )
@@ -46,11 +48,14 @@ type App struct {
 	Provider             *oidc.Provider
 	OAuth                oauth2.Config
 	HTTP                 *http.Client
+	Audience, ReadScope  string
 }
 
 func New(ctx context.Context, repo store.Store, client, secret string, key []byte) (*App, error) {
 	origin := ""
 	name := ""
+	audience, readScope := Audience, "demo:read"
+	scopes := []string{"openid", "offline_access", "demo:read"}
 	switch client {
 	case "local-demo-a":
 		origin = "http://app-a.localhost:3001"
@@ -58,6 +63,11 @@ func New(ctx context.Context, repo store.Store, client, secret string, key []byt
 	case "local-demo-b":
 		origin = "http://app-b.localhost:3002"
 		name = "研究工作台"
+	case "local-console":
+		origin = "http://console.localhost:3003"
+		name = "身份平台控制台"
+		audience, readScope = "https://api.sso.local", "platform:read"
+		scopes = []string{"openid", "offline_access", "platform:read", "platform:write"}
 	default:
 		return nil, errors.New("unknown local app")
 	}
@@ -79,7 +89,7 @@ func New(ctx context.Context, repo store.Store, client, secret string, key []byt
 	}
 	endpoint := provider.Endpoint()
 	endpoint.AuthStyle = oauth2.AuthStyleInHeader
-	return &App{repo, client, name, origin, aead, provider, oauth2.Config{ClientID: client, ClientSecret: secret, RedirectURL: origin + "/oidc/callback", Scopes: []string{"openid", "offline_access", "demo:read"}, Endpoint: endpoint}, httpClient}, nil
+	return &App{Store: repo, Client: client, Name: name, Origin: origin, Key: aead, Provider: provider, OAuth: oauth2.Config{ClientID: client, ClientSecret: secret, RedirectURL: origin + "/oidc/callback", Scopes: scopes, Endpoint: endpoint}, HTTP: httpClient, Audience: audience, ReadScope: readScope}, nil
 }
 func token() (string, error) {
 	b := make([]byte, 32)
@@ -150,19 +160,19 @@ type accessClaims struct {
 
 func (a *App) verifyAccess(ctx context.Context, raw, subject string) (accessClaims, error) {
 	var claims accessClaims
-	verified, err := a.Provider.Verifier(&oidc.Config{ClientID: Audience, SupportedSigningAlgs: []string{"RS256"}}).Verify(a.ctx(ctx), raw)
+	verified, err := a.Provider.Verifier(&oidc.Config{ClientID: a.Audience, SupportedSigningAlgs: []string{"RS256"}}).Verify(a.ctx(ctx), raw)
 	if err != nil {
 		return claims, errors.New("access token rejected")
 	}
 	if err = verified.Claims(&claims); err != nil {
 		return claims, err
 	}
-	if len(claims.Audience) != 1 || claims.Audience[0] != Audience || claims.Client != a.Client || claims.Subject != subject || claims.Ext.Principal != subject || claims.Ext.Type != "user" {
+	if len(claims.Audience) != 1 || claims.Audience[0] != a.Audience || claims.Client != a.Client || claims.Subject != subject || claims.Ext.Principal != subject || claims.Ext.Type != "user" {
 		return claims, store.ErrDenied
 	}
 	allowed := false
 	for _, scope := range claims.Scopes {
-		if scope == "demo:read" {
+		if scope == a.ReadScope {
 			allowed = true
 		}
 	}
@@ -266,7 +276,7 @@ func (a *App) Handler() http.Handler {
 			fail(w, 503)
 			return
 		}
-		options := []oauth2.AuthCodeOption{oauth2.S256ChallengeOption(verifier), oidc.Nonce(nonce), oauth2.SetAuthURLParam("audience", Audience)}
+		options := []oauth2.AuthCodeOption{oauth2.S256ChallengeOption(verifier), oidc.Nonce(nonce), oauth2.SetAuthURLParam("audience", a.Audience)}
 		if r.URL.Query().Get("force") == "1" {
 			options = append(options, oauth2.SetAuthURLParam("max_age", "0"))
 		}
@@ -334,11 +344,27 @@ func (a *App) Handler() http.Handler {
 			fail(w, 503)
 			return
 		}
-		setCookie(w, sessionCookie, session, 8*3600)
-		http.Redirect(w, r, "/", 303)
+		if a.Client == "local-console" {
+			context, err := store.NewID()
+			if err != nil {
+				fail(w, 503)
+				return
+			}
+			a.limitContextCookies(w, r)
+			setCookie(w, consoleCookiePrefix+context.String(), session, 8*3600)
+			http.Redirect(w, r, "/#workspace="+context.String(), 303)
+		} else {
+			setCookie(w, sessionCookie, session, 8*3600)
+			http.Redirect(w, r, "/", 303)
+		}
 	})
 	load := func(w http.ResponseWriter, r *http.Request) (Tokens, []byte, bool) {
-		digest := cookie(r, sessionCookie)
+		cname, valid := a.sessionCookieName(r)
+		if !valid {
+			fail(w, 401)
+			return Tokens{}, nil, false
+		}
+		digest := cookie(r, cname)
 		entry, err := a.Store.BFFSession(r.Context(), digest, a.Client)
 		if err != nil {
 			fail(w, 401)
@@ -351,11 +377,11 @@ func (a *App) Handler() http.Handler {
 		}
 		tenant, err := store.ParseID(tokens.Tenant)
 		if err != nil || a.Store.GrantCurrent(r.Context(), entry.Grant, entry.User, tenant, a.Client) != nil {
-			setCookie(w, sessionCookie, "", -1)
+			a.clearSessionCookie(w, r)
 			fail(w, 401)
 			return tokens, nil, false
 		}
-		if r.Method == "POST" && subtle.ConstantTimeCompare([]byte(tokens.CSRF), []byte(r.Header.Get("X-CSRF-Token"))) != 1 {
+		if r.Method != "GET" && r.Method != "HEAD" && subtle.ConstantTimeCompare([]byte(tokens.CSRF), []byte(r.Header.Get("X-CSRF-Token"))) != 1 {
 			fail(w, 403)
 			return tokens, nil, false
 		}
@@ -421,7 +447,7 @@ func (a *App) Handler() http.Handler {
 			return a.seal(current, "session:"+a.Client+":"+base64.RawURLEncoding.EncodeToString(digest))
 		})
 		if err != nil {
-			setCookie(w, sessionCookie, "", -1)
+			a.clearSessionCookie(w, r)
 			fail(w, 401)
 			return
 		}
@@ -436,10 +462,15 @@ func (a *App) Handler() http.Handler {
 			fail(w, 503)
 			return
 		}
-		setCookie(w, sessionCookie, "", -1)
+		a.clearSessionCookie(w, r)
 		w.WriteHeader(204)
 	})
-	mux.Handle("GET /", a.assets())
+	if a.Client == "local-console" {
+		a.mountConsole(mux, load)
+		mux.Handle("GET /", consoleui.Handler())
+	} else {
+		mux.Handle("GET /", a.assets())
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Referrer-Policy", "no-referrer")
@@ -450,11 +481,11 @@ func (a *App) Handler() http.Handler {
 			fail(w, 403)
 			return
 		}
-		if r.URL.RawQuery != "" && r.URL.Path != "/oidc/callback" && r.URL.Path != "/login" {
+		if r.URL.RawQuery != "" && r.URL.Path != "/oidc/callback" && r.URL.Path != "/login" && !(a.Client == "local-console" && strings.HasPrefix(r.URL.Path, "/bff/v1/") && r.Method == "GET") {
 			fail(w, 400)
 			return
 		}
-		if r.Method == "POST" && (r.Header.Get("Origin") != a.Origin || r.Header.Get("Sec-Fetch-Site") == "cross-site") {
+		if r.Method != "GET" && r.Method != "HEAD" && (r.Header.Get("Origin") != a.Origin || r.Header.Get("Sec-Fetch-Site") == "cross-site") {
 			fail(w, 403)
 			return
 		}

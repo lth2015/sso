@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SSO Public Platform API
-  version: 0.4.0
+  version: 0.5.0
   description: External server/native-client contract. Local reference server only;
     production requires TLS and configured public origins. OAuth code+S256 PKCE, platform
     audience https://api.sso.local. No cookie authentication or wildcard CORS; browser
@@ -1014,6 +1014,7 @@ components:
       additionalProperties: false
       required:
       - id
+      - name
       - slug
       - membership_id
       - owner
@@ -1022,6 +1023,7 @@ components:
       - root_id
       properties:
         id: *id002
+        name: *id001
         slug:
           type: string
           pattern: ^[a-z0-9][a-z0-9-]{0,62}$
@@ -1065,11 +1067,18 @@ components:
       required:
       - id
       - user_id
+      - email
       - status
       - owner
       properties:
         id: *id002
         user_id: *id002
+        email:
+          type:
+          - string
+          - 'null'
+          format: email
+          description: Verified alias visible only to authorized tenant owners.
         status:
           enum:
           - active
