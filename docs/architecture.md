@@ -94,3 +94,7 @@ User/BFF 新增只读 audit-exports 资源，管理与机器来源分别以独�
 ## 协议登记只读核对 0.18.0
 
 自有 public client 与 machine credential 新增受控 profile 观察。主库先确认 active owner/资源，固定 Admin GET 后再次检查资格与资源版本；网络等待不持有租户锁，资源变更拒绝返回旧观察。DTO 只包含本地 namespace/revision/state、匹配状态/差异字段名、两次检查时间，不回传 Admin 实际值或秘密。读取无本地/远端副作用，不替代 reconcile/cleanup 或持续授权判断。见 [协议核对](protocol-inspection.md) / ADR 0020。
+
+## User 审计客户端 0.19.0
+
+标准库 Go useraudit 库每次调用已有 User audit-exports 主库授权读取，按管理/机器来源返回独立事件类型。调用方提供已有 User Bearer 与预期 tenant；库不承担身份签发、Cookie 或业务授权缓存。可信 HTTPS 原点、受限上下文/大小/完整 JSON 与固定批次投影形成外部消费边界；本地 CLI 仅通过私有 stdin 读取输入，一个批次输出 stdout。详细见 user-audit-client.md / ADR 0021。

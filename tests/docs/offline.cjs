@@ -72,6 +72,7 @@ with zipfile.ZipFile(archive) as z:
       "受控审计批次导出",
       "邀请凭证更新",
       "协议登记只读核对",
+      "外部 User 审计客户端与 CLI",
     ])
       assert(body.includes(marker));
     for (const width of [1365, 768, 390, 320]) {

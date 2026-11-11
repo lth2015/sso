@@ -116,3 +116,7 @@ API Playground 已接入真实控制台授权：接口选择、参数、JSON、I
 ## 协议登记核对 0.18.0
 
 客户端专页和机器凭证卡片增加「只读核对协议登记」，初次不自动请求。按受控字段展示未发现/一致/差异状态，只有已审核字段名称与时间；失败清除旧的一致状态，未知额外字段受控拒绝。父记录写入/刷新、取消、关闭和换空间都清除旧观察，显式激活/撤销/清理仍按原确认与 MFA 流程。截图：[桌面](ui/protocol-inspection-desktop.png) / [手机](ui/protocol-inspection-mobile.png) / [机器凭证](ui/machine-protocol-inspection.png)。
+
+## 外部 User 审计消费入口 0.19.0
+
+本切片增加 Go SDK 和本地 CLI，浏览器界面与现有审计下载流程沿用 0.18。控制台 Playground 仍展示 59 项 User 合同、执行其中 58 项；CLI 一次输出一个已验证批次，错误只输出受控类别，不回显输入。需要交互登录/分页下载时使用既有控制台；SDK 调用方持有真实 User Bearer，完整接入说明见 user-audit-client.md。

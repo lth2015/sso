@@ -68,3 +68,7 @@ Go 服务端验证器、独立回环身份服务及私有 stdin 输入客户端�
 ## 2026-11-11：协议登记只读核对 0.18.0
 
 已实现 owner 的自有 public client/machine credential 受控字段观察与 UI，User 合同 59 项、Playground 可执行 58 项。读前/读后主库复查、网络等待释放租户锁、固定时间/大小/字段投影与取消防迟到；没有自动修复、SK 恢复或周期补偿 worker。见 protocol-inspection.md / ADR 0020 / validation.md。
+
+## 2026-11-11：User 审计客户端 0.19.0
+
+交付标准库 Go 两类固定审计批次客户端及固定本地 stdin CLI，复用 59 项 User 合同，当前只读委托/撤销/realm 与真实独立进程已验收。SDK 不处理登录、存档或跨批快照；业务授权范围扩展、正式通知、遗失设备恢复与生产运维继续按后续切片实施。见 user-audit-client.md / ADR 0021 / validation.md。

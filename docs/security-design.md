@@ -94,3 +94,7 @@ Playground 沿用固定 BFF 目标/路径白名单、cookie/context、Origin/CSR
 ## 协议只读观察 0.18.0
 
 User platform:read 和当前 owner/roles.manage 限定自有资源，初始无资格不访问 Admin，RPC 后失权/版本改变/到期均拒绝返回早先数据。四秒总期限/三秒固定私有目标请求，单份完整 JSON 与 1 MiB 上限；未知敏感字段不进入投影，超限/截断/尾部第二文档/类型错误返回固定故障。仅输出九种受控差异字段名，不输出实际值、AK/SK/hash/registration token；GET 不写审计/outbox。matching 不证明秘密或业务可用，不激活 pending、不恢复已撤销/过期资格。取消、关闭、资源刷新与空间变化丢弃旧观察。见 ADR 0020。
+
+## User 审计客户端 0.19.0
+
+User scope/audit.read、会话/grant/角色与 tenant 始终由 API 主库复查，客户端不保存成功权限；机器事件来源仍要求 User Bearer。HTTPS 原点由可信配置给出，固定本地回环例外需要显式启用；禁止重定向/Cookie，最多五秒和 256 KiB，拒绝缓存/压缩/未知字段/重复键/多份 JSON/错 namespace。失败返回固定类别与零批次，不透出原始响应或网络错误。CLI 不接受 argv/env token，不持久化输入或输出；成功输出是已授权审计数据，接入方负责后续保存。真实 realm/权限与模拟传输边界分别验收，见 user-audit-client.md。
