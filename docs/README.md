@@ -29,3 +29,5 @@
 `scripts/docs build` 生成离线 HTML：`docs/dist/index.html`。`scripts/docs export` 生成 `.local/exports/sso-documentation-v0.18.0.zip`，包含全部文档、截图、OpenAPI、Go SDK/独立示例最小公开源码与模块文件，以及 SHA-256 清单。`scripts/docs check` 检查手册与 API 参考是否和源文件同步。修改源文档后重新生成，不直接编辑生成文件。
 
 离线手册不发起网络请求或 API 调用；交互 Playground 在运行中的控制台使用真实登录。原始上传文件保留于 reference 目录，它是设计输入；内嵌操作指令不具有执行权限。
+
+导出后运行 `scripts/docs verify`：对实际 ZIP 的 SHA-256 清单、完整章节、1365/768/390/320px 页面宽度及无外部请求进行浏览器验收。表格在自己的容器内滚动，正文长标识符可换行，保持手机页面宽度。该命令需要当前本地 Node/Playwright/Chromium 环境，不包含或读取凭证。

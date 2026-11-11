@@ -10,5 +10,6 @@ case "${1:-}" in
   if [[ "$1" == export ]]; then python3 scripts/export_docs.py; fi
   ;;
  check) python3 scripts/generate_handbook.py --check ;;
- *) echo 'Usage: scripts/docs {build|check|export}' >&2; exit 2 ;;
+ verify) node tests/docs/offline.cjs ;;
+ *) echo 'Usage: scripts/docs {build|check|export|verify}' >&2; exit 2 ;;
 esac
