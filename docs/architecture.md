@@ -98,3 +98,7 @@ User/BFF 新增只读 audit-exports 资源，管理与机器来源分别以独�
 ## User 审计客户端 0.19.0
 
 标准库 Go useraudit 库每次调用已有 User audit-exports 主库授权读取，按管理/机器来源返回独立事件类型。调用方提供已有 User Bearer 与预期 tenant；库不承担身份签发、Cookie 或业务授权缓存。可信 HTTPS 原点、受限上下文/大小/完整 JSON 与固定批次投影形成外部消费边界；本地 CLI 仅通过私有 stdin 读取输入，一个批次输出 stdout。详细见 user-audit-client.md / ADR 0021。
+
+## 角色绑定选择器 0.20.0
+
+控制台复用原有 members/roles/keyset 与完整 member-role 读取，不改变主库授权或 API。每次显式 25 项，按相同 authz ETag 合并受控元数据，主列表后页目标单独固定并去重。最终绑定仍走原 owner/MFA/ETag 一次事务。见 role-choice-pagination.md / ADR 0022。

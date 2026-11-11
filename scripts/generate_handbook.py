@@ -78,6 +78,7 @@ sources = [
     ('架构与数据边界', 'architecture.md'),
     ('安全设计', 'security-design.md'),
     ('UI 与交互设计', 'ui-design.md'),
+    ('角色绑定选择器分页', 'role-choice-pagination.md'),
     ('租户权限与恢复边界', 'adr/0008-tenant-roles-and-deny.md'),
     ('公开 API 接入', 'runbooks/public-api.md'),
     ('完整 API 参考', 'api-reference.md'),

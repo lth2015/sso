@@ -73,6 +73,7 @@ with zipfile.ZipFile(archive) as z:
       "邀请凭证更新",
       "协议登记只读核对",
       "外部 User 审计客户端与 CLI",
+      "角色绑定选择器分页",
     ])
       assert(body.includes(marker));
     for (const width of [1365, 768, 390, 320]) {

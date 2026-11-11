@@ -966,18 +966,23 @@ function App() {
               )}
               {tab === "roles" && (
                 <RoleManagement
+                  key={context + base + revision}
+                  context={context}
                   roles={rows}
                   etag={visible?.etag}
                   catalog={permissions?.catalog || []}
                   base={base}
                   me={me}
                   permissions={permissions?.permissions || []}
-                  read={(path) => request(context, csrf.current, "/bff" + path)}
+                  read={(path, options) =>
+                    request(context, csrf.current, "/bff" + path, options)
+                  }
                   write={mutate}
                   busy={busy}
                   error={error}
                   clearError={(e) => setError(e || null)}
                   initialMember={roleMember}
+                  onFailure={fail}
                   onConsumed={() => setRoleMember(null)}
                 />
               )}

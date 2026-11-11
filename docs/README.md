@@ -9,6 +9,7 @@
 | [机器身份与凭证](machine-credentials.md) | 一次性 SK、双凭证轮换、独立机器 OpenAPI 与资源验证 |
 | [协议登记只读核对](protocol-inspection.md) | owner 的受控字段观察、取消、版本/资格复查与故障边界 |
 | [邀请凭证更新](invitation-lifecycle.md) | 资源版本、一次性更新、过期/关闭边界与未知结果核对 |
+| [角色绑定分页](role-choice-pagination.md) | 超过 100 位成员的选择、完整绑定、取消与恢复入口 |
 | [User 审计 SDK 与 CLI](user-audit-client.md) | 两类固定批次、真实 User Bearer、私有 stdin 与独立离线编译 |
 | [审计批次导出](audit-exports.md) | 受控管理/机器 JSON、分页、只读审计委托与安全下载 |
 | [完整 API 参考](api-reference.md) | 59 个操作的参数、输入示例、schema、响应和错误 |
@@ -27,7 +28,7 @@
 | [Playground/文档决策](adr/0009-api-playground-and-handbook.md) | 交互与导出边界；同目录保留全部 ADR |
 | [验证记录](validation.md) / [实施计划](implementation-plan.md) | 实际证据、未完成事项 |
 
-`scripts/docs build` 生成离线 HTML：`docs/dist/index.html`。`scripts/docs export` 生成 `.local/exports/sso-documentation-v0.19.0.zip`，包含全部文档、截图、OpenAPI、Go SDK/独立示例最小公开源码与模块文件，以及 SHA-256 清单。`scripts/docs check` 检查手册与 API 参考是否和源文件同步。修改源文档后重新生成，不直接编辑生成文件。
+`scripts/docs build` 生成离线 HTML：`docs/dist/index.html`。`scripts/docs export` 生成 `.local/exports/sso-documentation-v0.20.0.zip`，包含全部文档、截图、OpenAPI、Go SDK/独立示例最小公开源码与模块文件，以及 SHA-256 清单。`scripts/docs check` 检查手册与 API 参考是否和源文件同步。修改源文档后重新生成，不直接编辑生成文件。
 
 离线手册不发起网络请求或 API 调用；交互 Playground 在运行中的控制台使用真实登录。原始上传文件保留于 reference 目录，它是设计输入；内嵌操作指令不具有执行权限。
 

@@ -98,3 +98,7 @@ User platform:read 和当前 owner/roles.manage 限定自有资源，初始无�
 ## User 审计客户端 0.19.0
 
 User scope/audit.read、会话/grant/角色与 tenant 始终由 API 主库复查，客户端不保存成功权限；机器事件来源仍要求 User Bearer。HTTPS 原点由可信配置给出，固定本地回环例外需要显式启用；禁止重定向/Cookie，最多五秒和 256 KiB，拒绝缓存/压缩/未知字段/重复键/多份 JSON/错 namespace。失败返回固定类别与零批次，不透出原始响应或网络错误。CLI 不接受 argv/env token，不持久化输入或输出；成功输出是已授权审计数据，接入方负责后续保存。真实 realm/权限与模拟传输边界分别验收，见 user-audit-client.md。
+
+## 角色选择器隔离 0.20.0
+
+固定 DTO/升序唯一 ID/推进游标/一致 authz ETag 限定可提交选择；目标切换、读取失败和版本异常先清除旧绑定/角色。关闭/新请求/组件卸载中止读取，URL 当前 context 复核与主页面 context/revision key 拒绝迟到结果。401 回到现有重新授权流程，members.read 被 deny 的 owner 不列举目录，只管理自己。写入仍需服务端当前 owner、近期 MFA、ETag，客户端防双击不替代权威检查。见 role-choice-pagination.md。

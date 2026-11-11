@@ -14,7 +14,7 @@
 
 ## 管理 API 与 OpenAPI
 
-[公共 User OpenAPI](../api/openapi.yaml) 0.19.0 共 59 项业务操作，机器身份切片增加 11 项，审计导出增加 1 项；[Console BFF 合同](../api/console.openapi.yaml) 为相同管理操作提供 cookie/context/CSRF 边界。
+[公共 User OpenAPI](../api/openapi.yaml) 0.20.0 共 59 项业务操作，机器身份切片增加 11 项，审计导出增加 1 项；[Console BFF 合同](../api/console.openapi.yaml) 为相同管理操作提供 cookie/context/CSRF 边界。
 
 | 方法 | 路径（前缀 `/v1/tenants/{tenant}`） | 作用 |
 | --- | --- | --- |
