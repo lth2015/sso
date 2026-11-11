@@ -1,14 +1,14 @@
 # 当前交付验证记录
 
-日期：2026-11-11（累计本地验收）。本地交付 M0 协议实验、M1 数据仓储、M2 账户生命周期，真实 Hydra 登录/MFA/中央会话与双应用 BFF，公共业务 API，以及真实 React/BFF 管理控制台。GCP 部署及云端运维由 SRE 负责。
+日期：2026-11-11（累计本地验收）。本地交付 M0 协议实验、M1 数据仓储、M2 账户生命周期，真实 Hydra 登录/MFA/中央会话与双应用 BFF，公共业务 API，以及真实 React/BFF 管理控制台和租户角色权限。GCP 部署及云端运维由 SRE 负责。
 
 | 检查 | 实际结果 | 边界 |
 | --- | --- | --- |
 | 固定工具链/依赖 | Go 1.27.3；x/crypto v0.58.0、go-oidc v3.21.0、x/oauth2 v0.36.0 及传递依赖锁定在 go.mod/go.sum，校验保持启用 | 未执行完整依赖漏洞审计 |
 | 密码单元测试 | 2 项通过，覆盖 Argon2id salt/格式/校验、畸形参数拒绝和输入策略 | 并发容量另在账户测试中验证 |
-| 全新数据库启动 | sso-console-validation 项目新 volume，M0/业务 Hydra、001–004 迁移、三个 BFF 受限账号/视图、platform-api、React 构建资产及独立 console client 从零建立通过 | 真实本地 MySQL 8.4.13；验证后仅删除自己创建的临时 volume，恢复默认服务 |
+| 全新数据库启动 | sso-rbac-validation 项目新 volume，M0/业务 Hydra、001–005 迁移、三个 BFF 受限账号/视图、platform-api、React 构建资产及独立 console client 从零建立通过 | 真实本地 MySQL 8.4.13；验证后仅删除自己创建的临时 volume，恢复默认服务 |
 | `scripts/m0 test` | 28 项协议测试全部通过 | 合成身份，真实 Hydra |
-| `scripts/m1 test` | 10 项业务数据库测试全部通过 | 真实 MySQL，无 mock |
+| `scripts/m1 test` | 16 项业务数据库测试全部通过 | 真实 MySQL，无 mock |
 | `scripts/m2 test` | 12 项账户/HTTP 测试全部通过，其中 11 项连接真实 MySQL、1 项测试限流器容量；此 profile 明确跳过 5 项 SSO 测试 | SSO 由专用 profile 另行执行 |
 | `node tests/accounts/browser.cjs` | 实际浏览器注册、私有邮箱投递、验证设密、密码确认、恢复流程通过；桌面/手机截图已生成 | 无 cookie/浏览器存储凭证，fragment 已清除；无外部邮件发送 |
 | 账户 OpenAPI | YAML 可解析，四个 POST 合同存在 | 不是正式管理 API 合同 |
@@ -19,12 +19,12 @@
 | BFF 数据库权限 | 三个专用 BFF 账号均验证原表受保护字段被 MySQL 1142/1143 拒绝、另一 client 会话不可见、跨 client 写入被视图 CHECK OPTION 1369 拒绝 | 本地 definer 初始化，生产最小权限账号仍需单独实施 |
 | `go vet ./...` 与 `go test -count=1 ./...` | 通过；TOTP 包包含 6 个 RFC 向量及防重放窗口检查 | 普通 Go 测试明确跳过需要服务/fixture 的情况，不能替代上述集成命令 |
 | SSO OpenAPI | 11 个路径 YAML 可解析，所有本地引用可解析 | 可信交互合同；公共业务 API 使用独立合同 |
-| `scripts/api test` | 18 个业务操作全部实际覆盖，87 个真实 HTTP 响应通过 OpenAPI 校验，成功请求 body 也校验；完整 fixture 清理成功 | 原生 loopback callback、真实 Hydra code+PKCE、真实业务 API/MySQL，无认证 stub |
-| 公共 API 授权边界 | read-only scope 禁写、ID token/坏 token/cookie 拒绝、错租户 path/header 拒绝、非 owner 无成员/组织/邀请/审计管理权限 | 组织归属不提权；当前为 owner-only 管理，非完整 scoped RBAC |
+| `scripts/api test` | 原有 18 个业务操作实际覆盖，87 个真实 HTTP 响应通过 OpenAPI 校验，成功请求 body 也校验；完整 fixture 清理成功 | 原生 loopback callback、真实 Hydra code+PKCE、真实业务 API/MySQL，无认证 stub |
+| 公共 API 授权边界 | read-only scope 禁写、ID token/坏 token/cookie 拒绝、错租户 path/header 拒绝、无角色绑定的成员无成员/组织/邀请/审计管理权限 | 组织归属不提权；租户角色验收见下节，子树/应用/资源范围授权未实现 |
 | 版本与最近 MFA | 同 org ETag 的两个并发写恰好一项 201、一项 412；缺失 428、畸形前置条件 400；旧认证时间写入 403，重新密码/MFA 后可写 | 真实并发 HTTP/数据库事务；refresh 不更新认证时间 |
 | 写入竞态 | 使用真实 access token 验证后递增 fixture User 版本，组织写入及全局新建空间均拒绝；事务内 token 到期也拒绝，无越权组织落库 | 专用 Go profile 从 stdin 读取 fixture，不把 bearer 放入 argv/env/日志 |
 | 邀请/成员/会话 | 邀请撤销、邮箱绑定、一次性接受，成员停用恢复后旧 grant 仍拒绝，最后 owner 保护；会话只允许本人撤销，当前会话撤销后 token 被拒绝 | proof 不进列表/审计；无外部邮件投递 |
-| 公共 API OpenAPI/参考页 | YAML/JSON 同步、引用可解析、operationId 唯一；实际 `/docs` 18 项操作、桌面/手机布局通过 | 默认 api/openapi.yaml 为公共业务合同，M0 原合同逐字保留到 m0-internal.openapi.yaml |
+| 公共 API OpenAPI/参考页 | YAML/JSON 同步、引用可解析、operationId 唯一；实际 `/docs` 26 项操作、桌面/手机布局通过 | 默认 api/openapi.yaml 为公共业务合同，M0 原合同逐字保留到 m0-internal.openapi.yaml |
 
 M2 数据证据：邮箱证明后才创建 User/凭证/个人 Tenant/Root/Membership/owner；挑战与相关事件同事务；同一挑战及同邮箱不同挑战并发时只有一个账户成功且无孤立 User。恢复递增安全版本，旧密码与旧版本恢复挑战拒绝。
 
@@ -36,7 +36,7 @@ M0/M1 既有证据仍包括跨租户/授权链隔离、会话/退出与签名轮
 
 验收期间修复了本地 BFF 共用账号/key、平面网络可达 Admin 的隔离缺口、中文 seed SQL 字符集，以及浏览器测试 API 客户端不解析 .localhost 的测试工具问题；最终浏览器请求使用 Chromium 的真实 cookie/域名行为。修复后相关检查均重新执行通过。
 
-尚未交付：控制台的动态 client/机器凭证/角色管理、完整 scoped RBAC、MFA 管理/受控恢复、正式多语言 SDK、30 天 refresh、真实邮件供应商与全部租户事件消费者。当前两个 BFF 属于同一 Application，不代表完整跨产品权限已验收。账户页面不直接签发 token；M0 合成身份实验独立，业务密码重置不会撤销 M0 token。生产 TLS/Secure cookie、分布式限流、KMS/轮换、负载/安全/云端 HA/DR/SLO 仍需后续实施验收，不在本地记录为通过。
+尚未交付：控制台的动态 client/机器凭证管理、完整 scoped RBAC、MFA 管理/受控恢复、正式多语言 SDK、30 天 refresh、真实邮件供应商与全部租户事件消费者。当前两个 BFF 属于同一 Application，不代表完整跨产品权限已验收。账户页面不直接签发 token；M0 合成身份实验独立，业务密码重置不会撤销 M0 token。生产 TLS/Secure cookie、分布式限流、KMS/轮换、负载/安全/云端 HA/DR/SLO 仍需后续实施验收，不在本地记录为通过。
 
 原始上传文档字节保留；随机本地秘密不进入 Git。源码推送不是生产发布。
 
@@ -68,3 +68,24 @@ M0/M1 既有证据仍包括跨租户/授权链隔离、会话/退出与签名轮
 全新 sso-console-validation volume 验收后仅删除该临时项目的数据，默认开发服务恢复。最后再以清理后的生成资产执行 prepare/up，确认可重复构建；未部署任何公网/GCP 服务。当前实现与剩余功能以 ADR 0007、console 手册为准。
 
 最终 React/CSS/控制台验收脚本使用锁定的格式工具整理；构建产物随之刷新，已重新构建服务并再次执行控制台完整浏览器验收。格式检查与含开发工具的 npm audit 均通过。
+
+
+## 2026-11-11：租户角色与显式拒绝
+
+公共 API 0.6.0 共 26 个业务操作，新增当前有效权限、角色 CRUD 与成员角色绑定管理 8 个操作；浏览器 BFF 合同同步派生。六种操作权限可分别委托，deny 优先；roles.manage 为不可委托/拒绝的 owner 恢复边界。组织子树、Application、资源范围授权仍未实现，前文 owner-only 描述对应早期切片。
+
+| 检查 | 实际结果 | 边界 |
+| --- | --- | --- |
+| RBAC 主库检查 | 新增 6 项，共 16 项真实业务数据库测试通过 | 默认拒绝/deny 撤销、读写分离、owner 保护、邀请创建者当前权限、跨租户/非法策略、历史绑定审计和并发 owner 移除 |
+| `scripts/console rbac-test` | 全新 volume 上 96 个真实响应通过合同校验，新增 8 操作全部实际覆盖 | 3 个已验证合成账户，真实密码/MFA、Hydra code+PKCE、React/BFF/API/MySQL |
+| 角色授权与撤销 | 目录读取/成员写入分别授权，不能自提权或停用 owner；deny 覆盖 allow，策略替换与解绑实时生效；旧授权失效，执行者需重新授权 | 相同策略/绑定 no-op 不递增版本；新授权使用旧 ETag 返回 412 |
+| owner 与跨租户 | owner 的 audit.read 可被拒绝，仍能通过保留角色管理解除绑定；owner 移交/最后 owner 拒绝、跨租户角色对象 404 通过 | 内置角色不可改删；带绑定角色必须先解绑 |
+| UI 与合同 | 实际创建角色、从成员页绑定角色、受委托审计导航通过；业务截图已生成，未发现 JWT 越过 BFF 或页面执行错误 | 修正下拉框可访问名称及浏览器 pattern；截图只含合成业务资料 |
+| 嵌套输入 | 递归重复键、深度、额外 JSON 文档拒绝，合法策略数组接受；4 KiB 与未知字段限制继续生效 | 有界枚举策略，无通配符/自定义表达式 |
+
+连续多轮验收曾触发进程内登录 IP 限流 429；保持限流规则，以独立服务进程隔离浏览器套件，不将重复压测当作同一用户流程。数据库/注册/MFA/Hook 验证均未旁路。角色绑定历史在删除角色后仍能解释成员与角色 code；完整政策前后快照与合规归档尚未实现。详细规则见 ADR 0008。
+
+
+全新 sso-rbac-validation volume 完整回归通过：M0 28、M1 16、M2 12（其 profile 明确跳过专用 SSO 5 项，随后专用 profile 全部通过）、SSO 5、网络隔离 2 次；账户/双应用 SSO/公开 API/React 控制台/RBAC 五个真实浏览器套件及 26 操作文档页通过。原有 18 操作的 87 个响应加新增 8 操作的 96 个响应，共 183 个真实响应通过合同校验。Go vet、普通 Go 测试、spec 同步/引用与唯一 operationId、锁定格式检查、npm audit（0 已知漏洞）通过；普通 Go 的服务 fixture 跳过不计入集成结果。
+
+最终确认合成浏览器账户及私有 mailbox 无遗留；仅移除本轮创建的临时 volume，保留默认开发数据、私有 key/fingerprint，并恢复默认服务。原始上传文档和已应用 001–004 迁移保持不变；新增 005 迁移在默认及全新数据库均已验证。Git 候选文件未匹配本地秘密，未包含私有配置、构建资产或依赖缓存。没有执行公网/GCP 部署；剩余完整 scoped RBAC、MFA/凭证/生产能力按实施计划继续开发。

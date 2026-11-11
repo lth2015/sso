@@ -27,7 +27,7 @@ if users:
  for table in ['protocol_logout_jobs','bff_sessions','business_grants','login_interactions','sso_sessions','mfa_recovery_codes','mfa_factors']:
   sql(f'DELETE FROM {table} WHERE user_id IN ({ids});')
  for tenant in tenants:
-  for table in ['org_memberships','invitations','outbox_events','audit_events','tenant_applications','role_bindings','roles','org_closure','tenant_roots']:
+  for table in ['role_binding_changes','role_policies','org_memberships','invitations','outbox_events','audit_events','tenant_applications','role_bindings','roles','org_closure','tenant_roots']:
    sql(f"DELETE FROM {table} WHERE tenant_id=UNHEX('{tenant}');")
   for _ in range(17):
       sql(f"DELETE leaf FROM org_nodes leaf LEFT JOIN org_nodes child ON child.tenant_id=leaf.tenant_id AND child.parent_id=leaf.id WHERE leaf.tenant_id=UNHEX('{tenant}') AND child.id IS NULL;")

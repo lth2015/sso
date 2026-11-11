@@ -24,7 +24,7 @@ if user:
     tenants=sql(f"SELECT HEX(tenant_id) FROM memberships WHERE user_id=UNHEX('{user}');").splitlines()
     for tenant in tenants:
         if not re.fullmatch('[0-9A-F]{32}',tenant):raise SystemExit('Invalid fixture tenant ID')
-        for table in ['org_memberships','invitations','outbox_events','audit_events','tenant_applications','role_bindings','roles','org_closure','tenant_roots']:
+        for table in ['role_binding_changes','role_policies','org_memberships','invitations','outbox_events','audit_events','tenant_applications','role_bindings','roles','org_closure','tenant_roots']:
             sql(f"DELETE FROM {table} WHERE tenant_id=UNHEX('{tenant}');")
         for _ in range(17):
             sql(f"DELETE leaf FROM org_nodes leaf LEFT JOIN org_nodes child ON child.tenant_id=leaf.tenant_id AND child.parent_id=leaf.id WHERE leaf.tenant_id=UNHEX('{tenant}') AND child.id IS NULL;")

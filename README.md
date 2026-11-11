@@ -36,7 +36,7 @@ scripts/m1 up
 scripts/m1 test
 ```
 
-本地验收现有 28 项真实协议测试和 10 项业务数据库测试。后续开发与本地验收继续在此仓库进行；GCP 部署和云端运维由 SRE 专门负责。
+本地验收现有 28 项真实协议测试和 16 项业务数据库测试。后续开发与本地验收继续在此仓库进行；GCP 部署和云端运维由 SRE 专门负责。
 
 ## 本地账户验证与恢复
 
@@ -70,7 +70,7 @@ node tests/sso/browser.cjs
 
 ## 公共业务 API 与 OpenAPI
 
-新增 18 个面向外部服务端/原生客户端的业务操作：身份/空间、成员停用恢复、组织创建移动/归属、一次性邀请、审计分页和用户会话撤销。采用独立平台 audience、OAuth code+PKCE、Bearer scope、owner 权限和最近 MFA；在业务事务内复查权威资格。公网部署仍由 SRE 负责。
+现有 26 个面向外部服务端/原生客户端的业务操作（包含角色与绑定管理）：身份/空间、成员停用恢复、组织创建移动/归属、一次性邀请、审计分页和用户会话撤销。采用独立平台 audience、OAuth code+PKCE、Bearer scope、租户角色权限和最近 MFA；在业务事务内复查权威资格。公网部署仍由 SRE 负责。
 
 ```sh
 scripts/api prepare
@@ -92,4 +92,7 @@ scripts/console up
 scripts/console test
 ```
 
-见 [控制台手册](docs/runbooks/console.md)、[ADR 0007](docs/adr/0007-console-bff-contexts.md)、[浏览器 BFF OpenAPI](api/console.openapi.yaml) 和 [界面截图](docs/ui/console-overview.png)。React/Vite 用精确 npm lockfile 构建并嵌入 Go 服务，实际运行不需要 Vite 开发服务器。公共 API 0.5.0 增加空间可读名称和 owner 可见的成员邮箱，仍为 18 个业务操作。
+见 [控制台手册](docs/runbooks/console.md)、[ADR 0007](docs/adr/0007-console-bff-contexts.md)、[浏览器 BFF OpenAPI](api/console.openapi.yaml) 和 [界面截图](docs/ui/console-overview.png)。React/Vite 用精确 npm lockfile 构建并嵌入 Go 服务，实际运行不需要 Vite 开发服务器。公共 API 0.6.0 共 26 个业务操作，包含租户角色与成员绑定；成员邮箱读取需要 members.read。
+
+
+租户角色与权限已接入真实 API 和控制台：可分别委托成员、组织、邀请和审计能力，显式拒绝优先；owner 保留角色管理恢复能力。支持角色创建/编辑/删除、成员绑定/解绑和 owner 移交，最后 owner 受并发保护。角色变更使旧授权失效，需重新确认空间。见 [ADR 0008](docs/adr/0008-tenant-roles-and-deny.md)、[角色界面](docs/ui/rbac-roles.png)，验收运行 `scripts/console rbac-test`。当前范围为整个租户，组织子树、应用/资源范围授权仍待实现。

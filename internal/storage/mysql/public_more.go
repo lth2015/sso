@@ -12,9 +12,12 @@ func (s Store) APITenant(ctx context.Context, a Authorization) (v TenantSummary,
 	return
 }
 func (s TenantStore) APIRestoreMember(ctx context.Context, id ID, expected int64) error {
-	return s.publicRead(ctx, func(tx *sql.Tx, av, ov int64) error {
+	return s.publicRead(ctx, "members.write", func(tx *sql.Tx, av, ov int64) error {
 		if av != expected {
 			return ErrConflict
+		}
+		if err := s.guardMemberChange(ctx, tx, id); err != nil {
+			return err
 		}
 		var state, userStatus string
 		e := tx.QueryRowContext(ctx, `SELECT m.status,u.status FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.tenant_id=? AND m.id=? FOR UPDATE`, s.tenant, id).Scan(&state, &userStatus)

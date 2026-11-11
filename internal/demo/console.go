@@ -72,7 +72,7 @@ var consoleRoutes = func() []consoleRoute {
 			continue
 		}
 		pattern := regexp.QuoteMeta(path)
-		for _, name := range []string{"tenant", "member", "org", "invitation", "session"} {
+		for _, name := range []string{"tenant", "member", "org", "invitation", "session", "role"} {
 			pattern = strings.ReplaceAll(pattern, regexp.QuoteMeta("{"+name+"}"), "[a-f0-9]{32}")
 		}
 		for method := range methods {
@@ -195,7 +195,7 @@ func (a *App) mountConsole(mux *http.ServeMux, load func(http.ResponseWriter, *h
 		w.WriteHeader(response.StatusCode)
 		w.Write(data)
 	}
-	for _, method := range []string{"GET", "POST", "PUT"} {
+	for _, method := range []string{"GET", "POST", "PUT", "DELETE"} {
 		mux.HandleFunc(method+" /bff/", proxyHandler)
 	}
 }

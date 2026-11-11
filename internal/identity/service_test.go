@@ -90,7 +90,7 @@ func (f *fixture) cleanup(t *testing.T) {
 		exec("DELETE FROM "+table+" WHERE user_id=?", user)
 	}
 	for _, tenant := range tenants {
-		for _, table := range []string{"outbox_events", "audit_events", "tenant_applications", "role_bindings", "roles", "org_closure", "tenant_roots", "org_nodes", "memberships"} {
+		for _, table := range []string{"role_binding_changes", "role_policies", "outbox_events", "audit_events", "tenant_applications", "role_bindings", "roles", "org_closure", "tenant_roots", "org_nodes", "memberships"} {
 			exec("DELETE FROM "+table+" WHERE tenant_id=?", tenant)
 		}
 		exec(`DELETE FROM tenants WHERE id=?`, tenant)

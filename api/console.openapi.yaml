@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Identity Console Same-Origin BFF
-  version: 0.5.0
+  version: 0.6.0
   description: Browser cookie+context+CSRF boundary. Proxy paths are restricted to
     the public platform contract and one fixed API destination; caller Authorization
     is rejected. OAuth tokens and verifier remain encrypted server-side. Every tab
@@ -209,7 +209,8 @@ paths:
     get:
       operationId: consoleListMembers
       summary: List space memberships
-      description: Active tenant owner required.
+      description: 'Requires members.read on the token tenant. Explicit deny overrides
+        other allows, including owner operational privileges. '
       tags:
       - Tenant management
       security:
@@ -253,14 +254,16 @@ paths:
           $ref: '#/components/responses/Problem'
         '503':
           $ref: '#/components/responses/Problem'
-      x-authorization: active_owner
+      x-authorization: permission:members.read
   /bff/v1/tenants/{tenant}/members/{member}/suspend:
     post:
       operationId: consoleSuspendMember
       summary: Suspend a membership
-      description: Owner and recent MFA required. Last active owner cannot be suspended.
-        Changes increment membership and tenant versions, invalidating existing tenant
-        grants; restoration never revives old grants.
+      description: Requires members.write on the token tenant. Explicit deny overrides
+        other allows, including owner operational privileges. Recent MFA required.
+        Last active owner cannot be suspended. Changes increment membership and tenant
+        versions, invalidating existing tenant grants; restoration never revives old
+        grants.
       tags:
       - Tenant management
       security:
@@ -300,7 +303,7 @@ paths:
           $ref: '#/components/responses/Problem'
         '503':
           $ref: '#/components/responses/Problem'
-      x-authorization: active_owner
+      x-authorization: permission:members.write
       x-recent-mfa-seconds: 300
       requestBody:
         required: true
@@ -312,9 +315,11 @@ paths:
     post:
       operationId: consoleRestoreMember
       summary: Restore a membership
-      description: Owner and recent MFA required. Last active owner cannot be suspended.
-        Changes increment membership and tenant versions, invalidating existing tenant
-        grants; restoration never revives old grants.
+      description: Requires members.write on the token tenant. Explicit deny overrides
+        other allows, including owner operational privileges. Recent MFA required.
+        Last active owner cannot be suspended. Changes increment membership and tenant
+        versions, invalidating existing tenant grants; restoration never revives old
+        grants.
       tags:
       - Tenant management
       security:
@@ -354,7 +359,7 @@ paths:
           $ref: '#/components/responses/Problem'
         '503':
           $ref: '#/components/responses/Problem'
-      x-authorization: active_owner
+      x-authorization: permission:members.write
       x-recent-mfa-seconds: 300
       requestBody:
         required: true
@@ -366,7 +371,8 @@ paths:
     get:
       operationId: consoleListOrganizations
       summary: List space organization nodes
-      description: Active tenant owner required.
+      description: 'Requires organizations.read on the token tenant. Explicit deny
+        overrides other allows, including owner operational privileges. '
       tags:
       - Tenant management
       security:
@@ -410,11 +416,12 @@ paths:
           $ref: '#/components/responses/Problem'
         '503':
           $ref: '#/components/responses/Problem'
-      x-authorization: active_owner
+      x-authorization: permission:organizations.read
     post:
       operationId: consoleCreateOrganization
       summary: Create an organization under an existing parent
-      description: Active tenant owner required.
+      description: 'Requires organizations.write on the token tenant. Explicit deny
+        overrides other allows, including owner operational privileges. '
       tags:
       - Tenant management
       security:
@@ -459,7 +466,7 @@ paths:
           $ref: '#/components/responses/Problem'
         '503':
           $ref: '#/components/responses/Problem'
-      x-authorization: active_owner
+      x-authorization: permission:organizations.write
       x-recent-mfa-seconds: 300
       requestBody:
         required: true
@@ -471,9 +478,11 @@ paths:
     post:
       operationId: consoleMoveOrganization
       summary: Preview or execute an organization move
-      description: Owner and recent MFA required, including preview. Root/cycle/depth
-        checks apply. Preview changes no state. Executing changes organization and
-        tenant authorization versions; obtain a new authorization afterwards.
+      description: Requires organizations.write on the token tenant. Explicit deny
+        overrides other allows, including owner operational privileges. Recent MFA
+        required, including preview. Root/cycle/depth checks apply. Preview changes
+        no state. Executing changes organization and tenant authorization versions;
+        obtain a new authorization afterwards.
       tags:
       - Tenant management
       security:
@@ -517,7 +526,7 @@ paths:
           $ref: '#/components/responses/Problem'
         '503':
           $ref: '#/components/responses/Problem'
-      x-authorization: active_owner
+      x-authorization: permission:organizations.write
       x-recent-mfa-seconds: 300
       requestBody:
         required: true
@@ -529,8 +538,10 @@ paths:
     put:
       operationId: consoleAssignOrganization
       summary: Associate a membership with an organization
-      description: Association does not grant owner or other roles. Changes tenant
-        authorization version; obtain a new authorization afterwards.
+      description: Requires organizations.write on the token tenant. Explicit deny
+        overrides other allows, including owner operational privileges. Association
+        does not grant owner or other roles. Changes tenant authorization version;
+        obtain a new authorization afterwards.
       tags:
       - Tenant management
       security:
@@ -571,7 +582,7 @@ paths:
           $ref: '#/components/responses/Problem'
         '503':
           $ref: '#/components/responses/Problem'
-      x-authorization: active_owner
+      x-authorization: permission:organizations.write
       x-recent-mfa-seconds: 300
       requestBody:
         required: true
@@ -583,7 +594,8 @@ paths:
     get:
       operationId: consoleListInvitations
       summary: List invitation metadata without bearer secrets
-      description: Active tenant owner required.
+      description: 'Requires invitations.manage on the token tenant. Explicit deny
+        overrides other allows, including owner operational privileges. '
       tags:
       - Tenant management
       security:
@@ -625,13 +637,15 @@ paths:
           $ref: '#/components/responses/Problem'
         '503':
           $ref: '#/components/responses/Problem'
-      x-authorization: active_owner
+      x-authorization: permission:invitations.manage
     post:
       operationId: consoleCreateInvitation
       summary: Create an email-bound one-time invitation
-      description: Owner and recent MFA required. Token is returned once, stored only
-        as a digest and never in audit/outbox. The caller delivers it securely; no
-        external email is sent. Invitations grant membership only.
+      description: Requires invitations.manage on the token tenant. Explicit deny
+        overrides other allows, including owner operational privileges. Recent MFA
+        required. Token is returned once, stored only as a digest and never in audit/outbox.
+        The caller delivers it securely; no external email is sent. Invitations grant
+        membership only.
       tags:
       - Tenant management
       security:
@@ -673,7 +687,7 @@ paths:
           $ref: '#/components/responses/Problem'
         '503':
           $ref: '#/components/responses/Problem'
-      x-authorization: active_owner
+      x-authorization: permission:invitations.manage
       x-recent-mfa-seconds: 300
       requestBody:
         required: true
@@ -685,9 +699,10 @@ paths:
     post:
       operationId: consoleRevokeInvitation
       summary: Close an invitation so its proof cannot be accepted
-      description: Owner and recent MFA required. Idempotently closes the proof; already
-        closed proofs stay closed. Audit records the first revocation; closed includes
-        accepted or revoked.
+      description: Requires invitations.manage on the token tenant. Explicit deny
+        overrides other allows, including owner operational privileges. Recent MFA
+        required. Idempotently closes the proof; already closed proofs stay closed.
+        Audit records the first revocation; closed includes accepted or revoked.
       tags:
       - Tenant management
       security:
@@ -726,7 +741,7 @@ paths:
           $ref: '#/components/responses/Problem'
         '503':
           $ref: '#/components/responses/Problem'
-      x-authorization: active_owner
+      x-authorization: permission:invitations.manage
       x-recent-mfa-seconds: 300
       requestBody:
         required: true
@@ -793,7 +808,8 @@ paths:
     get:
       operationId: consoleListAuditEvents
       summary: List controlled space audit metadata
-      description: Active tenant owner required.
+      description: 'Requires audit.read on the token tenant. Explicit deny overrides
+        other allows, including owner operational privileges. '
       tags:
       - Tenant management
       security:
@@ -835,7 +851,7 @@ paths:
           $ref: '#/components/responses/Problem'
         '503':
           $ref: '#/components/responses/Problem'
-      x-authorization: active_owner
+      x-authorization: permission:audit.read
   /bff/v1/sessions:
     get:
       operationId: consoleListMySessions
@@ -925,6 +941,421 @@ paths:
           $ref: '#/components/responses/Problem'
         '503':
           $ref: '#/components/responses/Problem'
+      x-recent-mfa-seconds: 300
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Empty'
+  /bff/v1/tenants/{tenant}/permissions:
+    get:
+      operationId: consoleGetMyPermissions
+      summary: Get the current membership effective permissions
+      description: Any current member may inspect their own effective set. Explicit
+        deny wins across tenant-scoped roles. Reserved owner roles.manage is retained
+        for recovery and cannot be expressed in custom policies.
+      tags:
+      - Tenant management
+      security:
+      - ConsoleCookie: []
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/Context'
+      responses:
+        '200':
+          description: Get the current membership effective permissions
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionSnapshot'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+  /bff/v1/tenants/{tenant}/roles:
+    get:
+      operationId: consoleListRoles
+      summary: List tenant roles and rules
+      description: Active tenant owner required.
+      tags:
+      - Tenant management
+      security:
+      - ConsoleCookie: []
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/After'
+      - $ref: '#/components/parameters/Context'
+      responses:
+        '200':
+          description: List tenant roles and rules
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RolePage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: reserved_owner:roles.manage
+    post:
+      operationId: consoleCreateRole
+      summary: Create a tenant-scoped custom role
+      description: Active tenant owner required.
+      tags:
+      - Tenant management
+      security:
+      - ConsoleCookie: []
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/AuthzMatch'
+      - $ref: '#/components/parameters/Context'
+      - $ref: '#/components/parameters/CSRF'
+      - $ref: '#/components/parameters/Origin'
+      responses:
+        '201':
+          description: Create a tenant-scoped custom role
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleCreated'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: reserved_owner:roles.manage
+      x-recent-mfa-seconds: 300
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleInput'
+  /bff/v1/tenants/{tenant}/roles/{role}:
+    put:
+      operationId: consoleReplaceRole
+      summary: Replace all custom role rules
+      description: Owner and recent MFA required. Reserved owner is immutable. Duplicate
+        rules and reserved permissions are invalid. Changed policies increment tenant
+        authorization version and invalidate prior tenant grants; identical rules
+        are a no-op.
+      tags:
+      - Tenant management
+      security:
+      - ConsoleCookie: []
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/roleID'
+      - $ref: '#/components/parameters/AuthzMatch'
+      - $ref: '#/components/parameters/Context'
+      - $ref: '#/components/parameters/CSRF'
+      - $ref: '#/components/parameters/Origin'
+      responses:
+        '204':
+          description: Replace all custom role rules
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: reserved_owner:roles.manage
+      x-recent-mfa-seconds: 300
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleUpdate'
+    delete:
+      operationId: consoleDeleteRole
+      summary: Delete an unbound custom role
+      description: Owner and recent MFA required. Built-in owner cannot be deleted;
+        roles with bindings return role_in_use. Changed state invalidates tenant grants.
+      tags:
+      - Tenant management
+      security:
+      - ConsoleCookie: []
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/roleID'
+      - $ref: '#/components/parameters/AuthzMatch'
+      - $ref: '#/components/parameters/Context'
+      - $ref: '#/components/parameters/CSRF'
+      - $ref: '#/components/parameters/Origin'
+      responses:
+        '204':
+          description: Delete an unbound custom role
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: reserved_owner:roles.manage
+      x-recent-mfa-seconds: 300
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Empty'
+  /bff/v1/tenants/{tenant}/members/{member}/roles:
+    get:
+      operationId: consoleListMemberRoles
+      summary: List one tenant membership role bindings
+      description: Active tenant owner required.
+      tags:
+      - Tenant management
+      security:
+      - ConsoleCookie: []
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/memberID'
+      - $ref: '#/components/parameters/Context'
+      responses:
+        '200':
+          description: List one tenant membership role bindings
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberRoles'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: reserved_owner:roles.manage
+  /bff/v1/tenants/{tenant}/members/{member}/roles/{role}:
+    put:
+      operationId: consoleBindRole
+      summary: Bind a tenant role to a membership
+      description: Owner and recent MFA required. Both objects must belong to the
+        token tenant. Owner grants/revocations are explicit reserved-role operations;
+        last active owner cannot be removed. Repeating the same binding state with
+        the current ETag is a no-op. A real change increments tenant authz_version;
+        old grants must reauthorize. Audit preserves member and role metadata even
+        after role deletion.
+      tags:
+      - Tenant management
+      security:
+      - ConsoleCookie: []
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/memberID'
+      - $ref: '#/components/parameters/roleID'
+      - $ref: '#/components/parameters/AuthzMatch'
+      - $ref: '#/components/parameters/Context'
+      - $ref: '#/components/parameters/CSRF'
+      - $ref: '#/components/parameters/Origin'
+      responses:
+        '204':
+          description: Bind a tenant role to a membership
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: reserved_owner:roles.manage
+      x-recent-mfa-seconds: 300
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Empty'
+    delete:
+      operationId: consoleUnbindRole
+      summary: Unbind a tenant role to a membership
+      description: Owner and recent MFA required. Both objects must belong to the
+        token tenant. Owner grants/revocations are explicit reserved-role operations;
+        last active owner cannot be removed. Repeating the same binding state with
+        the current ETag is a no-op. A real change increments tenant authz_version;
+        old grants must reauthorize. Audit preserves member and role metadata even
+        after role deletion.
+      tags:
+      - Tenant management
+      security:
+      - ConsoleCookie: []
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/memberID'
+      - $ref: '#/components/parameters/roleID'
+      - $ref: '#/components/parameters/AuthzMatch'
+      - $ref: '#/components/parameters/Context'
+      - $ref: '#/components/parameters/CSRF'
+      - $ref: '#/components/parameters/Origin'
+      responses:
+        '204':
+          description: Unbind a tenant role to a membership
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: reserved_owner:roles.manage
       x-recent-mfa-seconds: 300
       requestBody:
         required: true
@@ -1418,6 +1849,14 @@ components:
         occurred_at:
           type: string
           format: date-time
+        role_id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        membership_id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        role_code:
+          type: string
     Session:
       type: object
       additionalProperties: false
@@ -1554,6 +1993,171 @@ components:
           - string
           - 'null'
           pattern: ^[a-f0-9]{32}$
+    RolePolicy:
+      type: object
+      additionalProperties: false
+      required:
+      - permission
+      - effect
+      properties:
+        permission:
+          enum:
+          - audit.read
+          - invitations.manage
+          - members.read
+          - members.write
+          - organizations.read
+          - organizations.write
+        effect:
+          enum:
+          - allow
+          - deny
+    RoleInput:
+      type: object
+      additionalProperties: false
+      required:
+      - code
+      - policies
+      properties:
+        code:
+          type: string
+          pattern: ^[a-z][a-z0-9_-]{0,62}$
+          not:
+            const: owner
+        policies:
+          type: array
+          maxItems: 12
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/RolePolicy'
+    RoleUpdate:
+      type: object
+      additionalProperties: false
+      required:
+      - policies
+      properties:
+        policies:
+          type: array
+          maxItems: 12
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/RolePolicy'
+    Role:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - code
+      - built_in
+      - scope
+      - policies
+      - binding_count
+      properties:
+        id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        code:
+          type: string
+        built_in:
+          type: boolean
+        scope:
+          const: tenant
+        policies:
+          type: array
+          items:
+            $ref: '#/components/schemas/RolePolicy'
+        binding_count:
+          type: integer
+          minimum: 0
+    RolePage:
+      type: object
+      additionalProperties: false
+      required:
+      - items
+      - next_cursor
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/Role'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          pattern: ^[a-f0-9]{32}$
+    RoleCreated:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - authz_version
+      properties:
+        id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        authz_version:
+          type: integer
+          minimum: 1
+    MemberRoles:
+      type: object
+      additionalProperties: false
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/Role'
+    PermissionSnapshot:
+      type: object
+      additionalProperties: false
+      required:
+      - permissions
+      - denied
+      - owner
+      - authz_version
+      - catalog
+      properties:
+        permissions:
+          type: array
+          uniqueItems: true
+          items:
+            enum:
+            - audit.read
+            - invitations.manage
+            - members.read
+            - members.write
+            - organizations.read
+            - organizations.write
+            - roles.manage
+        denied:
+          type: array
+          uniqueItems: true
+          items:
+            enum:
+            - audit.read
+            - invitations.manage
+            - members.read
+            - members.write
+            - organizations.read
+            - organizations.write
+        owner:
+          type: boolean
+        authz_version:
+          type: integer
+          minimum: 1
+        catalog:
+          type: array
+          items:
+            enum:
+            - audit.read
+            - invitations.manage
+            - members.read
+            - members.write
+            - organizations.read
+            - organizations.write
     BFFError:
       type: object
       additionalProperties: false
@@ -1633,6 +2237,13 @@ components:
       schema:
         type: string
         pattern: ^[a-f0-9]{32}$
+    roleID:
+      in: path
+      name: role
+      required: true
+      schema:
+        type: string
+        pattern: ^[a-f0-9]{32}$
     Context:
       in: header
       name: X-Console-Context
@@ -1661,9 +2272,9 @@ components:
     Problem:
       description: RFC 9457 problem. Fixed code only; no input, token or SQL echoed.
         Codes include invalid_token, forbidden, insufficient_scope, recent_mfa_required,
-        tenant_mismatch, invalid_request, not_found, already_exists, last_active_owner,
-        root_cannot_move, organization_cycle, version_conflict, precondition_required,
-        invalid_precondition, rate_limited, temporarily_unavailable.
+        tenant_mismatch, invalid_request, not_found, already_exists, reserved_role,
+        role_in_use, last_active_owner, root_cannot_move, organization_cycle, version_conflict,
+        precondition_required, invalid_precondition, rate_limited, temporarily_unavailable.
       headers:
         X-Request-ID:
           $ref: '#/components/headers/RequestID'

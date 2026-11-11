@@ -80,3 +80,14 @@ func TestAPIRevocationBetweenAuthenticationAndWrite(t *testing.T) {
 		t.Fatal("global mutation accepted revoked authority")
 	}
 }
+
+func TestRBACNestedInputRejectsDuplicateKeysAndDepth(t *testing.T) {
+	for _, body := range []string{`{"policies":[{"permission":"audit.read","effect":"allow","effect":"deny"}]}`, `{"policies":[],"policies":[]}`, `{"x":[[[[[[[[]]]]]]]]}`, `[]`, `{} {}`} {
+		if strictNestedObject([]byte(body)) {
+			t.Fatal("ambiguous/deep role request accepted")
+		}
+	}
+	if !strictNestedObject([]byte(`{"policies":[{"permission":"audit.read","effect":"allow"}]}`)) {
+		t.Fatal("typed role policy container rejected")
+	}
+}

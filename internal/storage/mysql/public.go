@@ -30,11 +30,14 @@ type InvitationSummary struct {
 	State   string `json:"state"`
 }
 type AuditSummary struct {
-	ID     string    `json:"id"`
-	Actor  string    `json:"actor_membership_id"`
-	Action string    `json:"action"`
-	Target string    `json:"target_id"`
-	At     time.Time `json:"occurred_at"`
+	ID         string    `json:"id"`
+	Actor      string    `json:"actor_membership_id"`
+	Action     string    `json:"action"`
+	Target     string    `json:"target_id"`
+	At         time.Time `json:"occurred_at"`
+	RoleID     *string   `json:"role_id,omitempty"`
+	RoleCode   *string   `json:"role_code,omitempty"`
+	Membership *string   `json:"membership_id,omitempty"`
 }
 type SessionSummary struct {
 	ID       string `json:"id"`
@@ -93,13 +96,13 @@ func (s Store) APIBootstrap(ctx context.Context, a Authorization, slug, name str
 	})
 	return
 }
-func (s TenantStore) publicRead(ctx context.Context, run func(*sql.Tx, int64, int64) error) error {
+func (s TenantStore) publicRead(ctx context.Context, permission string, run func(*sql.Tx, int64, int64) error) error {
 	tx, err := s.store.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	av, ov, err := s.lockOwner(ctx, tx)
+	av, ov, err := s.lockPermission(ctx, tx, permission)
 	if err != nil {
 		return err
 	}
@@ -110,7 +113,7 @@ func (s TenantStore) publicRead(ctx context.Context, run func(*sql.Tx, int64, in
 }
 func (s TenantStore) APIMembers(ctx context.Context, limit int, after ID) (items []MemberSummary, version int64, err error) {
 	items = []MemberSummary{}
-	err = s.publicRead(ctx, func(tx *sql.Tx, av, ov int64) error {
+	err = s.publicRead(ctx, "members.read", func(tx *sql.Tx, av, ov int64) error {
 		version = av
 		rows, e := tx.QueryContext(ctx, `SELECT LOWER(HEX(m.id)),LOWER(HEX(m.user_id)),m.status,EXISTS(SELECT 1 FROM role_bindings b JOIN roles r ON r.tenant_id=b.tenant_id AND r.id=b.role_id WHERE b.tenant_id=m.tenant_id AND b.membership_id=m.id AND r.code='owner'),(SELECT normalized_email FROM login_aliases a WHERE a.user_id=m.user_id AND a.verified_at IS NOT NULL ORDER BY normalized_email LIMIT 1) FROM memberships m WHERE m.tenant_id=? AND m.id>? ORDER BY m.id LIMIT ?`, s.tenant, after, limit)
 		if e != nil {
@@ -134,7 +137,7 @@ func (s TenantStore) APIMembers(ctx context.Context, limit int, after ID) (items
 }
 func (s TenantStore) APIOrganizations(ctx context.Context, limit int, after ID) (items []Org, version int64, err error) {
 	items = []Org{}
-	err = s.publicRead(ctx, func(tx *sql.Tx, av, ov int64) error {
+	err = s.publicRead(ctx, "organizations.read", func(tx *sql.Tx, av, ov int64) error {
 		version = ov
 		rows, e := tx.QueryContext(ctx, `SELECT id,parent_id,name FROM org_nodes WHERE tenant_id=? AND id>? ORDER BY id LIMIT ?`, s.tenant, after, limit)
 		if e != nil {
@@ -162,7 +165,7 @@ func (s TenantStore) APIOrganizations(ctx context.Context, limit int, after ID) 
 }
 func (s TenantStore) APIInvitations(ctx context.Context, limit int, after ID) (items []InvitationSummary, err error) {
 	items = []InvitationSummary{}
-	err = s.publicRead(ctx, func(tx *sql.Tx, av, ov int64) error {
+	err = s.publicRead(ctx, "invitations.manage", func(tx *sql.Tx, av, ov int64) error {
 		rows, e := tx.QueryContext(ctx, `SELECT LOWER(HEX(id)),target_email,expires_at,IF(consumed_at IS NOT NULL,'closed',IF(expires_at<=?,'expired','pending')) FROM invitations WHERE tenant_id=? AND id>? ORDER BY id LIMIT ?`, time.Now().Unix(), s.tenant, after, limit)
 		if e != nil {
 			return e
@@ -180,7 +183,7 @@ func (s TenantStore) APIInvitations(ctx context.Context, limit int, after ID) (i
 	return
 }
 func (s TenantStore) APIRevokeInvitation(ctx context.Context, id ID) error {
-	return s.publicRead(ctx, func(tx *sql.Tx, av, ov int64) error {
+	return s.publicRead(ctx, "invitations.manage", func(tx *sql.Tx, av, ov int64) error {
 		var consumed sql.NullTime
 		e := tx.QueryRowContext(ctx, `SELECT consumed_at FROM invitations WHERE tenant_id=? AND id=? FOR UPDATE`, s.tenant, id).Scan(&consumed)
 		if e == sql.ErrNoRows {
@@ -200,16 +203,22 @@ func (s TenantStore) APIRevokeInvitation(ctx context.Context, id ID) error {
 }
 func (s TenantStore) APIAudit(ctx context.Context, limit int, after ID) (items []AuditSummary, err error) {
 	items = []AuditSummary{}
-	err = s.publicRead(ctx, func(tx *sql.Tx, av, ov int64) error {
-		rows, e := tx.QueryContext(ctx, `SELECT LOWER(HEX(event_id)),LOWER(HEX(actor_membership_id)),action,LOWER(HEX(target_id)),occurred_at FROM audit_events WHERE tenant_id=? AND event_id>? ORDER BY event_id LIMIT ?`, s.tenant, after, limit)
+	err = s.publicRead(ctx, "audit.read", func(tx *sql.Tx, av, ov int64) error {
+		rows, e := tx.QueryContext(ctx, `SELECT LOWER(HEX(a.event_id)),LOWER(HEX(a.actor_membership_id)),a.action,LOWER(HEX(a.target_id)),a.occurred_at,LOWER(HEX(c.role_id)),c.role_code,LOWER(HEX(c.membership_id)) FROM audit_events a LEFT JOIN role_binding_changes c ON c.tenant_id=a.tenant_id AND c.id=a.target_id WHERE a.tenant_id=? AND a.event_id>? ORDER BY a.event_id LIMIT ?`, s.tenant, after, limit)
 		if e != nil {
 			return e
 		}
 		defer rows.Close()
 		for rows.Next() {
 			var v AuditSummary
-			if e = rows.Scan(&v.ID, &v.Actor, &v.Action, &v.Target, &v.At); e != nil {
+			var roleID, roleCode, member sql.NullString
+			if e = rows.Scan(&v.ID, &v.Actor, &v.Action, &v.Target, &v.At, &roleID, &roleCode, &member); e != nil {
 				return e
+			}
+			if roleID.Valid {
+				v.RoleID = &roleID.String
+				v.RoleCode = &roleCode.String
+				v.Membership = &member.String
 			}
 			items = append(items, v)
 		}

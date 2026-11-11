@@ -52,6 +52,8 @@ export const errorText = (error) =>
     network_unavailable:
       "连接中断，操作结果可能已保存。请刷新核对后再决定是否重试。",
     recent_mfa_required: "请重新验证身份，再发起这项操作。",
+    reserved_role: "内置所有者角色不能编辑或删除。",
+    role_in_use: "请先移除该角色的所有成员绑定。",
     last_active_owner: "至少需要保留一位有效的空间所有者。",
     version_conflict: "资料已被其他操作更新，请刷新后重新确认。",
     already_exists: "相同记录已存在，请核对后再操作。",

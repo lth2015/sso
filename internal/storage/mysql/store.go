@@ -112,39 +112,9 @@ func (s Store) ForTenant(tenant, actor ID) TenantStore {
 // lockOwner serializes safety-critical changes per tenant, then checks active
 // User, Membership, Tenant and owner binding from the primary inside the tx.
 func (s TenantStore) lockOwner(ctx context.Context, tx *sql.Tx) (int64, int64, error) {
-	if s.tenant.empty() || s.actor.empty() {
-		return 0, 0, ErrDenied
-	}
-	var authz, org int64
-	var status string
-	err := tx.QueryRowContext(ctx, `SELECT status,authz_version,org_version FROM tenants WHERE id=? FOR UPDATE`, s.tenant).Scan(&status, &authz, &org)
-	if err == sql.ErrNoRows {
-		return 0, 0, ErrNotFound
-	}
-	if err != nil {
-		return 0, 0, err
-	}
-	if status != "active" {
-		return 0, 0, ErrDenied
-	}
-	if s.authority != nil {
-		if s.authority.Tenant != s.tenant || s.authority.Member != s.actor {
-			return 0, 0, ErrDenied
-		}
-		if err = lockAuthorization(ctx, tx, *s.authority); err != nil {
-			return 0, 0, err
-		}
-	}
-	var count int
-	err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM memberships m JOIN users u ON u.id=m.user_id JOIN role_bindings b ON b.tenant_id=m.tenant_id AND b.membership_id=m.id JOIN roles r ON r.tenant_id=b.tenant_id AND r.id=b.role_id WHERE m.tenant_id=? AND m.id=? AND m.status='active' AND u.status='active' AND r.code='owner'`, s.tenant, s.actor).Scan(&count)
-	if err != nil {
-		return 0, 0, err
-	}
-	if count != 1 {
-		return 0, 0, ErrDenied
-	}
-	return authz, org, nil
+	return s.lockPermission(ctx, tx, RoleManagement)
 }
+
 func record(ctx context.Context, tx *sql.Tx, tenant, actor ID, action string, target ID, version int64) error {
 	event, err := NewID()
 	if err != nil {
@@ -163,7 +133,7 @@ func (s TenantStore) ListOrganizations(ctx context.Context) ([]Org, error) {
 	}
 	defer tx.Rollback()
 	// This initial management slice is owner-only until scoped RBAC is implemented.
-	if _, _, err = s.lockOwner(ctx, tx); err != nil {
+	if _, _, err = s.lockPermission(ctx, tx, "organizations.read"); err != nil {
 		return nil, err
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT id,parent_id,name FROM org_nodes WHERE tenant_id=? ORDER BY id`, s.tenant)
@@ -202,7 +172,7 @@ func (s TenantStore) AddOrganization(ctx context.Context, parent ID, name string
 		return ID{}, err
 	}
 	defer tx.Rollback()
-	_, version, err := s.lockOwner(ctx, tx)
+	_, version, err := s.lockPermission(ctx, tx, "organizations.write")
 	if err != nil {
 		return ID{}, err
 	}
@@ -255,12 +225,15 @@ func (s TenantStore) SuspendMember(ctx context.Context, target ID, expectedVersi
 		return err
 	}
 	defer tx.Rollback()
-	version, _, err := s.lockOwner(ctx, tx)
+	version, _, err := s.lockPermission(ctx, tx, "members.write")
 	if err != nil {
 		return err
 	}
 	if version != expectedVersion {
 		return ErrConflict
+	}
+	if err = s.guardMemberChange(ctx, tx, target); err != nil {
+		return err
 	}
 	var status string
 	if err = tx.QueryRowContext(ctx, `SELECT status FROM memberships WHERE tenant_id=? AND id=? FOR UPDATE`, s.tenant, target).Scan(&status); err == sql.ErrNoRows {
@@ -311,7 +284,7 @@ func (s TenantStore) MoveOrganization(ctx context.Context, node, parent ID, expe
 		return plan, err
 	}
 	defer tx.Rollback()
-	_, version, err := s.lockOwner(ctx, tx)
+	_, version, err := s.lockPermission(ctx, tx, "organizations.write")
 	if err != nil {
 		return plan, err
 	}

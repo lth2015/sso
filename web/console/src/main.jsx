@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { request, errorText, ApiError } from "./api.js";
 import "./style.css";
+import RoleManagement from "./RoleManagement.jsx";
 
 const tabs = [
   ["overview", "空间概览", "◈"],
@@ -9,9 +10,16 @@ const tabs = [
   ["organizations", "组织", "▦"],
   ["invitations", "邀请", "↗"],
   ["audit", "审计", "≡"],
+  ["roles", "角色与权限", "⚿"],
   ["sessions", "安全会话", "◉"],
 ];
-const adminTabs = new Set(["members", "organizations", "invitations", "audit"]);
+const tabPermissions = {
+  members: "members.read",
+  organizations: "organizations.read",
+  invitations: "invitations.manage",
+  audit: "audit.read",
+  roles: "roles.manage",
+};
 const contextFromURL = () =>
   /^#workspace=([a-f0-9]{32})$/.exec(location.hash)?.[1] || "";
 const short = (id) => (id ? id.slice(0, 8) + "…" : "—");
@@ -20,6 +28,11 @@ const date = (value) =>
     "zh-CN",
   );
 const actionNames = {
+  "role.created": "创建角色",
+  "role.updated": "更新角色规则",
+  "role.deleted": "删除角色",
+  "role.bound": "授予角色",
+  "role.unbound": "移除角色",
   "tenant.created": "创建空间",
   "org.created": "创建组织",
   "org.moved": "移动组织",
@@ -78,6 +91,10 @@ function Dialog({ title, children, busy, onClose }) {
 function App() {
   const [context, setContext] = useState(contextFromURL),
     [tab, setTab] = useState("overview");
+  const [permissions, setPermissions] = useState(null),
+    [roleMember, setRoleMember] = useState(null);
+  const can = (permission) =>
+    permissions?.permissions?.includes(permission) || false;
   const [session, setSession] = useState(null),
     [me, setMe] = useState(null),
     [tenant, setTenant] = useState(null),
@@ -124,6 +141,8 @@ function App() {
     setSession(null);
     setMe(null);
     setTenant(null);
+    setPermissions(null);
+    setRoleMember(null);
     setData(null);
     setError(null);
     setAuthNeeded(false);
@@ -149,6 +168,14 @@ function App() {
           { signal: abort.signal },
         )
       ).data;
+      const effective = (
+        await request(
+          context,
+          value.csrf,
+          "/bff/v1/tenants/" + identity.tenant_id + "/permissions",
+          { signal: abort.signal },
+        )
+      ).data;
       if (
         generation !== epoch.current ||
         current.current !== context ||
@@ -159,6 +186,7 @@ function App() {
       setSession(value);
       setMe(identity);
       setTenant(detail);
+      setPermissions(effective);
     })()
       .catch((error) => {
         if (
@@ -241,7 +269,13 @@ function App() {
   async function mutate(
     path,
     body,
-    { etag, invalidates = false, message = "操作已完成。", onSuccess } = {},
+    {
+      etag,
+      method,
+      invalidates = false,
+      message = "操作已完成。",
+      onSuccess,
+    } = {},
   ) {
     const generation = epoch.current;
     setBusy(true);
@@ -249,9 +283,10 @@ function App() {
     try {
       const response = await request(context, csrf.current, "/bff" + path, {
         method:
-          path.includes("/organizations/") && path.includes("/members/")
+          method ||
+          (path.includes("/organizations/") && path.includes("/members/")
             ? "PUT"
-            : "POST",
+            : "POST"),
         body,
         etag,
       });
@@ -438,7 +473,7 @@ function App() {
         </a>
         <nav aria-label="主导航">
           {tabs
-            .filter(([id]) => !adminTabs.has(id) || tenant?.owner)
+            .filter(([id]) => !tabPermissions[id] || can(tabPermissions[id]))
             .map(([id, label, icon]) => (
               <button
                 key={id}
@@ -590,9 +625,11 @@ function App() {
                 <section className="panel">
                   <div className="panel-heading">
                     <h2>空间成员</h2>
-                    <button onClick={() => open({ kind: "invite" })}>
-                      邀请成员
-                    </button>
+                    {can("invitations.manage") && (
+                      <button onClick={() => open({ kind: "invite" })}>
+                        邀请成员
+                      </button>
+                    )}
                   </div>
                   <Table
                     headers={["账户", "角色", "状态", "操作"]}
@@ -616,12 +653,28 @@ function App() {
                           </span>
                         </td>
                         <td>
-                          <button
-                            className="text-button"
-                            onClick={() => open({ kind: "member", row })}
-                          >
-                            {row.status === "active" ? "停用成员" : "恢复成员"}
-                          </button>
+                          {can("members.write") &&
+                            (!row.owner || tenant.owner) && (
+                              <button
+                                className="text-button"
+                                onClick={() => open({ kind: "member", row })}
+                              >
+                                {row.status === "active"
+                                  ? "停用成员"
+                                  : "恢复成员"}
+                              </button>
+                            )}
+                          {can("roles.manage") && (
+                            <button
+                              className="text-button"
+                              onClick={() => {
+                                setRoleMember(row);
+                                navigate("roles");
+                              }}
+                            >
+                              管理角色
+                            </button>
+                          )}
                         </td>
                       </>
                     )}
@@ -633,36 +686,40 @@ function App() {
                   <div className="panel-heading">
                     <h2>组织结构</h2>
                     <div className="actions">
-                      <button
-                        className="secondary"
-                        onClick={async () => {
-                          const generation = epoch.current;
-                          try {
-                            const response = await request(
-                              context,
-                              csrf.current,
-                              "/bff" + base + "/members?limit=100",
-                            );
-                            if (
-                              generation !== epoch.current ||
-                              current.current !== context ||
-                              activeTab.current !== "organizations"
-                            )
-                              return;
-                            open({
-                              kind: "assign",
-                              members: response.data.items,
-                            });
-                          } catch (error) {
-                            fail(error);
-                          }
-                        }}
-                      >
-                        关联成员
-                      </button>
-                      <button onClick={() => open({ kind: "new-org" })}>
-                        创建组织
-                      </button>
+                      {can("organizations.write") && can("members.read") && (
+                        <button
+                          className="secondary"
+                          onClick={async () => {
+                            const generation = epoch.current;
+                            try {
+                              const response = await request(
+                                context,
+                                csrf.current,
+                                "/bff" + base + "/members?limit=100",
+                              );
+                              if (
+                                generation !== epoch.current ||
+                                current.current !== context ||
+                                activeTab.current !== "organizations"
+                              )
+                                return;
+                              open({
+                                kind: "assign",
+                                members: response.data.items,
+                              });
+                            } catch (error) {
+                              fail(error);
+                            }
+                          }}
+                        >
+                          关联成员
+                        </button>
+                      )}
+                      {can("organizations.write") && (
+                        <button onClick={() => open({ kind: "new-org" })}>
+                          创建组织
+                        </button>
+                      )}
                     </div>
                   </div>
                   <Table
@@ -683,7 +740,7 @@ function App() {
                             : "空间根组织"}
                         </td>
                         <td>
-                          {row.parent_id ? (
+                          {row.parent_id && can("organizations.write") ? (
                             <button
                               className="text-button"
                               onClick={() => open({ kind: "move", row })}
@@ -691,7 +748,9 @@ function App() {
                               移动组织
                             </button>
                           ) : (
-                            <span className="muted">根组织</span>
+                            <span className="muted">
+                              {row.parent_id ? "只读" : "根组织"}
+                            </span>
                           )}
                         </td>
                       </>
@@ -745,6 +804,23 @@ function App() {
                   />
                 </section>
               )}
+              {tab === "roles" && (
+                <RoleManagement
+                  roles={rows}
+                  etag={visible?.etag}
+                  catalog={permissions?.catalog || []}
+                  base={base}
+                  me={me}
+                  permissions={permissions?.permissions || []}
+                  read={(path) => request(context, csrf.current, "/bff" + path)}
+                  write={mutate}
+                  busy={busy}
+                  error={error}
+                  clearError={(e) => setError(e || null)}
+                  initialMember={roleMember}
+                  onConsumed={() => setRoleMember(null)}
+                />
+              )}
               {tab === "audit" && (
                 <section className="panel">
                   <div className="panel-heading">
@@ -760,7 +836,13 @@ function App() {
                           <ID value={row.actor_membership_id} />
                         </td>
                         <td>
-                          <ID value={row.target_id} />
+                          {row.role_code ? (
+                            <span>
+                              {row.role_code} · <ID value={row.membership_id} />
+                            </span>
+                          ) : (
+                            <ID value={row.target_id} />
+                          )}
                         </td>
                         <td>{date(row.occurred_at)}</td>
                       </>

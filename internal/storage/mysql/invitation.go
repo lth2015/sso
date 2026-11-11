@@ -49,7 +49,7 @@ func (s TenantStore) CreateInvitation(ctx context.Context, email string) (ID, st
 		return ID{}, "", err
 	}
 	defer tx.Rollback()
-	if _, _, err = s.lockOwner(ctx, tx); err != nil {
+	if _, _, err = s.lockPermission(ctx, tx, "invitations.manage"); err != nil {
 		return ID{}, "", err
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO invitations(id,tenant_id,creator_membership_id,target_email,token_digest,expires_at) VALUES(?,?,?,?,?,?)`, id, s.tenant, s.actor, email, digest[:], time.Now().Add(24*time.Hour).Unix()); err != nil {
@@ -98,7 +98,7 @@ func (s Store) acceptInvitation(ctx context.Context, user ID, token string, a *A
 		return ID{}, err
 	}
 	repo := s.ForTenant(tenant, creator)
-	version, _, err := repo.lockOwner(ctx, tx)
+	version, _, err := repo.lockPermission(ctx, tx, "invitations.manage")
 	if err != nil {
 		return ID{}, err
 	}
@@ -155,7 +155,7 @@ func (s TenantStore) AssignOrganization(ctx context.Context, member, org ID, exp
 		return err
 	}
 	defer tx.Rollback()
-	version, _, err := s.lockOwner(ctx, tx)
+	version, _, err := s.lockPermission(ctx, tx, "organizations.write")
 	if err != nil {
 		return err
 	}

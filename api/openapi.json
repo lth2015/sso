@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "SSO Public Platform API",
-    "version": "0.5.0",
-    "description": "External server/native-client contract. Local reference server only; production requires TLS and configured public origins. OAuth code+S256 PKCE, platform audience https://api.sso.local. No cookie authentication or wildcard CORS; browser integrations use a BFF. All writes require MFA authenticated within 300 seconds; refresh does not update auth_time. Active owners manage tenant resources; this slice does not implement arbitrary scoped RBAC. Authorization is checked against the business primary inside each operation transaction. Tenant-version mutations invalidate prior tenant grants, requiring new authorization. JSON objects reject duplicates, unknown fields, nested objects/arrays, invalid UTF-8 and extra documents. Request body limit 4096 bytes. UUIDs are lowercase 32-hex strings. List limit 1–100, default 50; after is previous next_cursor. No pagination snapshot guarantee. Error format follows RFC 9457. All responses no-store. Invitation proofs never appear in lists/audit."
+    "version": "0.6.0",
+    "description": "External server/native-client contract. Local reference server only; production requires TLS and configured public origins. OAuth code+S256 PKCE, platform audience https://api.sso.local. No cookie authentication or wildcard CORS; browser integrations use a BFF. All writes require MFA authenticated within 300 seconds; refresh does not update auth_time. Tenant-scoped roles grant separate member/organization/invitation/audit permissions; explicit deny wins. Only active owners manage roles and owner bindings; roles.manage cannot be delegated or denied via custom policies. Resource/subtree scopes are not implemented. Delegated member operators cannot suspend/restore owner bindings. Authorization is checked against the business primary inside each operation transaction. Tenant-version mutations invalidate prior tenant grants, requiring new authorization. JSON objects reject duplicate keys, unknown fields, invalid UTF-8 and extra documents. Only role policy requests admit typed nested rules, with depth/work and policy-count limits. Request body limit 4096 bytes. UUIDs are lowercase 32-hex strings. List limit 1–100, default 50; after is previous next_cursor. No pagination snapshot guarantee. Error format follows RFC 9457. All responses no-store. Invitation proofs never appear in lists/audit."
   },
   "servers": [
     {
@@ -325,7 +325,7 @@
       "get": {
         "operationId": "listMembers",
         "summary": "List space memberships",
-        "description": "Active tenant owner required.",
+        "description": "Requires members.read on the token tenant. Explicit deny overrides other allows, including owner operational privileges. ",
         "tags": [
           "Tenant management"
         ],
@@ -400,14 +400,14 @@
             "$ref": "#/components/responses/Problem"
           }
         },
-        "x-authorization": "active_owner"
+        "x-authorization": "permission:members.read"
       }
     },
     "/v1/tenants/{tenant}/members/{member}/suspend": {
       "post": {
         "operationId": "suspendMember",
         "summary": "Suspend a membership",
-        "description": "Owner and recent MFA required. Last active owner cannot be suspended. Changes increment membership and tenant versions, invalidating existing tenant grants; restoration never revives old grants.",
+        "description": "Requires members.write on the token tenant. Explicit deny overrides other allows, including owner operational privileges. Recent MFA required. Last active owner cannot be suspended. Changes increment membership and tenant versions, invalidating existing tenant grants; restoration never revives old grants.",
         "tags": [
           "Tenant management"
         ],
@@ -472,7 +472,7 @@
             "$ref": "#/components/responses/Problem"
           }
         },
-        "x-authorization": "active_owner",
+        "x-authorization": "permission:members.write",
         "x-recent-mfa-seconds": 300,
         "requestBody": {
           "required": true,
@@ -490,7 +490,7 @@
       "post": {
         "operationId": "restoreMember",
         "summary": "Restore a membership",
-        "description": "Owner and recent MFA required. Last active owner cannot be suspended. Changes increment membership and tenant versions, invalidating existing tenant grants; restoration never revives old grants.",
+        "description": "Requires members.write on the token tenant. Explicit deny overrides other allows, including owner operational privileges. Recent MFA required. Last active owner cannot be suspended. Changes increment membership and tenant versions, invalidating existing tenant grants; restoration never revives old grants.",
         "tags": [
           "Tenant management"
         ],
@@ -555,7 +555,7 @@
             "$ref": "#/components/responses/Problem"
           }
         },
-        "x-authorization": "active_owner",
+        "x-authorization": "permission:members.write",
         "x-recent-mfa-seconds": 300,
         "requestBody": {
           "required": true,
@@ -573,7 +573,7 @@
       "get": {
         "operationId": "listOrganizations",
         "summary": "List space organization nodes",
-        "description": "Active tenant owner required.",
+        "description": "Requires organizations.read on the token tenant. Explicit deny overrides other allows, including owner operational privileges. ",
         "tags": [
           "Tenant management"
         ],
@@ -648,12 +648,12 @@
             "$ref": "#/components/responses/Problem"
           }
         },
-        "x-authorization": "active_owner"
+        "x-authorization": "permission:organizations.read"
       },
       "post": {
         "operationId": "createOrganization",
         "summary": "Create an organization under an existing parent",
-        "description": "Active tenant owner required.",
+        "description": "Requires organizations.write on the token tenant. Explicit deny overrides other allows, including owner operational privileges. ",
         "tags": [
           "Tenant management"
         ],
@@ -725,7 +725,7 @@
             "$ref": "#/components/responses/Problem"
           }
         },
-        "x-authorization": "active_owner",
+        "x-authorization": "permission:organizations.write",
         "x-recent-mfa-seconds": 300,
         "requestBody": {
           "required": true,
@@ -743,7 +743,7 @@
       "post": {
         "operationId": "moveOrganization",
         "summary": "Preview or execute an organization move",
-        "description": "Owner and recent MFA required, including preview. Root/cycle/depth checks apply. Preview changes no state. Executing changes organization and tenant authorization versions; obtain a new authorization afterwards.",
+        "description": "Requires organizations.write on the token tenant. Explicit deny overrides other allows, including owner operational privileges. Recent MFA required, including preview. Root/cycle/depth checks apply. Preview changes no state. Executing changes organization and tenant authorization versions; obtain a new authorization afterwards.",
         "tags": [
           "Tenant management"
         ],
@@ -815,7 +815,7 @@
             "$ref": "#/components/responses/Problem"
           }
         },
-        "x-authorization": "active_owner",
+        "x-authorization": "permission:organizations.write",
         "x-recent-mfa-seconds": 300,
         "requestBody": {
           "required": true,
@@ -833,7 +833,7 @@
       "put": {
         "operationId": "assignOrganization",
         "summary": "Associate a membership with an organization",
-        "description": "Association does not grant owner or other roles. Changes tenant authorization version; obtain a new authorization afterwards.",
+        "description": "Requires organizations.write on the token tenant. Explicit deny overrides other allows, including owner operational privileges. Association does not grant owner or other roles. Changes tenant authorization version; obtain a new authorization afterwards.",
         "tags": [
           "Tenant management"
         ],
@@ -901,7 +901,7 @@
             "$ref": "#/components/responses/Problem"
           }
         },
-        "x-authorization": "active_owner",
+        "x-authorization": "permission:organizations.write",
         "x-recent-mfa-seconds": 300,
         "requestBody": {
           "required": true,
@@ -919,7 +919,7 @@
       "get": {
         "operationId": "listInvitations",
         "summary": "List invitation metadata without bearer secrets",
-        "description": "Active tenant owner required.",
+        "description": "Requires invitations.manage on the token tenant. Explicit deny overrides other allows, including owner operational privileges. ",
         "tags": [
           "Tenant management"
         ],
@@ -991,12 +991,12 @@
             "$ref": "#/components/responses/Problem"
           }
         },
-        "x-authorization": "active_owner"
+        "x-authorization": "permission:invitations.manage"
       },
       "post": {
         "operationId": "createInvitation",
         "summary": "Create an email-bound one-time invitation",
-        "description": "Owner and recent MFA required. Token is returned once, stored only as a digest and never in audit/outbox. The caller delivers it securely; no external email is sent. Invitations grant membership only.",
+        "description": "Requires invitations.manage on the token tenant. Explicit deny overrides other allows, including owner operational privileges. Recent MFA required. Token is returned once, stored only as a digest and never in audit/outbox. The caller delivers it securely; no external email is sent. Invitations grant membership only.",
         "tags": [
           "Tenant management"
         ],
@@ -1062,7 +1062,7 @@
             "$ref": "#/components/responses/Problem"
           }
         },
-        "x-authorization": "active_owner",
+        "x-authorization": "permission:invitations.manage",
         "x-recent-mfa-seconds": 300,
         "requestBody": {
           "required": true,
@@ -1080,7 +1080,7 @@
       "post": {
         "operationId": "revokeInvitation",
         "summary": "Close an invitation so its proof cannot be accepted",
-        "description": "Owner and recent MFA required. Idempotently closes the proof; already closed proofs stay closed. Audit records the first revocation; closed includes accepted or revoked.",
+        "description": "Requires invitations.manage on the token tenant. Explicit deny overrides other allows, including owner operational privileges. Recent MFA required. Idempotently closes the proof; already closed proofs stay closed. Audit records the first revocation; closed includes accepted or revoked.",
         "tags": [
           "Tenant management"
         ],
@@ -1142,7 +1142,7 @@
             "$ref": "#/components/responses/Problem"
           }
         },
-        "x-authorization": "active_owner",
+        "x-authorization": "permission:invitations.manage",
         "x-recent-mfa-seconds": 300,
         "requestBody": {
           "required": true,
@@ -1239,7 +1239,7 @@
       "get": {
         "operationId": "listAuditEvents",
         "summary": "List controlled space audit metadata",
-        "description": "Active tenant owner required.",
+        "description": "Requires audit.read on the token tenant. Explicit deny overrides other allows, including owner operational privileges. ",
         "tags": [
           "Tenant management"
         ],
@@ -1311,7 +1311,7 @@
             "$ref": "#/components/responses/Problem"
           }
         },
-        "x-authorization": "active_owner"
+        "x-authorization": "permission:audit.read"
       }
     },
     "/v1/sessions": {
@@ -1465,6 +1465,652 @@
         }
       }
     },
+    "/v1/tenants/{tenant}/permissions": {
+      "get": {
+        "operationId": "getMyPermissions",
+        "summary": "Get the current membership effective permissions",
+        "description": "Any current member may inspect their own effective set. Explicit deny wins across tenant-scoped roles. Reserved owner roles.manage is retained for recovery and cannot be expressed in custom policies.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Get the current membership effective permissions",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionSnapshot"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/v1/tenants/{tenant}/roles": {
+      "get": {
+        "operationId": "listRoles",
+        "summary": "List tenant roles and rules",
+        "description": "Active tenant owner required.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/After"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List tenant roles and rules",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RolePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "reserved_owner:roles.manage"
+      },
+      "post": {
+        "operationId": "createRole",
+        "summary": "Create a tenant-scoped custom role",
+        "description": "Active tenant owner required.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/AuthzMatch"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Create a tenant-scoped custom role",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleCreated"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "reserved_owner:roles.manage",
+        "x-recent-mfa-seconds": 300,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tenants/{tenant}/roles/{role}": {
+      "put": {
+        "operationId": "replaceRole",
+        "summary": "Replace all custom role rules",
+        "description": "Owner and recent MFA required. Reserved owner is immutable. Duplicate rules and reserved permissions are invalid. Changed policies increment tenant authorization version and invalidate prior tenant grants; identical rules are a no-op.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/roleID"
+          },
+          {
+            "$ref": "#/components/parameters/AuthzMatch"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Replace all custom role rules",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "reserved_owner:roles.manage",
+        "x-recent-mfa-seconds": 300,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleUpdate"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteRole",
+        "summary": "Delete an unbound custom role",
+        "description": "Owner and recent MFA required. Built-in owner cannot be deleted; roles with bindings return role_in_use. Changed state invalidates tenant grants.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/roleID"
+          },
+          {
+            "$ref": "#/components/parameters/AuthzMatch"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Delete an unbound custom role",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "reserved_owner:roles.manage",
+        "x-recent-mfa-seconds": 300,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Empty"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tenants/{tenant}/members/{member}/roles": {
+      "get": {
+        "operationId": "listMemberRoles",
+        "summary": "List one tenant membership role bindings",
+        "description": "Active tenant owner required.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/memberID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List one tenant membership role bindings",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberRoles"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "reserved_owner:roles.manage"
+      }
+    },
+    "/v1/tenants/{tenant}/members/{member}/roles/{role}": {
+      "put": {
+        "operationId": "bindRole",
+        "summary": "Bind a tenant role to a membership",
+        "description": "Owner and recent MFA required. Both objects must belong to the token tenant. Owner grants/revocations are explicit reserved-role operations; last active owner cannot be removed. Repeating the same binding state with the current ETag is a no-op. A real change increments tenant authz_version; old grants must reauthorize. Audit preserves member and role metadata even after role deletion.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/memberID"
+          },
+          {
+            "$ref": "#/components/parameters/roleID"
+          },
+          {
+            "$ref": "#/components/parameters/AuthzMatch"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Bind a tenant role to a membership",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "reserved_owner:roles.manage",
+        "x-recent-mfa-seconds": 300,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Empty"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "unbindRole",
+        "summary": "Unbind a tenant role to a membership",
+        "description": "Owner and recent MFA required. Both objects must belong to the token tenant. Owner grants/revocations are explicit reserved-role operations; last active owner cannot be removed. Repeating the same binding state with the current ETag is a no-op. A real change increments tenant authz_version; old grants must reauthorize. Audit preserves member and role metadata even after role deletion.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/memberID"
+          },
+          {
+            "$ref": "#/components/parameters/roleID"
+          },
+          {
+            "$ref": "#/components/parameters/AuthzMatch"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Unbind a tenant role to a membership",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "reserved_owner:roles.manage",
+        "x-recent-mfa-seconds": 300,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Empty"
+              }
+            }
+          }
+        }
+      }
+    },
     "/openapi.yaml": {
       "get": {
         "operationId": "getOpenapiyaml",
@@ -1537,7 +2183,7 @@
             "refreshUrl": "http://auth.localhost:4464/oauth2/token",
             "scopes": {
               "platform:read": "Read identity and authorized space metadata",
-              "platform:write": "Modify owned spaces and own sessions; recent MFA required"
+              "platform:write": "Modify authorized space resources and own sessions; recent MFA required"
             }
           }
         }
@@ -1967,6 +2613,17 @@
           "occurred_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "role_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "membership_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "role_code": {
+            "type": "string"
           }
         }
       },
@@ -2159,6 +2816,231 @@
             "pattern": "^[a-f0-9]{32}$"
           }
         }
+      },
+      "RolePolicy": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "permission",
+          "effect"
+        ],
+        "properties": {
+          "permission": {
+            "enum": [
+              "audit.read",
+              "invitations.manage",
+              "members.read",
+              "members.write",
+              "organizations.read",
+              "organizations.write"
+            ]
+          },
+          "effect": {
+            "enum": [
+              "allow",
+              "deny"
+            ]
+          }
+        }
+      },
+      "RoleInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "policies"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,62}$",
+            "not": {
+              "const": "owner"
+            }
+          },
+          "policies": {
+            "type": "array",
+            "maxItems": 12,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/RolePolicy"
+            }
+          }
+        }
+      },
+      "RoleUpdate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "policies"
+        ],
+        "properties": {
+          "policies": {
+            "type": "array",
+            "maxItems": 12,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/RolePolicy"
+            }
+          }
+        }
+      },
+      "Role": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "code",
+          "built_in",
+          "scope",
+          "policies",
+          "binding_count"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "code": {
+            "type": "string"
+          },
+          "built_in": {
+            "type": "boolean"
+          },
+          "scope": {
+            "const": "tenant"
+          },
+          "policies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RolePolicy"
+            }
+          },
+          "binding_count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "RolePage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/Role"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      },
+      "RoleCreated": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "authz_version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "authz_version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "MemberRoles": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/Role"
+            }
+          }
+        }
+      },
+      "PermissionSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "permissions",
+          "denied",
+          "owner",
+          "authz_version",
+          "catalog"
+        ],
+        "properties": {
+          "permissions": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "audit.read",
+                "invitations.manage",
+                "members.read",
+                "members.write",
+                "organizations.read",
+                "organizations.write",
+                "roles.manage"
+              ]
+            }
+          },
+          "denied": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "audit.read",
+                "invitations.manage",
+                "members.read",
+                "members.write",
+                "organizations.read",
+                "organizations.write"
+              ]
+            }
+          },
+          "owner": {
+            "type": "boolean"
+          },
+          "authz_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "catalog": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "audit.read",
+                "invitations.manage",
+                "members.read",
+                "members.write",
+                "organizations.read",
+                "organizations.write"
+              ]
+            }
+          }
+        }
       }
     },
     "parameters": {
@@ -2247,11 +3129,20 @@
           "type": "string",
           "pattern": "^[a-f0-9]{32}$"
         }
+      },
+      "roleID": {
+        "in": "path",
+        "name": "role",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{32}$"
+        }
       }
     },
     "responses": {
       "Problem": {
-        "description": "RFC 9457 problem. Fixed code only; no input, token or SQL echoed. Codes include invalid_token, forbidden, insufficient_scope, recent_mfa_required, tenant_mismatch, invalid_request, not_found, already_exists, last_active_owner, root_cannot_move, organization_cycle, version_conflict, precondition_required, invalid_precondition, rate_limited, temporarily_unavailable.",
+        "description": "RFC 9457 problem. Fixed code only; no input, token or SQL echoed. Codes include invalid_token, forbidden, insufficient_scope, recent_mfa_required, tenant_mismatch, invalid_request, not_found, already_exists, reserved_role, role_in_use, last_active_owner, root_cannot_move, organization_cycle, version_conflict, precondition_required, invalid_precondition, rate_limited, temporarily_unavailable.",
         "headers": {
           "X-Request-ID": {
             "$ref": "#/components/headers/RequestID"

@@ -30,6 +30,7 @@ func authority(r *http.Request) store.Authorization { return principal(r).Author
 func Handler(auth *Authenticator) http.Handler {
 	mux := http.NewServeMux()
 	repo := auth.Store
+	mountRBAC(mux, repo)
 	limit := identity.NewLimiter()
 	capacity := make(chan struct{}, 32)
 	mux.HandleFunc("GET /openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
@@ -447,7 +448,7 @@ func Handler(auth *Authenticator) http.Handler {
 	})
 }
 func isList(path string) bool {
-	return path == "/v1/tenants" || path == "/v1/sessions" || strings.HasSuffix(path, "/members") || strings.HasSuffix(path, "/organizations") || strings.HasSuffix(path, "/invitations") || strings.HasSuffix(path, "/audit-events")
+	return path == "/v1/tenants" || path == "/v1/sessions" || strings.HasSuffix(path, "/members") || strings.HasSuffix(path, "/organizations") || strings.HasSuffix(path, "/invitations") || strings.HasSuffix(path, "/audit-events") || (strings.HasSuffix(path, "/roles") && !strings.Contains(path, "/members/"))
 }
 func respond(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -473,6 +474,10 @@ func failure(w http.ResponseWriter, err error) {
 		problem(w, 404, "not_found")
 	case errors.Is(err, store.ErrConflict):
 		problem(w, 412, "version_conflict")
+	case errors.Is(err, store.ErrReservedRole):
+		problem(w, 409, "reserved_role")
+	case errors.Is(err, store.ErrRoleInUse):
+		problem(w, 409, "role_in_use")
 	case errors.Is(err, store.ErrLastOwner):
 		problem(w, 409, "last_active_owner")
 	case errors.Is(err, store.ErrRoot):
@@ -559,7 +564,8 @@ func page[T any](w http.ResponseWriter, items []T, n int, id func(T) string) {
 	}
 	respond(w, 200, map[string]any{"items": items, "next_cursor": next})
 }
-func decode(w http.ResponseWriter, r *http.Request, v any) bool {
+func decode(w http.ResponseWriter, r *http.Request, v any) bool { return decodeJSON(w, r, v, false) }
+func decodeJSON(w http.ResponseWriter, r *http.Request, v any, nested bool) bool {
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 4096))
 	if err != nil {
 		var max *http.MaxBytesError
@@ -570,7 +576,11 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 		}
 		return false
 	}
-	if !utf8.Valid(body) || !strictObject(body) {
+	valid := strictObject(body)
+	if nested {
+		valid = strictNestedObject(body)
+	}
+	if !utf8.Valid(body) || !valid {
 		problem(w, 400, "invalid_request")
 		return false
 	}

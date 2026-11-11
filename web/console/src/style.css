@@ -798,3 +798,24 @@ dialog .secret {
   margin-left: 12px;
   white-space: nowrap;
 }
+
+.denied-rule {
+  color: #9a352e;
+  font-weight: 600;
+}
+.owner-confirm {
+  flex-direction: row;
+  align-items: flex-start;
+  line-height: 1.7;
+  color: #914035;
+}
+.owner-confirm input {
+  width: auto;
+  margin-top: 5px;
+}
+.dialog-actions {
+  position: sticky;
+  bottom: -27px;
+  background: white;
+  padding: 12px 0;
+}
