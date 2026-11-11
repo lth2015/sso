@@ -34,7 +34,10 @@ export function buildCall(operation, values, text, etag, tenant) {
     if (!value) continue;
     if (p.name === "limit" && !/^(?:[1-9][0-9]?|100)$/.test(value))
       throw new Error("limit 需要是 1–100 的整数。");
-    if (p.name === "after" && !id.test(value))
+    if (
+      p.name === "after" &&
+      value.match(new RegExp(p.schema.pattern || id.source))?.[0] !== value
+    )
       throw new Error("after 需要使用上页返回的有效 cursor。");
     query.set(p.name, value);
   }

@@ -15,7 +15,7 @@ const all = operations(spec),
   tenant = "a".repeat(32);
 const op = (name) => all.find((x) => x.operationId === name);
 test("tenant path is bound to the session; query and resource IDs are constrained", () => {
-  assert.equal(all.length, 29);
+  assert.equal(all.length, 34);
   assert.equal(
     buildCall(
       op("listMembers"),
@@ -120,4 +120,51 @@ test("transport forwards exactly once, sends no Authorization, and preserves fai
   } finally {
     globalThis.fetch = original;
   }
+});
+
+test("client cursors are encoded and application ETags have their own schema", () => {
+  const application = "b".repeat(32),
+    client = op("listApplicationClients");
+  assert.equal(
+    buildCall(client, { application, after: "local-demo-a" }, "", "", tenant)
+      .path,
+    "/v1/tenants/" +
+      tenant +
+      "/applications/" +
+      application +
+      "/clients?after=local-demo-a",
+  );
+  assert(
+    buildCall(
+      client,
+      { application, after: "client?&=" },
+      "",
+      "",
+      tenant,
+    ).path.endsWith("after=client%3F%26%3D"),
+  );
+  for (const after of ["client\n", "a".repeat(129), "含中文"])
+    assert.throws(() =>
+      buildCall(client, { application, after }, "", "", tenant),
+    );
+  const tag = '"app-' + tenant + "-" + application + '-2"';
+  assert.equal(
+    buildCall(
+      op("disableTenantApplication"),
+      { application },
+      "{}",
+      tag,
+      tenant,
+    ).etag,
+    tag,
+  );
+  assert.throws(() =>
+    buildCall(
+      op("disableTenantApplication"),
+      { application },
+      "{}",
+      '"authz-2"',
+      tenant,
+    ),
+  );
 });

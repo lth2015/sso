@@ -5,6 +5,7 @@ import "./style.css";
 import RoleManagement from "./RoleManagement.jsx";
 import Playground from "./Playground.jsx";
 import AccountSecurity from "./AccountSecurity.jsx";
+import ApplicationManagement from "./ApplicationManagement.jsx";
 
 const tabs = [
   ["overview", "空间概览", "◈"],
@@ -13,6 +14,7 @@ const tabs = [
   ["invitations", "邀请", "↗"],
   ["audit", "审计", "≡"],
   ["roles", "角色与权限", "⚿"],
+  ["applications", "应用接入", "↔"],
   ["sessions", "安全会话", "◉"],
   ["playground", "API Playground", "⌘"],
 ];
@@ -22,6 +24,7 @@ const tabPermissions = {
   invitations: "invitations.manage",
   audit: "audit.read",
   roles: "roles.manage",
+  applications: "roles.manage",
 };
 const contextFromURL = () =>
   /^#workspace=([a-f0-9]{32})$/.exec(location.hash)?.[1] || "";
@@ -32,6 +35,8 @@ const date = (value) =>
   );
 const actionNames = {
   "role.created": "创建角色",
+  "application.enabled": "恢复空间应用",
+  "application.disabled": "停用空间应用",
   "role.updated": "更新角色规则",
   "role.deleted": "删除角色",
   "role.bound": "授予角色",
@@ -262,7 +267,11 @@ function App() {
     }
   }
   useEffect(() => {
-    if (!me || !tenant || authNeeded || tab === "playground") return;
+    if (!me || !tenant || authNeeded) return;
+    if (tab === "playground" || tab === "applications") {
+      setLoading(false);
+      return;
+    }
     const abort = new AbortController();
     setError(null);
     loadList(abort.signal);
@@ -825,6 +834,15 @@ function App() {
                   onUnauthorized={() =>
                     fail(new ApiError(401, "invalid_token"))
                   }
+                />
+              )}
+              {tab === "applications" && (
+                <ApplicationManagement
+                  key={context}
+                  context={{ context, tenant_id: me.tenant_id }}
+                  csrf={csrf.current}
+                  onFailure={fail}
+                  revision={revision}
                 />
               )}
               {tab === "roles" && (

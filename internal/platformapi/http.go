@@ -32,6 +32,7 @@ func Handler(auth *Authenticator) http.Handler {
 	repo := auth.Store
 	mountRBAC(mux, repo)
 	mountSecurity(mux, repo)
+	mountApplications(mux, repo)
 	limit := identity.NewLimiter()
 	capacity := make(chan struct{}, 32)
 	mux.HandleFunc("GET /openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
@@ -437,7 +438,11 @@ func Handler(auth *Authenticator) http.Handler {
 			return
 		}
 		if r.URL.RawQuery != "" {
-			if _, _, ok := pagination(w, r); !ok {
+			if clientListPath.MatchString(r.URL.Path) {
+				if _, _, ok := clientPagination(w, r); !ok {
+					return
+				}
+			} else if _, _, ok := pagination(w, r); !ok {
 				return
 			}
 			if !isList(r.URL.Path) {
@@ -449,7 +454,7 @@ func Handler(auth *Authenticator) http.Handler {
 	})
 }
 func isList(path string) bool {
-	return path == "/v1/me/security-events" || path == "/v1/tenants" || path == "/v1/sessions" || strings.HasSuffix(path, "/members") || strings.HasSuffix(path, "/organizations") || strings.HasSuffix(path, "/invitations") || strings.HasSuffix(path, "/audit-events") || (strings.HasSuffix(path, "/roles") && !strings.Contains(path, "/members/"))
+	return clientListPath.MatchString(path) || strings.HasSuffix(path, "/applications") || path == "/v1/me/security-events" || path == "/v1/tenants" || path == "/v1/sessions" || strings.HasSuffix(path, "/members") || strings.HasSuffix(path, "/organizations") || strings.HasSuffix(path, "/invitations") || strings.HasSuffix(path, "/audit-events") || (strings.HasSuffix(path, "/roles") && !strings.Contains(path, "/members/"))
 }
 func respond(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -475,6 +480,10 @@ func failure(w http.ResponseWriter, err error) {
 		problem(w, 404, "not_found")
 	case errors.Is(err, store.ErrConflict):
 		problem(w, 412, "version_conflict")
+	case errors.Is(err, store.ErrProtectedApplication):
+		problem(w, 409, "protected_application")
+	case errors.Is(err, store.ErrApplicationUnavailable):
+		problem(w, 409, "application_unavailable")
 	case errors.Is(err, store.ErrReservedRole):
 		problem(w, 409, "reserved_role")
 	case errors.Is(err, store.ErrRoleInUse):

@@ -72,7 +72,7 @@ var consoleRoutes = func() []consoleRoute {
 			continue
 		}
 		pattern := regexp.QuoteMeta(path)
-		for _, name := range []string{"tenant", "member", "org", "invitation", "session", "role"} {
+		for _, name := range []string{"tenant", "member", "org", "invitation", "session", "role", "application"} {
 			pattern = strings.ReplaceAll(pattern, regexp.QuoteMeta("{"+name+"}"), "[a-f0-9]{32}")
 		}
 		for method := range methods {

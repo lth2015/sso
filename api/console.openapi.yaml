@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Identity Console Same-Origin BFF
-  version: 0.10.0
+  version: 0.11.0
   description: Browser cookie+context+CSRF boundary. Proxy paths are restricted to
     the public platform contract and one fixed API destination; caller Authorization
     is rejected. OAuth tokens and verifier remain encrypted server-side. Every tab
@@ -13,6 +13,289 @@ info:
 servers:
 - url: http://console.localhost:3003
 paths:
+  /bff/v1/tenants/{tenant}/applications:
+    get:
+      operationId: consoleListTenantApplications
+      summary: List applications explicitly associated with this space
+      description: Active owner only. Includes disabled associations for recovery;
+        no global application discovery, implicit enablement, client creation or secret
+        access.
+      tags:
+      - Tenant management
+      security:
+      - ConsoleCookie: []
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/After'
+      - $ref: '#/components/parameters/Context'
+      responses:
+        '200':
+          description: List applications explicitly associated with this space
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationPage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: reserved_owner:roles.manage
+  /bff/v1/tenants/{tenant}/applications/{application}:
+    get:
+      operationId: consoleGetTenantApplication
+      summary: Read an application association and resource-bound version
+      description: Active owner only. ETag binds tenant ID, application ID and association
+        version. Global availability and per-tenant enablement are separate. Only
+        existing associations may be managed.
+      tags:
+      - Tenant management
+      security:
+      - ConsoleCookie: []
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/applicationID'
+      - $ref: '#/components/parameters/Context'
+      responses:
+        '200':
+          description: Read an application association and resource-bound version
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: reserved_owner:roles.manage
+  /bff/v1/tenants/{tenant}/applications/{application}/clients:
+    get:
+      operationId: consoleListApplicationClients
+      summary: Read registered client metadata for an associated application
+      description: Active owner only, including disabled associations. Exact registered
+        client_id, redirect URI, scopes, audience, active flag and version; never
+        client secrets, cookies or token material. Cursor is printable client_id (not
+        UUID), sorted ascending within this application. This registry view does not
+        create clients or change protocol configuration/authentication methods.
+      tags:
+      - Tenant management
+      security:
+      - ConsoleCookie: []
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/applicationID'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/ClientAfter'
+      - $ref: '#/components/parameters/Context'
+      responses:
+        '200':
+          description: Read registered client metadata for an associated application
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationClientPage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: reserved_owner:roles.manage
+  /bff/v1/tenants/{tenant}/applications/{application}/enable:
+    post:
+      operationId: consoleEnableTenantApplication
+      summary: Enable an existing application association
+      description: Active owner and recent MFA required. Exact tenant/application/version
+        ETag. Atomically changes only this association version, records audit/outbox;
+        disabling revokes this tenant/application grants and BFF sessions. Other spaces,
+        applications and central SSO remain valid; no shared Hydra SID logout. Re-enabling
+        requires new authorization and never resurrects old grants. Same-state requests
+        with current ETag are no-ops. Management platform disable is 409 protected_application;
+        globally suspended application enable is 409 application_unavailable. No registration
+        or global registry mutation.
+      tags:
+      - Tenant management
+      security:
+      - ConsoleCookie: []
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/applicationID'
+      - $ref: '#/components/parameters/ApplicationMatch'
+      - $ref: '#/components/parameters/Context'
+      - $ref: '#/components/parameters/CSRF'
+      - $ref: '#/components/parameters/Origin'
+      responses:
+        '200':
+          description: Enable an existing application association
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: reserved_owner:roles.manage
+      x-recent-mfa-seconds: 300
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Empty'
+            example: {}
+  /bff/v1/tenants/{tenant}/applications/{application}/disable:
+    post:
+      operationId: consoleDisableTenantApplication
+      summary: Disable an existing application association
+      description: Active owner and recent MFA required. Exact tenant/application/version
+        ETag. Atomically changes only this association version, records audit/outbox;
+        disabling revokes this tenant/application grants and BFF sessions. Other spaces,
+        applications and central SSO remain valid; no shared Hydra SID logout. Re-enabling
+        requires new authorization and never resurrects old grants. Same-state requests
+        with current ETag are no-ops. Management platform disable is 409 protected_application;
+        globally suspended application enable is 409 application_unavailable. No registration
+        or global registry mutation.
+      tags:
+      - Tenant management
+      security:
+      - ConsoleCookie: []
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/applicationID'
+      - $ref: '#/components/parameters/ApplicationMatch'
+      - $ref: '#/components/parameters/Context'
+      - $ref: '#/components/parameters/CSRF'
+      - $ref: '#/components/parameters/Origin'
+      responses:
+        '200':
+          description: Disable an existing application association
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: reserved_owner:roles.manage
+      x-recent-mfa-seconds: 300
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Empty'
+            example: {}
   /bff/v1/me:
     get:
       operationId: consoleGetMe
@@ -2432,6 +2715,112 @@ components:
         revoked_sessions:
           type: integer
           minimum: 0
+    Application:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - code
+      - name
+      - enabled
+      - available
+      - protected
+      - version
+      - client_count
+      properties:
+        id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        code:
+          type: string
+        name:
+          type: string
+        enabled:
+          type: boolean
+          description: Enabled for this token-bound tenant.
+        available:
+          type: boolean
+          description: Global application registry is active; tenant owners cannot
+            override global suspension.
+        protected:
+          type: boolean
+          description: Platform management entry cannot be disabled through this API.
+        version:
+          type: integer
+          minimum: 1
+        client_count:
+          type: integer
+          minimum: 0
+    ApplicationPage:
+      type: object
+      additionalProperties: false
+      required:
+      - items
+      - next_cursor
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/Application'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          pattern: ^[a-f0-9]{32}$
+    ApplicationClient:
+      type: object
+      additionalProperties: false
+      required:
+      - client_id
+      - redirect_uri
+      - scopes
+      - audience
+      - active
+      - version
+      properties:
+        client_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        redirect_uri:
+          type: string
+          format: uri
+        scopes:
+          type: array
+          items:
+            type: string
+        audience:
+          type: string
+          format: uri
+        active:
+          type: boolean
+        version:
+          type: integer
+          minimum: 1
+    ApplicationClientPage:
+      type: object
+      additionalProperties: false
+      required:
+      - issuer
+      - items
+      - next_cursor
+      properties:
+        issuer:
+          type: string
+          format: uri
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/ApplicationClient'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          minLength: 1
+          maxLength: 128
+          pattern: ^[!-~]{1,128}$
     BFFError:
       type: object
       additionalProperties: false
@@ -2467,6 +2856,25 @@ components:
       schema:
         type: string
         pattern: ^[a-f0-9]{32}$
+    ApplicationMatch:
+      in: header
+      name: If-Match
+      required: true
+      description: 'Exact application detail ETag, bound to tenant/application/version.
+        Missing: 428; wrong resource or stale: 412.'
+      schema:
+        type: string
+        pattern: ^"app-[a-f0-9]{32}-[a-f0-9]{32}-[1-9][0-9]*"$
+    ClientAfter:
+      in: query
+      name: after
+      description: Previous client page next_cursor. Ascending printable client_id,
+        not a UUID or pagination snapshot. URL-encode it.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: ^[!-~]{1,128}$
     AuthzMatch:
       in: header
       name: If-Match
@@ -2518,6 +2926,13 @@ components:
       schema:
         type: string
         pattern: ^[a-f0-9]{32}$
+    applicationID:
+      in: path
+      name: application
+      required: true
+      schema:
+        type: string
+        pattern: ^[a-f0-9]{32}$
     Context:
       in: header
       name: X-Console-Context
@@ -2545,10 +2960,11 @@ components:
   responses:
     Problem:
       description: RFC 9457 problem. Fixed code only; no input, token or SQL echoed.
-        Codes include invalid_token, forbidden, insufficient_scope, recent_mfa_required,
-        tenant_mismatch, invalid_request, not_found, already_exists, reserved_role,
-        role_in_use, last_active_owner, root_cannot_move, organization_cycle, version_conflict,
-        precondition_required, invalid_precondition, rate_limited, temporarily_unavailable.
+        Codes include protected_application, application_unavailable, invalid_token,
+        forbidden, insufficient_scope, recent_mfa_required, tenant_mismatch, invalid_request,
+        not_found, already_exists, reserved_role, role_in_use, last_active_owner,
+        root_cannot_move, organization_cycle, version_conflict, precondition_required,
+        invalid_precondition, rate_limited, temporarily_unavailable.
       headers:
         X-Request-ID:
           $ref: '#/components/headers/RequestID'

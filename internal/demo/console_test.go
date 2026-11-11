@@ -13,6 +13,10 @@ import (
 )
 
 func TestConsoleGatewayAllowsOnlyPublicContract(t *testing.T) {
+	appPath := "/v1/tenants/0123456789abcdef0123456789abcdef/applications/0123456789abcdef0123456789abcdef"
+	if !consoleRouteAllowed("GET", appPath+"/clients") || !consoleRouteAllowed("POST", appPath+"/disable") || consoleRouteAllowed("POST", appPath+"/clients") || consoleRouteAllowed("GET", appPath+"/clients/private-secret") {
+		t.Fatal("application gateway method/path boundary mismatch")
+	}
 	for _, v := range []struct{ method, path string }{{"GET", "/v1/me"}, {"POST", "/v1/tenants"}, {"PUT", "/v1/tenants/" + "0123456789abcdef0123456789abcdef" + "/organizations/0123456789abcdef0123456789abcdef/members/0123456789abcdef0123456789abcdef"}} {
 		if !consoleRouteAllowed(v.method, v.path) {
 			t.Fatal("documented public operation rejected")

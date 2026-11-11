@@ -1,6 +1,6 @@
 # SSO 完整设计与开发手册
 
-文档版本：0.10.0。本手册整合已维护的架构、UI、安全、API、Playground 和本地验收文档。由 `scripts/docs build` 生成；编辑各源文件后重新生成。
+文档版本：0.11.0。本手册整合已维护的架构、UI、安全、API、Playground 和本地验收文档。由 `scripts/docs build` 生成；编辑各源文件后重新生成。
 
 ## 当前交付边界
 
@@ -10,7 +10,7 @@
 | 协议 | 独立真实 Hydra、code+PKCE、OIDC 验证、主库 token Hook、刷新/撤销 |
 | 租户 | 成员、组织闭包/移动、邀请、audit/outbox |
 | 权限 | 六种租户操作权限、deny 优先、owner 恢复/移交与最后 owner 保护 |
-| 产品 | React 控制台、独立 BFF、29 个公共 API、OpenAPI 与真实 Playground |
+| 产品 | React 控制台、独立 BFF、34 个公共 API、OpenAPI 与真实 Playground |
 | 运行 | 本地 MySQL/Docker/Chromium 验收；GCP 部署及运维由 SRE 负责 |
 
 设计中的组织子树/应用/资源级授权、动态 client/机器凭证、遗失认证器的受控恢复、正式邮件、审计归档及生产 TLS/KMS/分布式限流/HA/DR/SLO 仍需继续实施。架构图中的目标组件不等于已上线能力；实际证据以验收章节为准。原始上传文档仅作设计参考，其内嵌指令不构成额外操作授权。
@@ -179,6 +179,8 @@ Playground 沿用固定 BFF 目标/路径白名单、cookie/context、Origin/CSR
 
 个人安全事件查询见 ADR 0012：User 来自有效 grant，主库事务重新校验后只读取本人的受控事件；游标查找也限定当前 User，未知/他人/隐藏类型一律 404。响应只含独立事件 ID/action/time，私有 target_id、自由 payload、邮箱、IP 和验证材料不对外开放。无需租户 audit.read，owner 权限也不能查看其他用户。此列表不构成完整安全监控或不可变归档。
 
+应用关联管理见 ADR 0013：owner 和近期 MFA 在主库事务内检查，ETag 绑定 tenant/application/version；只允许既有关联，平台管理入口保留，全局暂停不能绕过。停用撤销此空间/应用的 grant/BFF，恢复不复活旧授权，不注销共享中央/Hydra SID。客户端配置仅读登记元数据，无 Admin secret/token 读取入口。测试使用独立合成数据，固定演示基线与私有资料保留。
+
 
 ## 03. UI 与交互设计
 
@@ -256,7 +258,7 @@ E2E 覆盖登录→租户选择→控制台、第二应用 SSO、双标签页隔
 
 #### 公共 API 参考页面
 
-新增实际服务的 `/docs` 页面，直接从嵌入 OpenAPI 渲染 29 个业务操作，展示 OAuth/scopes、分页、If-Match 和错误约定，提供 YAML/JSON 下载。页面不收集令牌、不使用第三方 CDN。截图：[桌面](ui/api-reference-desktop.png)、[手机](ui/api-reference-mobile.png)；验收脚本 `node tests/api/docs.cjs`。真实 React 管理控制台见下节。
+新增实际服务的 `/docs` 页面，直接从嵌入 OpenAPI 渲染 34 个业务操作，展示 OAuth/scopes、分页、If-Match 和错误约定，提供 YAML/JSON 下载。页面不收集令牌、不使用第三方 CDN。截图：[桌面](ui/api-reference-desktop.png)、[手机](ui/api-reference-mobile.png)；验收脚本 `node tests/api/docs.cjs`。真实 React 管理控制台见下节。
 
 
 #### 真实 React 控制台第一切片
@@ -276,6 +278,8 @@ API Playground 已接入真实控制台授权：接口选择、参数、JSON、I
 账户安全页提供“更换认证器”可信域链接。先验证旧因素，再显示新种子供手动导入并要求新 TOTP/撤销确认，最后一次展示恢复码；取消保留旧因素，最终提交前旧会话有效。结果不明时清空秘密、停止提交并引导重新登录核对。安全初始页截图见 [认证器更换](ui/authenticator-entry.png)；不对种子/恢复码页面截图。
 
 “安全会话”增加“个人安全记录”：中文事件说明/受控代码/时间，20 条分页、刷新到最新页、加载/错误/空态和手机布局；明确收到密码重置请求不代表本人发起。读取按 context/cursor/generation 绑定并可取消，离开页面不接收迟到内容。见 [手册](security-events.md) 与 [桌面](ui/security-events-desktop.png)/[手机](ui/security-events-mobile.png)截图。
+
+“应用接入”仅 owner 可见，展示本空间关联状态与客户端数量；登记配置对话框显示 issuer/回调/scope/audience。停用/恢复前读取目标版本、勾选影响确认；平台管理入口保持启用。加载/失败/空态、客户端分页、对话框取消、导航取消和手机布局均纳入验收。截图：[桌面](ui/application-access-desktop.png)、[手机](ui/application-access-mobile.png)。
 
 
 ## 04. 租户权限与恢复边界
@@ -386,14 +390,14 @@ curl http://127.0.0.1:8083/v1/me \
 
 `api test` 注册两个独立合成账户，通过真实原生 OAuth code+PKCE、密码/MFA 后访问 API；实际成功请求和响应由 OpenAPI JSON Schema 校验，原有 18 个业务操作均须覆盖；另运行 `scripts/console rbac-test` 覆盖新增 8 个操作及真实角色 UI。反例包含 ID token/非法 token/cookie 旁路、scope、错租户、非 owner、非法 JSON/媒体类型/body、最近 MFA、并发 If-Match、邀请重放/错误邮箱/撤销、成员恢复旧授权拒绝、会话归属和审计。专用 Go 检查在验签后递增 fixture User 版本，证明写事务阻止旧证明；也检查事务内 token 到期。
 
-浏览器测试仅把 token/proof 保存在测试进程内，失败只打印阶段/类别；不会录制秘密页面。共享 fixture 清理要求租户全部成员都属于本轮合成账户，按叶到根删除组织，并清理自己的私有通知；拒绝清理包含其他账户的租户。`docs.cjs` 检查实际参考页的 29 项操作、桌面/手机布局、无凭证存储并生成截图。
+浏览器测试仅把 token/proof 保存在测试进程内，失败只打印阶段/类别；不会录制秘密页面。共享 fixture 清理要求租户全部成员都属于本轮合成账户，按叶到根删除组织，并清理自己的私有通知；拒绝清理包含其他账户的租户。`docs.cjs` 检查实际参考页的 34 项操作、桌面/手机布局、无凭证存储并生成截图。
 
 既有回归依次运行 `scripts/m0 test`、`scripts/m1 test`、`scripts/m2 test`、`scripts/sso test`、`scripts/sso network-test`、两个账户/SSO 浏览器脚本。普通 Go 测试明确跳过真实 fixture 案例，不能替代 API 浏览器集成测试。命令会短暂停止自己的通知 worker，不能与浏览器通知流程并发执行。
 
 用 `scripts/sso down` 停止全部本地服务，保留 volume/私有 key。不要修改既有迁移校验和、输出完整 env/Compose/容器 inspect、token/proof、MFA 材料或 SQL 输入。详见 [ADR 0006](adr/0006-public-platform-api.md)。
 
 
-公共 API 0.10.0 共 29 项业务操作，成员 email 由 members.read 授权（无 verified alias 时 null）。新增真实 React 控制台见 [控制台手册](runbooks/console.md)，浏览器边界合同为 `api/console.openapi.yaml`；该合同要求对应 cookie/context/CSRF，不替代公共 Bearer 接入合同。
+公共 API 0.11.0 共 34 项业务操作，成员 email 由 members.read 授权（无 verified alias 时 null）。新增真实 React 控制台见 [控制台手册](runbooks/console.md)，浏览器边界合同为 `api/console.openapi.yaml`；该合同要求对应 cookie/context/CSRF，不替代公共 Bearer 接入合同。
 
 
 #### 角色 API
@@ -403,7 +407,7 @@ curl http://127.0.0.1:8083/v1/me \
 创建使用 `{"code":"auditor","policies":[{"permission":"audit.read","effect":"allow"}]}`；更新使用完整 policies 数组，删除/绑定/解绑提交 `{}`。均需 JSON、最近 MFA 和 authz If-Match。角色 code 不可更名，owner 不可修改/删除；带绑定角色返回 409 role_in_use。解绑最后 active owner 返回 409 last_active_owner。真实变更后旧授权失效，重复绑定/解绑及相同策略替换不改变版本。权限目录、恢复边界、并发与历史审计详见 [ADR 0008](adr/0008-tenant-roles-and-deny.md)。
 
 
-完整字段和示例见 [API 参考](api-reference.md)；运行中 `/docs` 展示同一份合同的参数、请求/响应 schema。控制台 [Playground](playground.md) 使用现有 BFF 发起真实调用，支持写入确认、ETag、MFA/权限错误与凭证脱敏。OpenAPI 0.10.0 仍为 29 个业务操作，补全角色/权限读取 ETag 和所有写入 JSON 示例；新增同源只读 `/platform-openapi.json` 记录在 BFF 合同。
+完整字段和示例见 [API 参考](api-reference.md)；运行中 `/docs` 展示同一份合同的参数、请求/响应 schema。控制台 [Playground](playground.md) 使用现有 BFF 发起真实调用，支持写入确认、ETag、MFA/权限错误与凭证脱敏。OpenAPI 0.11.0 仍为 34 个业务操作，补全角色/权限读取 ETag 和所有写入 JSON 示例；新增同源只读 `/platform-openapi.json` 记录在 BFF 合同。
 
 新增 `GET /v1/me/security-events`：platform:read、有效当前租户 grant，仅本人记录；无需 audit.read。支持 limit/after，按时间与 ID 降序，其他用户/隐藏/未知游标统一 404。仅返回 id/action/occurred_at，完整语义见 [个人安全事件](security-events.md)。
 
@@ -414,7 +418,7 @@ curl http://127.0.0.1:8083/v1/me \
 
 ### 完整 API 参考
 
-OpenAPI 0.10.0；公共 Bearer API 共 29 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
+OpenAPI 0.11.0；公共 Bearer API 共 34 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
 
 真实交互入口见 [Playground 手册](playground.md)；外部接入见 [公共 API 手册](runbooks/public-api.md)。JSON/YAML 合同见 [OpenAPI](../api/openapi.yaml)。
 
@@ -434,6 +438,11 @@ OpenAPI 0.10.0；公共 Bearer API 共 29 个业务操作。此文件由 OpenAPI
 | GET | `/v1/tenants` | `listMyTenants` |
 | POST | `/v1/tenants` | `createTenant` |
 | GET | `/v1/tenants/{tenant}` | `getTenant` |
+| GET | `/v1/tenants/{tenant}/applications` | `listTenantApplications` |
+| GET | `/v1/tenants/{tenant}/applications/{application}` | `getTenantApplication` |
+| GET | `/v1/tenants/{tenant}/applications/{application}/clients` | `listApplicationClients` |
+| POST | `/v1/tenants/{tenant}/applications/{application}/disable` | `disableTenantApplication` |
+| POST | `/v1/tenants/{tenant}/applications/{application}/enable` | `enableTenantApplication` |
 | GET | `/v1/tenants/{tenant}/audit-events` | `listAuditEvents` |
 | GET | `/v1/tenants/{tenant}/invitations` | `listInvitations` |
 | POST | `/v1/tenants/{tenant}/invitations` | `createInvitation` |
@@ -1362,6 +1371,685 @@ HTTP 200
           "root_id": {
             "type": "string",
             "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+#### GET /v1/tenants/{tenant}/applications
+
+List applications explicitly associated with this space
+
+Active owner only. Includes disabled associations for recovery; no global application discovery, implicit enablement, client creation or secret access.
+
+OAuth scope：`platform:read`。权限：`reserved_owner:roles.manage`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "query",
+    "name": "limit",
+    "description": "Bounded keyset page size.",
+    "schema": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 50
+    }
+  },
+  {
+    "in": "query",
+    "name": "after",
+    "description": "Previous next_cursor; ascending UUID keyset, not a snapshot or timestamp ordering guarantee.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+##### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "List applications explicitly associated with this space",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "code",
+                "name",
+                "enabled",
+                "available",
+                "protected",
+                "version",
+                "client_count"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "code": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Enabled for this token-bound tenant."
+                },
+                "available": {
+                  "type": "boolean",
+                  "description": "Global application registry is active; tenant owners cannot override global suspension."
+                },
+                "protected": {
+                  "type": "boolean",
+                  "description": "Platform management entry cannot be disabled through this API."
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "client_count": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+#### GET /v1/tenants/{tenant}/applications/{application}
+
+Read an application association and resource-bound version
+
+Active owner only. ETag binds tenant ID, application ID and association version. Global availability and per-tenant enablement are separate. Only existing associations may be managed.
+
+OAuth scope：`platform:read`。权限：`reserved_owner:roles.manage`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+##### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Read an application association and resource-bound version",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "code",
+          "name",
+          "enabled",
+          "available",
+          "protected",
+          "version",
+          "client_count"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Enabled for this token-bound tenant."
+          },
+          "available": {
+            "type": "boolean",
+            "description": "Global application registry is active; tenant owners cannot override global suspension."
+          },
+          "protected": {
+            "type": "boolean",
+            "description": "Platform management entry cannot be disabled through this API."
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "client_count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+#### GET /v1/tenants/{tenant}/applications/{application}/clients
+
+Read registered client metadata for an associated application
+
+Active owner only, including disabled associations. Exact registered client_id, redirect URI, scopes, audience, active flag and version; never client secrets, cookies or token material. Cursor is printable client_id (not UUID), sorted ascending within this application. This registry view does not create clients or change protocol configuration/authentication methods.
+
+OAuth scope：`platform:read`。权限：`reserved_owner:roles.manage`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "query",
+    "name": "limit",
+    "description": "Bounded keyset page size.",
+    "schema": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 50
+    }
+  },
+  {
+    "in": "query",
+    "name": "after",
+    "description": "Previous client page next_cursor. Ascending printable client_id, not a UUID or pagination snapshot. URL-encode it.",
+    "schema": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[!-~]{1,128}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+##### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Read registered client metadata for an associated application",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "issuer",
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "issuer": {
+            "type": "string",
+            "format": "uri"
+          },
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "client_id",
+                "redirect_uri",
+                "scopes",
+                "audience",
+                "active",
+                "version"
+              ],
+              "properties": {
+                "client_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "redirect_uri": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "scopes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "audience": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "active": {
+                  "type": "boolean"
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[!-~]{1,128}$"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+#### POST /v1/tenants/{tenant}/applications/{application}/disable
+
+Disable an existing application association
+
+Active owner and recent MFA required. Exact tenant/application/version ETag. Atomically changes only this association version, records audit/outbox; disabling revokes this tenant/application grants and BFF sessions. Other spaces, applications and central SSO remain valid; no shared Hydra SID logout. Re-enabling requires new authorization and never resurrects old grants. Same-state requests with current ETag are no-ops. Management platform disable is 409 protected_application; globally suspended application enable is 409 application_unavailable. No registration or global registry mutation.
+
+OAuth scope：`platform:write`。权限：`reserved_owner:roles.manage`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Exact application detail ETag, bound to tenant/application/version. Missing: 428; wrong resource or stale: 412.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"app-[a-f0-9]{32}-[a-f0-9]{32}-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+##### 请求示例
+
+```json
+{}
+```
+
+##### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
+```
+
+##### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Disable an existing application association",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "code",
+          "name",
+          "enabled",
+          "available",
+          "protected",
+          "version",
+          "client_count"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Enabled for this token-bound tenant."
+          },
+          "available": {
+            "type": "boolean",
+            "description": "Global application registry is active; tenant owners cannot override global suspension."
+          },
+          "protected": {
+            "type": "boolean",
+            "description": "Platform management entry cannot be disabled through this API."
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "client_count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+#### POST /v1/tenants/{tenant}/applications/{application}/enable
+
+Enable an existing application association
+
+Active owner and recent MFA required. Exact tenant/application/version ETag. Atomically changes only this association version, records audit/outbox; disabling revokes this tenant/application grants and BFF sessions. Other spaces, applications and central SSO remain valid; no shared Hydra SID logout. Re-enabling requires new authorization and never resurrects old grants. Same-state requests with current ETag are no-ops. Management platform disable is 409 protected_application; globally suspended application enable is 409 application_unavailable. No registration or global registry mutation.
+
+OAuth scope：`platform:write`。权限：`reserved_owner:roles.manage`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Exact application detail ETag, bound to tenant/application/version. Missing: 428; wrong resource or stale: 412.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"app-[a-f0-9]{32}-[a-f0-9]{32}-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+##### 请求示例
+
+```json
+{}
+```
+
+##### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
+```
+
+##### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Enable an existing application association",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "code",
+          "name",
+          "enabled",
+          "available",
+          "protected",
+          "version",
+          "client_count"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Enabled for this token-bound tenant."
+          },
+          "available": {
+            "type": "boolean",
+            "description": "Global application registry is active; tenant owners cannot override global suspension."
+          },
+          "protected": {
+            "type": "boolean",
+            "description": "Platform management entry cannot be disabled through this API."
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "client_count": {
+            "type": "integer",
+            "minimum": 0
           }
         }
       }
@@ -3582,7 +4270,7 @@ If-Match 使用带双引号的 authz-N / org-N。权限版本变更使旧 grant 
 
 ### API Playground
 
-Playground 是登录后的真实 API 客户端。它读取与公共服务相同的 OpenAPI 0.10.0，通过控制台 BFF 调用现有 29 个业务操作。它使用真实 Hydra/主库授权，不创建演示身份或伪造 token。
+Playground 是登录后的真实 API 客户端。它读取与公共服务相同的 OpenAPI 0.11.0，通过控制台 BFF 调用现有 34 个业务操作。它使用真实 Hydra/主库授权，不创建演示身份或伪造 token。
 
 #### 启动与使用
 
@@ -3641,7 +4329,7 @@ GCP、公网域名、TLS 和部署由 SRE 负责。本地验收不代表生产�
 
 “撤销其他会话”有明确确认对话框。动作跨空间和应用；同一中央会话的多个标签页都保留。之后新完成的认证仍可创建新会话，这个操作不阻止未来登录。返回数量是被改为 inactive 的会话记录数，可能包含已过期但仍保留 active 标记的记录；重复调用返回零。共享当前 Hydra SID 的记录不会排入破坏当前协议会话的清理任务，其他会话的业务权威仍立即撤销。
 
-这两个操作可在 Playground 调用，公开 API 总数为 29。完整字段见 api-reference.md；外部 Bearer 接入继续遵守 tenant/audience/scope/主库事务校验。
+这两个操作可在 Playground 调用，公开 API 总数为 34。完整字段见 api-reference.md；外部 Bearer 接入继续遵守 tenant/audience/scope/主库事务校验。
 
 #### 恢复码重生成
 
@@ -3690,7 +4378,7 @@ GCP、公网域名、TLS 和部署由 SRE 负责。本地验收不代表生产�
 
 #### API 与安全边界
 
-可信浏览器合同在 [security.openapi.yaml](../api/security.openapi.yaml)，运行时 `/sso/security/openapi.yaml`。它与公共 Bearer API、控制台 BFF 和 Playground 分开；公共业务操作为 29 个，没有给外部应用增加读取/替换 MFA 秘密的权限。
+可信浏览器合同在 [security.openapi.yaml](../api/security.openapi.yaml)，运行时 `/sso/security/openapi.yaml`。它与公共 Bearer API、控制台 BFF 和 Playground 分开；公共业务操作为 34 个，没有给外部应用增加读取/替换 MFA 秘密的权限。
 
 | 方法与路径 | 请求 | 成功响应 |
 | --- | --- | --- |
@@ -3804,7 +4492,7 @@ scripts/demo check         # 演示前快速检查，可重复运行
 | 1:30–2:30 | 在同一浏览器配置依次打开应用 A/B 的“使用统一登录”，选择星河科技 | 复用中央登录，无需再次输入密码/TOTP；两个应用具有独立会话，显示相同用户/空间 |
 | 2:30–4:00 | 回控制台查看“组织”“成员”“角色与权限” | 展示研发中心/两个小组、两名成员和 demo_auditor 的允许/拒绝规则。可创建一个“周五演示组”；写入最近 MFA 过期时先重新验证 |
 | 4:00–5:30 | 切到另一个浏览器配置中的只读审计员，打开组织/审计 | 能读组织和审计，组织创建控件不可用；在其 Playground 选择 listRoles，发送后得到 403，说明隐藏按钮之外还有服务端鉴权 |
-| 5:30–7:00 | 管理员打开 API Playground，选择 listOrganizations → 发送；再选 listMySecurityEvents | 展示真实 200、JSON、所需 scope、当前空间与受控 cURL 模板；打开公开 API 页下载 OpenAPI 3.1，公共业务共 29 操作 |
+| 5:30–7:00 | 管理员打开 API Playground，选择 listOrganizations → 发送；再选 listMySecurityEvents | 展示真实 200、JSON、所需 scope、当前空间与受控 cURL 模板；打开公开 API 页下载 OpenAPI 3.1，演示基线 0.10.0 为 29 操作，后续开发版以页面当前合同为准 |
 | 7:00–8:00 | 管理员“安全会话”，展示 MFA/恢复码数量、登录会话和个人安全记录 | 只展示元数据；重置请求仅代表收到请求，时间线不等于完整设备/异常登录监控 |
 | 8:00–9:00 | 应用 B 点击“仅退出此应用”，再查看应用 A | B 退出而 A 仍可用，展示应用会话与中央登录的边界 |
 | 9:00–10:00 | 展示一期范围和后续清单 | 动态 client/机器凭证、细粒度资源授权、遗失认证器受控恢复、正式通知与独立归档继续开发，部署交付由 SRE 负责 |
@@ -3853,8 +4541,49 @@ reset 使用封闭账户集合检查：如果演示空间中出现了清单之�
 
 准备/检查失败时先确认本地服务健康和数据库仍是当前环境，再重跑相应命令；已有完整演示数据不需要每天重建。SRE 环境的部署和访问问题由 SRE 对应，本地彩排包可供其核对数据与演示顺序。
 
+#### 固定基线
 
-## 12. React 控制台
+已将通过彩排的 5d8b46b 固定为标签 `demo-friday-2026-11-13`，源码与原文档另存于 artifacts 的 sso-demo-baseline-5d8b46b 文件及 SHA-256 清单；私有账号资料仍只保留在原工作区。后续开发版与原 0.10.0 文档包分开，必要时在干净工作区切回此标签，重新 prepare/up 后运行 check。不要重置或重新生成已有本地数据库密钥。
+
+
+## 12. 应用接入管理
+
+来源：[application-management.md](application-management.md)。
+
+### 应用接入管理
+
+这一切片提供当前空间已接入应用的目录、客户端登记元数据，以及应用在该空间的停用/恢复。动态客户端创建、client secret 发布/轮换、机器身份和全局应用登记仍在后续计划中。
+
+空间 owner 可在控制台“应用接入”查看名称、可用状态、启用状态和客户端数量，并分页查看已登记 client_id、精确回调 URI、scope、audience、客户端状态/版本和 issuer。它不读取协议管理端 secret 或令牌，也不对全体用户开放全局应用目录；普通成员及受委托审计员不能管理此入口。
+
+停用需要最近 300 秒 MFA、明确确认和刚读取的应用版本。动作只针对当前空间和目标应用：关联状态/版本和审计/outbox 同事务提交，旧 grant/BFF 按其绑定版本立即失去权威；其他空间、其他应用和中央登录保留。不会注销可能共享的 Hydra SID。资源权限和 code/refresh Hook 在主库复查，因此撤销不等待协议清理。
+
+恢复只能用于已有的关联且全局应用仍有效。恢复后必须重新授权；旧 grant 和旧 BFF 会话不会重新生效。存量加密会话行按既有到期任务清理，不代表立即物理删除。相同状态配合最新 ETag 不增加版本或重复记变更事件。平台管理入口保持启用，以保留 owner 的恢复入口；全局停用由可信平台管理端控制，本接口不能绕过。
+
+#### API 和并发
+
+| 方法与路径 | 用途 |
+| --- | --- |
+| GET `/v1/tenants/{tenant}/applications` | 当前空间已有应用，包含已停用项，按应用 ID 分页 |
+| GET `/v1/tenants/{tenant}/applications/{application}` | 读取状态与 ETag |
+| GET `/v1/tenants/{tenant}/applications/{application}/clients` | 按 client_id 升序分页查看公开登记元数据 |
+| POST `/v1/tenants/{tenant}/applications/{application}/disable` | JSON `{}`，停用关联 |
+| POST `/v1/tenants/{tenant}/applications/{application}/enable` | JSON `{}`，恢复关联 |
+
+读取需要 platform:read；写入需要 platform:write、owner 和最近 MFA。完整合同见公共/BFF OpenAPI 0.11.0，公共操作增至 34 个；Playground 使用同一合同。停用后，受保护资源拒绝旧 access token；本地固定 Hydra 的直接 refresh 拒绝为 HTTP 403 且不签发新 token，不使用公共业务 API 的 RFC 9457 body。应用列表使用 UUID 游标；客户端列表的 after 是上页返回的可打印 client_id，需 URL 编码，不能套用 UUID 格式。两者 limit 均为 1–100，不承诺分页快照。
+
+写入的 If-Match 形如 `"app-<tenant ID>-<application ID>-<version>"`，必须使用目标应用详情刚返回的完整值；它绑定空间和应用，不可复用其他对象的标签。缺失 428、非法格式 400、其他对象或旧版本 412。数据库确认死锁导致整笔事务回滚时，服务端可重新检查并重开一次事务；这不适用于网络结果不明。成功响应返回当前状态及新 ETag；网络结果不明时先重新读取，不自动重发。
+
+409 protected_application 表示管理平台不能停用；409 application_unavailable 表示全局应用停用，当前 owner 无权恢复其全局资格。未知/非当前空间关联统一 404，owner 校验、权威版本及近期 MFA 均在事务内检查，UI 按钮不代替服务端权限。
+
+#### 验证与演示保留
+
+新增真实主库/浏览器验收覆盖 owner/普通成员、同空间目标客户端撤销、其他空间/平台会话保留、恢复后旧授权仍拒绝、重新授权成功、版本冲突/并发、MFA、元数据与审计。演示数据不参与这些可变测试，最后使用 scripts/demo check 复验演示主线。
+
+周五基线已固定在标签 `demo-friday-2026-11-13`，对应提交 5d8b46b；源码与原文档单独备份，后续 0.11.0 文档包与 0.10.0 基线分开。当前功能不会声明 Marketstars 已接通。设计与实际证据分别见 ADR 0013 和 validation.md。
+
+
+## 13. React 控制台
 
 来源：[runbooks/console.md](runbooks/console.md)。
 
@@ -3915,7 +4644,7 @@ scripts/console enable --email YOUR_LOCAL_ADDRESS --second-tenant
 `rbac-test` 使用三个合成账户，通过真实登录/API/BFF 验收默认拒绝、委托读写、deny 优先、撤销、跨租户对象拒绝、owner 恢复/移交及真实 React 角色管理。新增截图：[角色](ui/rbac-roles.png)、[受委托审计员](ui/rbac-auditor.png)。设计和 API 细节见 [ADR 0008](adr/0008-tenant-roles-and-deny.md)。
 
 
-新增 API Playground 导航，可读取同源 OpenAPI 并调用固定的 29 个业务操作。GET 直接发送，写入预览/确认后发送一次，支持 ETag 读取、HTTP 状态/错误、cURL 模板和凭证字段脱敏；离开页面清空内存并取消在途读取，不自动重发写入。使用及限制见 [Playground 手册](playground.md)。
+新增 API Playground 导航，可读取同源 OpenAPI 并调用固定的 34 个业务操作。GET 直接发送，写入预览/确认后发送一次，支持 ETag 读取、HTTP 状态/错误、cURL 模板和凭证字段脱敏；离开页面清空内存并取消在途读取，不自动重发写入。使用及限制见 [Playground 手册](playground.md)。
 
 
 安全会话页面已增加个人 MFA/恢复码/会话概览及“撤销其他会话”确认流程；同一中央会话的多个标签页保留。恢复码管理和认证器更换跳转可信认证域，不在 BFF/Playground 输入密码或验证码。认证器更换的两阶段/取消/结果不明处理见 [专门手册](authenticator-management.md)，验收 `scripts/console authenticator-test`。见 [个人安全](account-security.md)。
@@ -3923,7 +4652,7 @@ scripts/console enable --email YOUR_LOCAL_ADDRESS --second-tenant
 个人安全记录位于安全会话页，20 条分页与刷新，使用当前 User 的公开只读接口；跨空间仍只读本人记录，未公开内部目标标识。验收 `scripts/console events-test`；语义及限制见 [手册](security-events.md)。
 
 
-## 13. 可信登录与双应用
+## 14. 可信登录与双应用
 
 来源：[runbooks/local-sso.md](runbooks/local-sso.md)。
 
@@ -3982,7 +4711,7 @@ scripts/sso enable --email YOUR_LOCAL_ADDRESS --second-tenant
 生产边界见 [ADR 0005](adr/0005-trusted-login-mfa-bff.md)。这些示范应用使用同一 Application，完整权限控制台、MFA 管理、正式邮件与生产 TLS/KMS 等仍待后续开发。
 
 
-## 14. 账户生命周期
+## 15. 账户生命周期
 
 来源：[runbooks/m2-accounts.md](runbooks/m2-accounts.md)。
 
@@ -4020,7 +4749,7 @@ m2 test 暂停本项目 mail-worker，防止真实 worker 与集成 fixture 争�
 已实现注册邮箱证明、原子个人空间引导、Argon2id 密码、恢复挑战、安全版本递增、通知加密/本地可靠落盘、四个 HTTP API 和真实账户页面。账户接口不提供 token 旁路；可信登录、中央会话、MFA 与 BFF 现由 [本地 SSO 手册](runbooks/local-sso.md) 说明。管理接口仍未公开；M0 合成身份实验继续独立。GCP 部署交由 SRE，对应生产邮箱、密钥托管和分布式限流留作正式集成。
 
 
-## 15. 数据库与组织
+## 16. 数据库与组织
 
 来源：[runbooks/m1.md](runbooks/m1.md)。
 
@@ -4055,7 +4784,7 @@ GCP 部署和云端运维由 SRE 专门负责，不作为后续本地开发前�
 新增 RBAC 数据检查：allow/deny 与撤销、委托边界、邀请创建者权限复查、非法/跨租户/内置角色拒绝、owner 操作 deny 的恢复能力、角色删除后的绑定审计和并发 owner 移除。迁移 005 增加策略/绑定事件表；勿修改已应用迁移的校验和。
 
 
-## 16. 协议实验
+## 17. 协议实验
 
 来源：[runbooks/m0.md](runbooks/m0.md)。
 
@@ -4111,7 +4840,7 @@ Go 的 GOPATH/GOMODCACHE/GOCACHE 全部位于 .local，避免受限 HOME 路径�
 M1 数据仓储的运行方式见 [M1 手册](runbooks/m1.md)。Cloud SQL 按用户要求本轮不验证，不把该项写成通过。
 
 
-## 17. 实施计划与剩余功能
+## 18. 实施计划与剩余功能
 
 来源：[implementation-plan.md](implementation-plan.md)。
 
@@ -4140,7 +4869,7 @@ M1 已提供组合外键隔离、组织闭包/移动、成员停用恢复、邀�
 
 M2 已实现邮箱验证设密/恢复、个人空间原子创建、加密通知队列/本地私有邮箱、真实 Hydra 密码/TOTP/一次性恢复码、中央会话、按租户授权、主库 Hook、两个独立 BFF、串行刷新、单应用及全设备退出。BFF 各自使用独立 key、受限 SQL 视图和网桥；Admin/私有 Hook 不可从 BFF 网络访问。当前 Go 验证适配尚未作为多语言 SDK 发布。
 
-公共 API 0.10.0 已提供 29 个业务操作和 OpenAPI 3.1 YAML/JSON，覆盖身份/空间、成员、组织、邀请、审计、自己的会话及角色/绑定管理。外部客户端使用 OAuth code+PKCE、Bearer scope 和平台 audience；写入需最近 MFA，资格/权限在业务事务内复查。普通成员默认拒绝，操作权限可分别委托；角色管理仅 owner。见 ADR 0006/0008。
+公共 API 0.11.0 已提供 34 个业务操作和 OpenAPI 3.1 YAML/JSON，覆盖身份/空间、成员、组织、邀请、审计、自己的会话及角色/绑定管理。外部客户端使用 OAuth code+PKCE、Bearer scope 和平台 audience；写入需最近 MFA，资格/权限在业务事务内复查。普通成员默认拒绝，操作权限可分别委托；角色管理仅 owner。见 ADR 0006/0008。
 
 M3 控制台第一切片已接入真实 React→BFF→公共 API，含多标签页空间隔离、上述管理页面及角色 UI。OAuth token 留在服务端，控件可见性不代替授权。真实浏览器的合同、权限、撤销和 UI 证据见 [验证记录](validation.md)；构建及运行见控制台手册。
 
@@ -4160,8 +4889,10 @@ API/文档切片已增加真实 Playground、逐操作运行时参考页、完�
 
 周五演示优先冻结一期主线：真实 MFA/双应用 SSO、空间/组织、只读角色、公开 API/Playground 和个人安全记录。通过本地私有演示数据与可重置彩排工具验收；完整 client/机器凭证、细粒度授权、受控恢复与正式通知/归档继续按后续切片实施。Marketstars 的实际接入尚待独立联调，不将两个示范 BFF 的结果记作该业务系统已经接通。见周五演示手卡。
 
+应用接入第一切片已提供本空间已接入应用、只读客户端登记元数据、owner/近期 MFA/对象绑定 ETag 下的停用与恢复，旧 grant/BFF 依据关联版本原子失去权威并保留其他空间/应用。公共合同 0.11.0 为 34 操作；客户端创建/secret 发布轮换和机器身份仍待实施，见 ADR 0013。周五基线固定标签 demo-friday-2026-11-13，对应 5d8b46b，当前演示数据保留并另行复验。
 
-## 18. 架构决策 0001
+
+## 19. 架构决策 0001
 
 来源：[adr/0001-platform-boundaries.md](adr/0001-platform-boundaries.md)。
 
@@ -4178,7 +4909,7 @@ API/文档切片已增加真实 Playground、逐操作运行时参考页、完�
 实施：先完成可运行 M0 和测试报告，再依次开展 M1–M5。UI 规格先完成，生产控制台后续交付。此次 Git push 是源码/文档交付，不是云部署或生产发布。上传原文保持不变供追溯。
 
 
-## 19. 架构决策 0002
+## 20. 架构决策 0002
 
 来源：[adr/0002-hydra-m0-findings.md](adr/0002-hydra-m0-findings.md)。
 
@@ -4214,7 +4945,7 @@ Hydra Admin 在本地为测试绑定 loopback，HTTP/--dev 仅此实验允许。
 每交易/refresh chain 绑定、logout/remembered consent/prompt=none/max_age、签名 key 轮换的本地真实引擎验证已补充。用户随后明确 Cloud SQL 由其准备且本轮无需验证，因此云端 HA/DR 不作为本轮本地代码推进阻塞项，也不记为通过。镜像漏洞/维护确认及生产部署前的云端验收仍需另行完成。M1 已开始内部数据与仓储切片，未开放生产功能。
 
 
-## 20. 架构决策 0003
+## 21. 架构决策 0003
 
 来源：[adr/0003-transaction-bindings-and-m1.md](adr/0003-transaction-bindings-and-m1.md)。
 
@@ -4257,7 +4988,7 @@ M0 实验资格表与 M1 业务表尚未连通；不把两个独立测试库的�
 用户进一步明确：本轮尽可能完成本地开发和验收，GCP 部署/云端运维由专门 SRE 负责。后续开发不等待 GCP 项目、实例或云凭证；本地迁移、接口合同和运行说明作为交接材料。云端 HA/DR、KMS 与上线 SLO 属于 SRE/联合生产验收，不由本轮代理执行，也不记为本地测试通过。
 
 
-## 21. 架构决策 0004
+## 22. 架构决策 0004
 
 来源：[adr/0004-account-proof-lifecycle.md](adr/0004-account-proof-lifecycle.md)。
 
@@ -4294,7 +5025,7 @@ worker 用 SELECT FOR UPDATE SKIP LOCKED 获取一条待投递记录，仅向私
 尚无 Hydra 可信登录交互、中央会话、MFA、BFF、真实邮件供应商、生产账号恢复审批与通知。M0 合成授权仍与此业务 User 权威状态分离；不能据 security_version 递增宣称现有 M0 JWT/refresh 已全部撤销。下一步必须把账户因素接入受 CSRF/Origin/交易状态保护的 Hydra 登录，再实施 MFA 与会话版本检查，而非新增 password-to-token 路由。
 
 
-## 22. 架构决策 0005
+## 23. 架构决策 0005
 
 来源：[adr/0005-trusted-login-mfa-bff.md](adr/0005-trusted-login-mfa-bff.md)。
 
@@ -4337,7 +5068,7 @@ BFF 会话绝对 8 小时、空闲 30 分钟。refresh 在会话行锁内串行�
 未实现正式 React 控制台、完整 scoped RBAC、MFA 撤销/更换及受控恢复、30 天 refresh 策略、产品级邮件供应商和全部业务事件消费者。GCP 部署、Cloud SQL HA/DR 验证由 SRE 负责；本地通过不代表生产验收。
 
 
-## 23. 架构决策 0006
+## 24. 架构决策 0006
 
 来源：[adr/0006-public-platform-api.md](adr/0006-public-platform-api.md)。
 
@@ -4384,7 +5115,7 @@ Owner 可列出成员、停用/恢复成员，创建组织、预览/执行移动
 本地固定域名/明文/loopback、开发 SQL 账号和单进程限流不得直接当作生产配置。正式域名、TLS、issuer/JWKS 接线、ingress、专用最小权限数据库账号、分布式限流、监控与容量由后续实施和 SRE 验收。没有部署公网、动态第三方 client 注册、通用机器身份凭证或完整控制台；已有 M0 机器 grant 仍是独立实验，不能调用此用户管理 API。
 
 
-## 24. 架构决策 0007
+## 25. 架构决策 0007
 
 来源：[adr/0007-console-bff-contexts.md](adr/0007-console-bff-contexts.md)。
 
@@ -4429,7 +5160,7 @@ BFF SQL 账号不能读取密码、MFA 密文、中央 cookie 摘要、login_ali
 后续实现更新：租户角色/委托见 ADR 0008，个人安全见 ADR 0010，认证器更换见 ADR 0011；本 ADR 的第一切片边界不代表后续能力仍未实现。
 
 
-## 25. 架构决策 0009
+## 26. 架构决策 0009
 
 来源：[adr/0009-api-playground-and-handbook.md](adr/0009-api-playground-and-handbook.md)。
 
@@ -4458,7 +5189,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 验收覆盖真实注册/密码/MFA/Hydra/BFF/API、写入确认/单次发送、ETag/412、普通成员 403、MFA 过期、凭证脱敏、输出转义、导航清理与桌面/手机；离线 HTML 检查目录锚点、无外部请求、无脚本/表单及布局，导出包校验每个摘要。受管 Chromium 禁止 file:// 导航，HTML 测试通过临时 loopback 只读服务加载同一文件，不将该测试描述为云端部署。GCP 部署与运维仍由 SRE 负责。
 
 
-## 26. 架构决策 0010
+## 27. 架构决策 0010
 
 来源：[adr/0010-self-service-account-security.md](adr/0010-self-service-account-security.md)。
 
@@ -4479,7 +5210,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 测试同时验证主库绑定/尝试次数/过期、密码重置竞态、并发仅一次成功，以及真实密码/TOTP/恢复码登录、旧授权失效、当前/其他用户会话隔离。未把普通 Go 中跳过的 fixture 用例当作数据库通过；SSO profile 明确运行新增 TestSSO 用例。生产 TLS/Secure cookie、分布式限流和 KMS 仍须后续由 SRE 实施验收。
 
 
-## 27. 架构决策 0011
+## 28. 架构决策 0011
 
 来源：[adr/0011-staged-authenticator-replacement.md](adr/0011-staged-authenticator-replacement.md)。
 
@@ -4500,7 +5231,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 公共/BFF/security 合同版本统一 0.9.0，公共操作数仍为 28；仅可信合同增加管理页和 start/confirm/cancel。生产 TLS、分布式限流和 KMS 仍按既有边界后续实施。此次不修改 SRE 的 CI 或部署配置。
 
 
-## 28. 架构决策 0012
+## 29. 架构决策 0012
 
 来源：[adr/0012-personal-security-events.md](adr/0012-personal-security-events.md)。
 
@@ -4519,7 +5250,26 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 本轮不改 CI、部署、既有迁移及 GCP；不可变归档、登录失败/设备监控、正式通知及事件消费者仍需继续实施。
 
 
-## 29. 验收证据
+## 30. 架构决策 0013
+
+来源：[adr/0013-tenant-application-access.md](adr/0013-tenant-application-access.md)。
+
+### ADR 0013：空间应用关联与客户端登记元数据
+
+状态：已实现，实际验收见 validation.md。客户端创建/凭证生命周期仍属于后续切片。
+
+应用和 OAuth client 是全局登记对象；tenant_applications 是空间显式授权边界。当前只允许 active owner 查看本空间已存在的关联及其公开客户端元数据，并对该关联停用/恢复。不提供全局目录、任意应用启用、全局状态修改或 secret 读取；平台管理应用保持启用，避免 owner 失去恢复入口。此 owner 边界复用不可委托的管理资格，不增加六项可委托权限。
+
+关联状态写入需近期 MFA 和绑定 tenant/application/version 的强 ETag。复用已有 tenant_applications.security_version，事务内检查 owner/当前 grant/最近认证/版本/全局应用状态。真实变更递增关联版本并记录 audit/outbox；同状态配合当前版本不重复变更。没有全局 tenant authz_version 变更，其他应用/空间无需重新授权。
+
+停用同事务更改关联 active/版本，使当前 tenant/application 的旧 grant/BFF 权威失效。资源和 Hook 比对 grant 已绑定的 enabled_version；恢复再次递增关联版本，因此旧 grant 不会复活。避免在持有空间锁时批量锁定 grant/BFF 行，与签发过程的授权行锁形成环；存量加密会话行按既有到期清理，不承诺即时物理删除。没有注销共享中央/Hydra SID，防止误伤其他应用/空间；资源资格与 token Hook 在主库复查，旧 code/refresh 无法继续签发。恢复递增版本但不复活旧 grant，只接受新的授权。全局应用已暂停时空间 owner 无权绕过。
+
+客户端登记页只读 client_id、精确 redirect URI、scopes、audience、active/version 与 issuer，不调用 Admin 读取 secret，也不宣称完整协议认证配置已可自助维护。客户端列表按字符串 ID 分页，采用独立有界游标校验；其余资源仍使用 UUID 游标。只在 MySQL 1213 已明确整笔事务回滚时重开事务一次，并重新检查权限/近期 MFA/预期版本；网络结果不明不重试。UI 在提交前读取目标 ETag，明确确认范围、无自动写入重试，取消和 context/generation 防止迟到响应覆盖。
+
+无迁移或 CI/GCP 配置变更。演示基线固定为 demo-friday-2026-11-13 / 5d8b46b，源码/文档已分别备份；变更使用独立合成测试数据，演示账户保留并最后复验。公共/BFF/可信安全合同统一 0.11.0，公共业务 34 操作。
+
+
+## 31. 验收证据
 
 来源：[validation.md](validation.md)。
 
@@ -4693,3 +5443,20 @@ M0/M1 既有证据仍包括跨租户/授权链隔离、会话/退出与签名轮
 | 工具与文档 | Bash/Node 语法、锁定格式检查、完整手册同步、离线 HTML/ZIP 摘要和秘密排除检查通过 | prepare 复用已验证的 console 构建/启动链，本轮实际验收命令为 seed/rehearse/reset/重复 seed；没有把未重新执行的后端整库套件计为本轮结果 |
 
 当前本地演示数据保持可用，登录资料位于 .local/demo/presenter.md，讲解见 runbooks/friday-demo.md。应使用服务所在工作区的 Desktop 浏览器访问 .localhost；其他机器不能直接复用这些回环地址。Marketstars 暂未独立接入验收；用户已要求先完成当前本地演示，未把示范 A/B 的通过结果记作该业务系统已经接通。CI、部署和 GCP 未改动。
+
+#### 2026-11-11：空间应用接入管理
+
+新增应用目录、应用关联详情、只读客户端登记，以及 owner/近期 MFA/资源绑定 ETag 下的停用恢复。公共/BFF/可信安全合同统一 0.11.0，公共业务共 34 操作。复用已有应用关联/版本字段，无迁移变更；客户端创建、secret 发布/轮换、机器身份仍未交付。见 ADR 0013/application-management.md。
+
+| 检查 | 实际结果 | 边界 |
+| --- | --- | --- |
+| 主库 | 新增 3 项应用用例通过，M1 共 19 项实际运行通过 | 元数据/客户端分页、owner/跨空间、状态/版本/无操作、全局暂停不可绕过、audit/outbox、并发同版本仅一次提交；不改动演示应用关联 |
+| 原生 OAuth/API | 最终代码 122 个真实响应通过 OpenAPI 校验，真实主库授权/MFA/撤销探针通过 | 5 个新操作、client_id 字符串游标、资源绑定 ETag、管理入口保护、成员拒绝、独立公开 PKCE 客户端在停用前可用、停用后旧 access 拒绝、直接 refresh HTTP 403 且无 token、恢复后旧 access 仍拒绝/新授权成功；测试专属协议客户端与业务记录已清理 |
+| 新浏览器 | 27 个真实合同响应及 UI 流程通过 | 真实双应用在不同空间，目标空间应用失效、当前平台/另一空间/中央登录保留、续期成功、恢复不复活旧授权、重新登录成功；MFA 过期、并发 200/412、metadata/手机、关闭对话框与快切页面丢弃实际迟到响应、审计及 Playground |
+| 既有回归 | 控制台完整流程、RBAC 96 个响应、34 操作 Playground、恢复码管理 13 个响应、15 项 SSO 数据库用例、两组网络隔离及 34 操作在线参考页全部通过 | 套件间重启本地 identity 隔离限流，不更改限流策略；普通 Go 跳过的服务 fixture 不计入主库用例 |
+| 构建与文档 | Go vet/普通 Go 测试、6 项前端边界测试、BFF 固定方法/路径白名单、新游标/ETag 单测、spec 引用/同步、格式、npm audit（0 已知漏洞）、离线 HTML/ZIP 摘要通过 | BFF 新增 application UUID 映射，仍拒绝任意客户端写入路径/私有接口；没有把旧协议全套结果当作本轮重新运行 |
+| 演示保护 | 固定标签 demo-friday-2026-11-13 指向 5d8b46b；源码/原文档与 SHA-256 清单已备份；最终 scripts/demo check 通过 | 保留原开发用户与两名演示用户、空间和私有资料；0.10.0 基线与 0.11.0 开发文档分开，不把 Marketstars 记作已接通 |
+
+并发验收定位到批量更新授权行与主库资格检查之间的锁顺序冲突。最终实现使用关联 active/单调版本使旧 grant/BFF 权威失效，不在空间锁内批量锁授权行；加密会话行按既有到期清理。恢复再次递增版本，旧 grant 不能复活；签发和资源检查继续读主库。只在 MySQL 1213 明确整笔事务回滚时重新检查并重开一次事务，不重试网络结果不明的提交。修正后的主库、原生令牌及浏览器回归均已重新通过。
+
+身份、角色和应用测试夹具已清理；演示数据有意保留且复验成功。CI、部署、GCP、原始上传参考和既有迁移未改动。版本回退可使用固定标签及原私有环境配置，不能重新生成持久密钥。

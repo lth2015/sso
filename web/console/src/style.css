@@ -896,3 +896,5 @@ dialog .secret {
 }
 
 .event-code { display: block; color: #526079; overflow-wrap: anywhere; }
+
+.integration-value { margin-left: 0; overflow-wrap: anywhere; }

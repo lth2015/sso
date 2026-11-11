@@ -53,6 +53,7 @@ func TestAPIRevocationBetweenAuthenticationAndWrite(t *testing.T) {
 		t.Fatal("refusing non-fixture mutation")
 	}
 	verifySecurityEventBoundary(t, db, repo, a)
+	verifyApplicationPrimaryChecks(t, db, repo, a)
 	tenant, err := repo.APITenant(context.Background(), a)
 	if err != nil || !tenant.Owner {
 		t.Fatal("owner fixture required")
