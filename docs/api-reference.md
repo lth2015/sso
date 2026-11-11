@@ -1,6 +1,6 @@
 # 完整 API 参考
 
-OpenAPI 0.15.0；公共 Bearer API 共 54 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
+OpenAPI 0.16.0；公共 Bearer API 共 55 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
 
 真实交互入口见 [Playground 手册](playground.md)；外部接入见 [公共 API 手册](runbooks/public-api.md)。JSON/YAML 合同见 [OpenAPI](../api/openapi.yaml)。
 
@@ -41,6 +41,7 @@ OpenAPI 0.15.0；公共 Bearer API 共 54 个业务操作。此文件由 OpenAPI
 | POST | `/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/disable` | `disableServicePrincipal` |
 | POST | `/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/enable` | `enableServicePrincipal` |
 | GET | `/v1/tenants/{tenant}/audit-events` | `listAuditEvents` |
+| GET | `/v1/tenants/{tenant}/audit-exports` | `exportAuditBatch` |
 | GET | `/v1/tenants/{tenant}/invitations` | `listInvitations` |
 | POST | `/v1/tenants/{tenant}/invitations` | `createInvitation` |
 | POST | `/v1/tenants/{tenant}/invitations/{invitation}/revoke` | `revokeInvitation` |
@@ -4111,6 +4112,278 @@ HTTP 200
             "pattern": "^[a-f0-9]{32}$"
           }
         }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## GET /v1/tenants/{tenant}/audit-exports
+
+Read one bounded audit export batch
+
+Requires audit.read on the token tenant. Explicit deny overrides other allows, including owner operational privileges. User platform:read and current audit.read, including delegated auditors. Kind management (default) or machine; 1–100 rows, default 50. Reads current primary authority and data in one transaction; no recent-MFA requirement beyond the valid User grant/session. Cursor must exist in this tenant and kind; unknown/foreign/cross-kind cursor is 404. Frozen sso.audit.batch.v1 projection: IDs, controlled action/time and optional role-binding snapshot; no raw request, email, token/proof/secret or creator-as-machine-actor. Empty items is [], next_cursor is null or the last included ID when more rows exist. No query/body tenant override or request body. No mutation/audit of the GET itself. Individual batches describe their own primary read time/authorization version; multiple batches are not a frozen global snapshot or signed archival proof. Browser downloads reread authority instead of saving a stale preview.
+
+OAuth scope：`platform:read`。权限：`permission:audit.read`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "query",
+    "name": "limit",
+    "description": "Bounded keyset page size.",
+    "schema": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 50
+    }
+  },
+  {
+    "in": "query",
+    "name": "after",
+    "description": "Previous next_cursor; ascending UUID keyset, not a snapshot or timestamp ordering guarantee.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "query",
+    "name": "kind",
+    "description": "Separate management or machine audit source; cursor cannot cross kinds.",
+    "schema": {
+      "enum": [
+        "management",
+        "machine"
+      ],
+      "default": "management"
+    }
+  }
+]
+```
+
+无请求体。
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Read one bounded audit export batch",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "format",
+              "kind",
+              "tenant_id",
+              "generated_at",
+              "authz_version",
+              "items",
+              "next_cursor"
+            ],
+            "properties": {
+              "format": {
+                "const": "sso.audit.batch.v1"
+              },
+              "kind": {
+                "const": "management"
+              },
+              "tenant_id": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              "generated_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "authz_version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "items": {
+                "type": "array",
+                "maxItems": 100,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "id",
+                    "actor_membership_id",
+                    "action",
+                    "target_id",
+                    "occurred_at",
+                    "role_id",
+                    "role_code",
+                    "membership_id"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{32}$"
+                    },
+                    "actor_membership_id": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{32}$"
+                    },
+                    "action": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "target_id": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{32}$"
+                    },
+                    "occurred_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "role_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "pattern": "^[a-f0-9]{32}$"
+                    },
+                    "role_code": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "membership_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "pattern": "^[a-f0-9]{32}$"
+                    }
+                  }
+                }
+              },
+              "next_cursor": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[a-f0-9]{32}$"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "format",
+              "kind",
+              "tenant_id",
+              "generated_at",
+              "authz_version",
+              "items",
+              "next_cursor"
+            ],
+            "properties": {
+              "format": {
+                "const": "sso.audit.batch.v1"
+              },
+              "kind": {
+                "const": "machine"
+              },
+              "tenant_id": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              "generated_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "authz_version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "items": {
+                "type": "array",
+                "maxItems": 100,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "id",
+                    "application_id",
+                    "service_principal_id",
+                    "credential_id",
+                    "action",
+                    "occurred_at"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{32}$"
+                    },
+                    "application_id": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{32}$"
+                    },
+                    "service_principal_id": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{32}$"
+                    },
+                    "credential_id": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{32}$"
+                    },
+                    "action": {
+                      "const": "token.client_credentials"
+                    },
+                    "occurred_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              },
+              "next_cursor": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[a-f0-9]{32}$"
+              }
+            }
+          }
+        ]
       }
     }
   }

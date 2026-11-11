@@ -1,6 +1,6 @@
 # SSO 完整设计与开发手册
 
-文档版本：0.15.0。本手册整合已维护的架构、UI、安全、API、Playground 和本地验收文档。由 `scripts/docs build` 生成；编辑各源文件后重新生成。
+文档版本：0.16.0。本手册整合已维护的架构、UI、安全、API、Playground 和本地验收文档。由 `scripts/docs build` 生成；编辑各源文件后重新生成。
 
 ## 当前交付边界
 
@@ -8,9 +8,9 @@
 | --- | --- |
 | 身份 | 已验证邮箱、Argon2id、密码恢复、TOTP/一次性恢复码、分阶段认证器更换、中央会话 |
 | 协议 | 独立真实 Hydra、code+PKCE、OIDC 验证、主库 token Hook、刷新/撤销 |
-| 租户 | 成员、组织闭包/移动、邀请、audit/outbox |
+| 租户 | 成员、组织闭包/移动、邀请、audit/outbox、受控 JSON 审计批次导出 |
 | 权限 | 六种租户操作权限、deny 优先、owner 恢复/移交与最后 owner 保护 |
-| 产品 | React 控制台、独立 BFF、54 项 User API，Playground 执行其中 53 项，SK 创建走专用页面 |
+| 产品 | React 控制台、独立 BFF、55 项 User API，Playground 执行其中 54 项，SK 创建走专用页面 |
 | 机器 | 自有应用 SP、一次性交付 SK、双凭证轮换、独立机器合同与主库检查资源样例 |
 | 外部服务 | Go 在线身份验证 SDK、独立回环服务/客户端参考与自身 OpenAPI |
 | 运行 | 本地 MySQL/Docker/Chromium 验收；GCP 部署及运维由 SRE 负责 |
@@ -113,6 +113,10 @@ Hydra 稳定版本、镜像 digest、Go/SDK 版本、MySQL 8.4 兼容性必须�
 
 机器身份当前切片：自有应用拥有 SP 和每 credential 独立的 client_credentials-only 登记；管理 User realm 与机器资源 realm 分离。签发 Hook 从主库解析资格，资源侧验签后再次查询版本/状态/expiry。设计和约束见 machine-credentials.md / ADR 0016。
 
+#### 审计导出切片 0.16.0
+
+User/BFF 新增只读 audit-exports 资源，管理与机器来源分别以独立固定 DTO 投影，避免列表模型扩展时静默改变下载字段。每批在主库 publicRead 事务检查当前身份、权限和本空间/来源游标，最多读取 101 行、返回 100 行；不生成审计写入或后台任务。响应明确记录单批权限版本和生成时间，跨批次不承诺冻结快照。见 [审计导出](audit-exports.md) / ADR 0018。
+
 
 ## 02. 安全设计
 
@@ -202,6 +206,10 @@ Playground 沿用固定 BFF 目标/路径白名单、cookie/context、Origin/CSR
 #### 机器身份切片
 
 机器身份 0.14.0：pending→私有协议核对→主库复查激活；SK 仅首次成功响应，业务库不保存可恢复副本。双凭证最多 24 小时重叠，撤销先本地失效；SP/应用恢复不复活旧 JWT。机器审计不伪造人类 actor。独立资源检查主库权威，不能据此保证外部离线验签服务实时撤销。详见 machine-credentials.md。
+
+#### 审计批次导出 0.16.0
+
+导出沿用 User platform:read 和主库 audit.read，不接受机器 JWT、跨租户覆盖、任意字段或原始 payload。管理事件仅投影受控 ID/action/time 与角色绑定快照；机器事件仅有应用/SP/credential ID 和签发时间，不借用创建者的人类身份。外空间、跨来源及未知游标统一 404；请求/响应均有单批边界，GET 无写入副作用。前端在每次下载重新获取并验证固定字段/namespace/数量/游标，取消与上下文改变后的迟到响应不能触发文件保存。下载文件仍含受控身份标识，按本空间审计数据管理；本切片不提供签名存证、完整历史保留或持久归档。见 ADR 0018。
 
 
 ## 03. UI 与交互设计
@@ -315,6 +323,10 @@ API Playground 已接入真实控制台授权：接口选择、参数、JSON、I
 
 机器凭证当前交互：应用行进入专用模态页，SP/凭证列表与一次性秘密页分开；确认后创建，不自动重试。返回、关闭或切换空间清除显示中的 SK；网络结果不明引导先核对、撤销后重建。Playground 中创建 SK 的操作只读合同并指向此专用页，其余管理操作仍可执行。详见 machine-credentials.md。
 
+#### 审计导出切片 0.16.0
+
+审计页增加独立批次卡片：管理/机器类型、25/50/100 条、首批预览、下载与下一批。下载重新请求当前资格，不从旧预览保存文件；读取期间可取消，离开/切换空间或授权版本变化后清空旧数据。结果含条数、版本、生成时间、继续游标及可展开 JSON；按固定类型/空间/UTC 时间命名。桌面与手机的实际截图见 [桌面](ui/audit-export-desktop.png) / [手机](ui/audit-export-mobile.png)，按钮可换行，无页面横向溢出。只读审计员也可导出，不能因页面具备此功能而管理凭证。
+
 
 ## 04. 租户权限与恢复边界
 
@@ -424,14 +436,14 @@ curl http://127.0.0.1:8083/v1/me \
 
 `api test` 注册两个独立合成账户，通过真实原生 OAuth code+PKCE、密码/MFA 后访问 API；实际成功请求和响应由 OpenAPI JSON Schema 校验，原有 18 个业务操作均须覆盖；另运行 `scripts/console rbac-test` 覆盖新增 8 个操作及真实角色 UI。反例包含 ID token/非法 token/cookie 旁路、scope、错租户、非 owner、非法 JSON/媒体类型/body、最近 MFA、并发 If-Match、邀请重放/错误邮箱/撤销、成员恢复旧授权拒绝、会话归属和审计。专用 Go 检查在验签后递增 fixture User 版本，证明写事务阻止旧证明；也检查事务内 token 到期。
 
-浏览器测试仅把 token/proof 保存在测试进程内，失败只打印阶段/类别；不会录制秘密页面。共享 fixture 清理要求租户全部成员都属于本轮合成账户，按叶到根删除组织，并清理自己的私有通知；拒绝清理包含其他账户的租户。`docs.cjs` 检查实际参考页的 54 项操作、桌面/手机布局、无凭证存储并生成截图。
+浏览器测试仅把 token/proof 保存在测试进程内，失败只打印阶段/类别；不会录制秘密页面。共享 fixture 清理要求租户全部成员都属于本轮合成账户，按叶到根删除组织，并清理自己的私有通知；拒绝清理包含其他账户的租户。`docs.cjs` 检查实际参考页的 55 项操作、桌面/手机布局、无凭证存储并生成截图。
 
 既有回归依次运行 `scripts/m0 test`、`scripts/m1 test`、`scripts/m2 test`、`scripts/sso test`、`scripts/sso network-test`、两个账户/SSO 浏览器脚本。普通 Go 测试明确跳过真实 fixture 案例，不能替代 API 浏览器集成测试。命令会短暂停止自己的通知 worker，不能与浏览器通知流程并发执行。
 
 用 `scripts/sso down` 停止全部本地服务，保留 volume/私有 key。不要修改既有迁移校验和、输出完整 env/Compose/容器 inspect、token/proof、MFA 材料或 SQL 输入。详见 [ADR 0006](adr/0006-public-platform-api.md)。
 
 
-公共 API 0.15.0 共 54 项业务操作，成员 email 由 members.read 授权（无 verified alias 时 null）。新增真实 React 控制台见 [控制台手册](runbooks/console.md)，浏览器边界合同为 `api/console.openapi.yaml`；该合同要求对应 cookie/context/CSRF，不替代公共 Bearer 接入合同。
+公共 API 0.16.0 共 55 项业务操作，成员 email 由 members.read 授权（无 verified alias 时 null）。新增真实 React 控制台见 [控制台手册](runbooks/console.md)，浏览器边界合同为 `api/console.openapi.yaml`；该合同要求对应 cookie/context/CSRF，不替代公共 Bearer 接入合同。
 
 
 #### 角色 API
@@ -441,11 +453,13 @@ curl http://127.0.0.1:8083/v1/me \
 创建使用 `{"code":"auditor","policies":[{"permission":"audit.read","effect":"allow"}]}`；更新使用完整 policies 数组，删除/绑定/解绑提交 `{}`。均需 JSON、最近 MFA 和 authz If-Match。角色 code 不可更名，owner 不可修改/删除；带绑定角色返回 409 role_in_use。解绑最后 active owner 返回 409 last_active_owner。真实变更后旧授权失效，重复绑定/解绑及相同策略替换不改变版本。权限目录、恢复边界、并发与历史审计详见 [ADR 0008](adr/0008-tenant-roles-and-deny.md)。
 
 
-完整字段和示例见 [API 参考](api-reference.md)；运行中 `/docs` 展示同一份合同的参数、请求/响应 schema。控制台 [Playground](playground.md) 使用现有 BFF 发起真实调用，支持写入确认、ETag、MFA/权限错误与凭证脱敏。OpenAPI 0.15.0 提供 54 个业务操作，包括组织生命周期、角色/权限读取 ETag 和写入 JSON 示例；新增同源只读 `/platform-openapi.json` 记录在 BFF 合同。
+完整字段和示例见 [API 参考](api-reference.md)；运行中 `/docs` 展示同一份合同的参数、请求/响应 schema。控制台 [Playground](playground.md) 使用现有 BFF 发起真实调用，支持写入确认、ETag、MFA/权限错误与凭证脱敏。OpenAPI 0.16.0 提供 55 个业务操作，包括组织生命周期、角色/权限读取 ETag 和写入 JSON 示例；新增同源只读 `/platform-openapi.json` 记录在 BFF 合同。
 
 新增 `GET /v1/me/security-events`：platform:read、有效当前租户 grant，仅本人记录；无需 audit.read。支持 limit/after，按时间与 ID 降序，其他用户/隐藏/未知游标统一 404。仅返回 id/action/occurred_at，完整语义见 [个人安全事件](security-events.md)。
 
 组织完整管理新增重命名、空节点删除、直属成员分页及移除关联，权限、版本及撤销边界见 [组织管理](organization-management.md)。
+
+审计导出使用 `GET /v1/tenants/{tenant}/audit-exports?kind=management&limit=50`；platform:read/audit.read，无额外写入 MFA 门槛。响应 `sso.audit.batch.v1` 固定投影，游标限定空间和来源，完整字段/错误/一致性边界见 [审计导出](audit-exports.md)。专用真实 Bearer 验收命令：`scripts/console exports-api-test`；每次测试清理只针对自己注册的封闭夹具。
 
 
 ## 06. 完整 API 参考
@@ -454,7 +468,7 @@ curl http://127.0.0.1:8083/v1/me \
 
 ### 完整 API 参考
 
-OpenAPI 0.15.0；公共 Bearer API 共 54 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
+OpenAPI 0.16.0；公共 Bearer API 共 55 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
 
 真实交互入口见 [Playground 手册](playground.md)；外部接入见 [公共 API 手册](runbooks/public-api.md)。JSON/YAML 合同见 [OpenAPI](../api/openapi.yaml)。
 
@@ -495,6 +509,7 @@ OpenAPI 0.15.0；公共 Bearer API 共 54 个业务操作。此文件由 OpenAPI
 | POST | `/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/disable` | `disableServicePrincipal` |
 | POST | `/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/enable` | `enableServicePrincipal` |
 | GET | `/v1/tenants/{tenant}/audit-events` | `listAuditEvents` |
+| GET | `/v1/tenants/{tenant}/audit-exports` | `exportAuditBatch` |
 | GET | `/v1/tenants/{tenant}/invitations` | `listInvitations` |
 | POST | `/v1/tenants/{tenant}/invitations` | `createInvitation` |
 | POST | `/v1/tenants/{tenant}/invitations/{invitation}/revoke` | `revokeInvitation` |
@@ -4574,6 +4589,278 @@ HTTP 200
 错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
 
 
+#### GET /v1/tenants/{tenant}/audit-exports
+
+Read one bounded audit export batch
+
+Requires audit.read on the token tenant. Explicit deny overrides other allows, including owner operational privileges. User platform:read and current audit.read, including delegated auditors. Kind management (default) or machine; 1–100 rows, default 50. Reads current primary authority and data in one transaction; no recent-MFA requirement beyond the valid User grant/session. Cursor must exist in this tenant and kind; unknown/foreign/cross-kind cursor is 404. Frozen sso.audit.batch.v1 projection: IDs, controlled action/time and optional role-binding snapshot; no raw request, email, token/proof/secret or creator-as-machine-actor. Empty items is [], next_cursor is null or the last included ID when more rows exist. No query/body tenant override or request body. No mutation/audit of the GET itself. Individual batches describe their own primary read time/authorization version; multiple batches are not a frozen global snapshot or signed archival proof. Browser downloads reread authority instead of saving a stale preview.
+
+OAuth scope：`platform:read`。权限：`permission:audit.read`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "query",
+    "name": "limit",
+    "description": "Bounded keyset page size.",
+    "schema": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 50
+    }
+  },
+  {
+    "in": "query",
+    "name": "after",
+    "description": "Previous next_cursor; ascending UUID keyset, not a snapshot or timestamp ordering guarantee.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "query",
+    "name": "kind",
+    "description": "Separate management or machine audit source; cursor cannot cross kinds.",
+    "schema": {
+      "enum": [
+        "management",
+        "machine"
+      ],
+      "default": "management"
+    }
+  }
+]
+```
+
+无请求体。
+
+##### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Read one bounded audit export batch",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "format",
+              "kind",
+              "tenant_id",
+              "generated_at",
+              "authz_version",
+              "items",
+              "next_cursor"
+            ],
+            "properties": {
+              "format": {
+                "const": "sso.audit.batch.v1"
+              },
+              "kind": {
+                "const": "management"
+              },
+              "tenant_id": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              "generated_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "authz_version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "items": {
+                "type": "array",
+                "maxItems": 100,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "id",
+                    "actor_membership_id",
+                    "action",
+                    "target_id",
+                    "occurred_at",
+                    "role_id",
+                    "role_code",
+                    "membership_id"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{32}$"
+                    },
+                    "actor_membership_id": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{32}$"
+                    },
+                    "action": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "target_id": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{32}$"
+                    },
+                    "occurred_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "role_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "pattern": "^[a-f0-9]{32}$"
+                    },
+                    "role_code": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "membership_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "pattern": "^[a-f0-9]{32}$"
+                    }
+                  }
+                }
+              },
+              "next_cursor": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[a-f0-9]{32}$"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "format",
+              "kind",
+              "tenant_id",
+              "generated_at",
+              "authz_version",
+              "items",
+              "next_cursor"
+            ],
+            "properties": {
+              "format": {
+                "const": "sso.audit.batch.v1"
+              },
+              "kind": {
+                "const": "machine"
+              },
+              "tenant_id": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              "generated_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "authz_version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "items": {
+                "type": "array",
+                "maxItems": 100,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "id",
+                    "application_id",
+                    "service_principal_id",
+                    "credential_id",
+                    "action",
+                    "occurred_at"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{32}$"
+                    },
+                    "application_id": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{32}$"
+                    },
+                    "service_principal_id": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{32}$"
+                    },
+                    "credential_id": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{32}$"
+                    },
+                    "action": {
+                      "const": "token.client_credentials"
+                    },
+                    "occurred_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              },
+              "next_cursor": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[a-f0-9]{32}$"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
 #### GET /v1/tenants/{tenant}/invitations
 
 List invitation metadata without bearer secrets
@@ -7247,7 +7534,7 @@ If-Match 使用带双引号的 authz-N / org-N。权限版本变更使旧 grant 
 
 ### API Playground
 
-Playground 是登录后的真实 API 客户端。它读取与公共服务相同的 OpenAPI 0.15.0，通过控制台 BFF 展示现有 54 项 User 管理操作，除一次性 SK 创建外，其余 53 项可真实执行。它使用真实 Hydra/主库授权，不创建演示身份或伪造 token。
+Playground 是登录后的真实 API 客户端。它读取与公共服务相同的 OpenAPI 0.16.0，通过控制台 BFF 展示现有 55 项 User 管理操作，除一次性 SK 创建外，其余 54 项可真实执行。它使用真实 Hydra/主库授权，不创建演示身份或伪造 token。
 
 #### 启动与使用
 
@@ -7293,6 +7580,8 @@ GCP、公网域名、TLS 和部署由 SRE 负责。本地验收不代表生产�
 #### 机器身份切片
 
 一次性凭证创建 `createMachineCredential` 使用 x-playground-execute=false；它保留完整可读合同、输入示例和安全提示，但禁用通用执行。请在「应用接入 → 机器身份」专用页创建并保存 SK。机器资源和引擎 token 端点使用独立 machine.openapi.yaml，不经 User BFF，Playground 不接受机器 token。
+
+0.16.0 增加 `exportAuditBatch`：在 Playground 选择该读取操作，可填写 kind（management/machine）、limit 和 after；空 kind 使用 management 默认值。审计下载页面另有当前资格复查、固定字段校验与安全文件名，操作见 [审计导出](audit-exports.md)。Playground 的响应预览沿用通用脱敏策略。
 
 
 ## 08. 个人账户安全
@@ -7423,7 +7712,44 @@ GCP、公网域名、TLS 和部署由 SRE 负责。本地验收不代表生产�
 `scripts/console events-test` 验证真实 BFF/主库记录、控制台分页/刷新、导航后的迟到响应丢弃、手机布局和真实 Playground；测试账户和事件夹具在退出后清理。不使用认证 stub，不截图或记录登录秘密。设计见 [ADR 0012](adr/0012-personal-security-events.md)。
 
 
-## 11. 周五演示与彩排
+## 11. 受控审计批次导出
+
+来源：[audit-exports.md](audit-exports.md)。
+
+### 受控审计批次导出
+
+本切片提供按权限读取并下载 JSON 审计批次的完整 API/UI。每批最多 100 条，管理操作与机器签发独立选择；读取使用当前 User 的 audit.read，支持只读审计委托。机器 Bearer 的权限仍限于其应用资源。
+
+#### 控制台
+
+在「审计」中找到「导出审计批次」，选择管理操作或机器签发、25/50/100 条，然后生成首批预览。预览显示条数、权限版本、生成时间和是否有下一批，可展开 JSON。下载时再次读取并复核当前资格，文件以这次读取为准；旧预览不直接转成下载。用「读取下一批」继续同一类型的游标。
+
+切换类型、条数、空间、授权上下文或页面会清空旧批次。读取中可以取消；迟到响应不触发下载。下载文件名只由固定类型、空间 ID 和 UTC 时间组成；不写浏览器存储，不自动重复请求。
+
+#### 公共 API 与合同
+
+`GET /v1/tenants/{tenant}/audit-exports`，User `platform:read` 和当前主库 `audit.read`。无写入、ETag 前置条件或额外近期 MFA 要求；User 会话/grant/MFA 因素及角色资格仍完整复查。只读角色可以导出自己有资格读取的审计，不获得成员邮箱或凭证管理权。
+
+| 参数 | 范围 |
+| --- | --- |
+| kind | management（缺省）或 machine |
+| limit | 1–100，默认 50 |
+| after | 上批 next_cursor；必须是当前空间与类型的已有事件 ID |
+
+重复/未知参数、不合法类型/limit/cursor、GET body 为 400；未知/外空间/跨类型游标为 404；身份失效 401、权限/scope 不足 403、权威暂不可用 503。以带原空间 token 请求其他空间仍返回 404，即使账号属于两处。完整字段和错误见 [公共 OpenAPI](../api/openapi.yaml) 与 [API 参考](api-reference.md)。User 合同现在 55 项，Playground 可执行其中 54 项；一次性 SK 创建仍使用专用页面。
+
+响应 format 固定为 `sso.audit.batch.v1`，包含 kind、tenant_id、generated_at、authz_version、items 与 next_cursor。items 为空时是 []；存在下一批时 next_cursor 为本批最后一条 ID。
+
+管理记录仅有事件 ID、actor membership ID、受控 action、target ID、occurred_at，以及三个可空角色绑定快照字段。机器记录只有事件/应用/SP/credential ID、token.client_credentials 与时间，不伪造创建者为人类 actor。导出使用独立固定 DTO/字段投影，列表模型未来增加字段不会自动进入文件。没有请求正文/头、邮箱、口令、SK、邀请 proof、token、MFA/恢复码或任意 payload。
+
+#### 数据与一致性
+
+每次读取在主库事务内检查当前权限，游标同时绑定租户和来源。权限版本/成员状态变化使旧 grant 失效；前端下载动作需要重新读取成功，权限拒绝时清除预览，不保存旧文件。客户端也检查固定 schema、类型、namespace、数量、游标和字段白名单。
+
+批次记录单次主库读取的资格版本和时间，分页按 UUID keyset，后续新事件可能继续追加。连续批次用于受控读取；持久归档、签名存证、完整历史保留及审计消费仍是独立后续能力。本地验收、模拟错误/迟到响应与实际角色/空间隔离结果分别记录在 validation.md。
+
+
+## 12. 周五演示与彩排
 
 来源：[runbooks/friday-demo.md](runbooks/friday-demo.md)。
 
@@ -7533,7 +7859,7 @@ reset 使用封闭账户集合检查：如果演示空间中出现了清单之�
 普通测试清理工具会先读取本地演示清单，拒绝受保护邮箱/空间，即使邮箱也符合 browser-* 合成格式。只有显式 scripts/demo reset 才携带匹配当前清单与环境的重置上下文；不要按邮箱前缀批量选择数据清理。此保护用于防止误操作，不替代独立备份；2026-11-11 清理事故与原行恢复的实际记录见 validation.md。
 
 
-## 12. 应用接入管理
+## 13. 应用接入管理
 
 来源：[application-management.md](application-management.md)。
 
@@ -7572,7 +7898,7 @@ reset 使用封闭账户集合检查：如果演示空间中出现了清单之�
 后续 OpenAPI 0.12.0 保留上述应用合同并增加组织管理，现共 38 个业务操作。Playground 的“读取最新 ETag”对应用操作须先填目标 application ID，读取该应用的详情版本，支持完整对象绑定 ETag；不会误用空间 authz 版本。
 
 
-## 13. 自有应用与公开客户端
+## 14. 自有应用与公开客户端
 
 来源：[managed-clients.md](managed-clients.md)。
 
@@ -7635,7 +7961,7 @@ client path 仅接受此功能生成的 32-hex ID；旧的字符串 client_id �
 本页的无 secret 约束仅适用于公开 PKCE 客户端。自有应用的 SP、一次性 AK/SK、双凭证轮换和独立机器 API 已另列 [机器凭证手册](machine-credentials.md) 与 ADR 0016；不复用公开客户端 reconcile 来恢复秘密或激活未知 pending。
 
 
-## 14. 机器身份与一次性凭证
+## 15. 机器身份与一次性凭证
 
 来源：[machine-credentials.md](machine-credentials.md)。
 
@@ -7655,7 +7981,7 @@ client path 仅接受此功能生成的 32-hex ID；旧的字符串 client_id �
 
 #### 管理 API 与 OpenAPI
 
-[公共 User OpenAPI](../api/openapi.yaml) 0.15.0 共 54 项业务操作，本次增加 11 项；[Console BFF 合同](../api/console.openapi.yaml) 为相同管理操作提供 cookie/context/CSRF 边界。
+[公共 User OpenAPI](../api/openapi.yaml) 0.16.0 共 55 项业务操作，机器身份切片增加 11 项，审计导出增加 1 项；[Console BFF 合同](../api/console.openapi.yaml) 为相同管理操作提供 cookie/context/CSRF 边界。
 
 | 方法 | 路径（前缀 `/v1/tenants/{tenant}`） | 作用 |
 | --- | --- | --- |
@@ -7675,11 +8001,11 @@ client path 仅接受此功能生成的 32-hex ID；旧的字符串 client_id �
 {"name":"nightly-import","expires_in_days":30}
 ```
 
-唯一含 SK 的成功响应为 HTTP 201 `{"credential":{...},"secret_key":"<one-time value>"}`。数据库不保存可恢复 SK 副本，协议引擎保存自己的认证散列；业务元数据、审计与 outbox 不含 SK。公开 Playground 展示全部 54 项管理合同，其中凭证创建仅供查看并引导专用页面，避免通用响应脱敏吞掉唯一 SK；其余 53 项支持现有真实执行流程。
+唯一含 SK 的成功响应为 HTTP 201 `{"credential":{...},"secret_key":"<one-time value>"}`。数据库不保存可恢复 SK 副本，协议引擎保存自己的认证散列；业务元数据、审计与 outbox 不含 SK。公开 Playground 展示全部 55 项管理合同，其中凭证创建仅供查看并引导专用页面，避免通用响应脱敏吞掉唯一 SK；其余 54 项支持现有真实执行流程。
 
 #### 机器换取 token 和访问资源
 
-机器协议与业务资源的合同单列在 [Machine OpenAPI](../api/machine.openapi.yaml)，JSON 版见 [machine.openapi.json](../api/machine.openapi.json)。运行中的匿名只读入口为 `http://api.localhost:8083/machine-openapi.yaml` / `.json`。合同包含一个机器业务资源和引擎 `/oauth2/token`，不计入 54 项 User 管理操作，不加入 User BFF 或 Playground。
+机器协议与业务资源的合同单列在 [Machine OpenAPI](../api/machine.openapi.yaml)，JSON 版见 [machine.openapi.json](../api/machine.openapi.json)。运行中的匿名只读入口为 `http://api.localhost:8083/machine-openapi.yaml` / `.json`。合同包含一个机器业务资源和引擎 `/oauth2/token`，不计入 55 项 User 管理操作，不加入 User BFF 或 Playground。
 
 在服务端进程内，向本地 `http://auth.localhost:4464/oauth2/token` 发送表单：`grant_type=client_credentials`、`scope=machine:invoke`、`audience=urn:sso:application:<application ID>`。HTTP Basic 的用户名为 AK，密码为 SK。不要把 AK/SK 或换得的 token 写入日志、命令行、URL、前端代码或导出文档；使用秘密管理系统或进程内配置注入。
 
@@ -7718,13 +8044,13 @@ API 元数据 revision 与 token security version 分开：轮换只缩短旧凭
 0.15.0 已提供 [Go 在线身份验证 SDK 与独立服务/客户端参考](external-machine-integration.md)。服务每次在线验证机器身份，保留本页的主库撤销语义；业务权限由接入方定义。独立示例的自身 OpenAPI 不增加平台 User 操作或 BFF 白名单。
 
 
-## 15. 外部机器服务与 Go SDK
+## 16. 外部机器服务与 Go SDK
 
 来源：[external-machine-integration.md](external-machine-integration.md)。
 
 ### 外部业务服务：Go SDK 与完整本地示例
 
-0.15.0 增加可复用的 Go 在线机器身份验证器，以及独立业务服务和一次性客户端示例。SSO 的 User 管理合同仍为 54 项；机器协议/主库身份资源合同单列。业务服务示例有自己的合同，不属于平台管理或 User BFF。
+0.15.0 增加可复用的 Go 在线机器身份验证器，以及独立业务服务和一次性客户端示例。当前 0.16.0 的 SSO User 管理合同为 55 项；机器协议/主库身份资源合同单列。业务服务示例有自己的合同，不属于平台管理或 User BFF。
 
 #### Go 服务端接入
 
@@ -7819,7 +8145,7 @@ Go 单元与竞态测试覆盖可信原点、TLS 默认信任、重定向、Cook
 完整导出包含本文、全部合同、SDK/独立服务/客户端最小公开源码和 go.mod/go.sum。解压到独立目录后，可用已有 Go 工具运行 `go test ./pkg/machineidentity ./examples/machine-resource`；这两个包只使用标准库与同包公开合同。文档渲染不访问外部网络，真实业务示例仍需要已运行的本地 SSO。私有 AK/SK 输入与任何恢复资料均不进入导出。
 
 
-## 16. 组织生命周期
+## 17. 组织生命周期
 
 来源：[organization-management.md](organization-management.md)。
 
@@ -7861,7 +8187,7 @@ Go 单元与竞态测试覆盖可信原点、TLS 默认信任、重定向、Cook
 运行 `scripts/console organizations-test` 验证真实登录、BFF→API→MySQL、合同响应、MFA、根/非空保护、跨空间、成员分页及桌面/手机操作。`scripts/m1 test` 包含闭包完整性、停用成员清理、委托读取双权限和并发创建/删除测试；原演示账号和数据不作这些测试的 fixture。周五基线标签 demo-friday-2026-11-13 保持原提交，开发后另跑 scripts/demo check。
 
 
-## 17. React 控制台
+## 18. React 控制台
 
 来源：[runbooks/console.md](runbooks/console.md)。
 
@@ -7922,15 +8248,17 @@ scripts/console enable --email YOUR_LOCAL_ADDRESS --second-tenant
 `rbac-test` 使用三个合成账户，通过真实登录/API/BFF 验收默认拒绝、委托读写、deny 优先、撤销、跨租户对象拒绝、owner 恢复/移交及真实 React 角色管理。新增截图：[角色](ui/rbac-roles.png)、[受委托审计员](ui/rbac-auditor.png)。设计和 API 细节见 [ADR 0008](adr/0008-tenant-roles-and-deny.md)。
 
 
-新增 API Playground 导航，可读取同源 OpenAPI 的 54 项 User 管理合同，真实执行其中 53 项；一次性 SK 创建引导专用机器凭证页面。GET 直接发送，写入预览/确认后发送一次，支持 ETag 读取、HTTP 状态/错误、cURL 模板和凭证字段脱敏；离开页面清空内存并取消在途读取，不自动重发写入。使用及限制见 [Playground 手册](playground.md)。
+新增 API Playground 导航，可读取同源 OpenAPI 的 55 项 User 管理合同，真实执行其中 54 项；一次性 SK 创建引导专用机器凭证页面。GET 直接发送，写入预览/确认后发送一次，支持 ETag 读取、HTTP 状态/错误、cURL 模板和凭证字段脱敏；离开页面清空内存并取消在途读取，不自动重发写入。使用及限制见 [Playground 手册](playground.md)。
 
 
 安全会话页面已增加个人 MFA/恢复码/会话概览及“撤销其他会话”确认流程；同一中央会话的多个标签页保留。恢复码管理和认证器更换跳转可信认证域，不在 BFF/Playground 输入密码或验证码。认证器更换的两阶段/取消/结果不明处理见 [专门手册](authenticator-management.md)，验收 `scripts/console authenticator-test`。见 [个人安全](account-security.md)。
 
 个人安全记录位于安全会话页，20 条分页与刷新，使用当前 User 的公开只读接口；跨空间仍只读本人记录，未公开内部目标标识。验收 `scripts/console events-test`；语义及限制见 [手册](security-events.md)。
 
+审计页的 [JSON 批次导出](audit-exports.md) 支持管理/机器两类、25/50/100 条与游标续读。点击下载会重新读取当前资格；读取期间可取消，换空间后旧批次和迟到响应被丢弃。实际验收：`scripts/console exports-test`，原生接入验收：`scripts/console exports-api-test`。
 
-## 18. 可信登录与双应用
+
+## 19. 可信登录与双应用
 
 来源：[runbooks/local-sso.md](runbooks/local-sso.md)。
 
@@ -7989,7 +8317,7 @@ scripts/sso enable --email YOUR_LOCAL_ADDRESS --second-tenant
 生产边界见 [ADR 0005](adr/0005-trusted-login-mfa-bff.md)。这些示范应用使用同一 Application，完整权限控制台、MFA 管理、正式邮件与生产 TLS/KMS 等仍待后续开发。
 
 
-## 19. 账户生命周期
+## 20. 账户生命周期
 
 来源：[runbooks/m2-accounts.md](runbooks/m2-accounts.md)。
 
@@ -8027,7 +8355,7 @@ m2 test 暂停本项目 mail-worker，防止真实 worker 与集成 fixture 争�
 已实现注册邮箱证明、原子个人空间引导、Argon2id 密码、恢复挑战、安全版本递增、通知加密/本地可靠落盘、四个 HTTP API 和真实账户页面。账户接口不提供 token 旁路；可信登录、中央会话、MFA 与 BFF 现由 [本地 SSO 手册](runbooks/local-sso.md) 说明。管理接口仍未公开；M0 合成身份实验继续独立。GCP 部署交由 SRE，对应生产邮箱、密钥托管和分布式限流留作正式集成。
 
 
-## 20. 数据库与组织
+## 21. 数据库与组织
 
 来源：[runbooks/m1.md](runbooks/m1.md)。
 
@@ -8066,7 +8394,7 @@ GCP 部署和云端运维由 SRE 专门负责，不作为后续本地开发前�
 008 新增自有应用/公开客户端管理：本轮共 28 项仓储/配置检查，其中 27 项实际连接主库，另 1 项为纯回调校验。覆盖所有权/共享应用拒绝、pending 拒绝、响应丢失、冲突、不复活、并发核对/撤销和取消 RPC 回滚。业务数据库与真实 Hydra 行为分别验证，不混算 HTTP 注入实验。
 
 
-## 21. 协议实验
+## 22. 协议实验
 
 来源：[runbooks/m0.md](runbooks/m0.md)。
 
@@ -8122,7 +8450,7 @@ Go 的 GOPATH/GOMODCACHE/GOCACHE 全部位于 .local，避免受限 HOME 路径�
 M1 数据仓储的运行方式见 [M1 手册](runbooks/m1.md)。Cloud SQL 按用户要求本轮不验证，不把该项写成通过。
 
 
-## 22. 实施计划与剩余功能
+## 23. 实施计划与剩余功能
 
 来源：[implementation-plan.md](implementation-plan.md)。
 
@@ -8185,8 +8513,12 @@ API/文档切片已增加真实 Playground、逐操作运行时参考页、完�
 
 Go 服务端验证器、独立回环身份服务及私有 stdin 输入客户端参考已实现，主 User API 仍 54 项。独立示例自列 OpenAPI，SDK 每次在线主库验证，没有成功权限缓存/业务自动重放。机器自定义业务 ACL、token 缓存/轮换代理、生产运维仍在后续范围。实际验收以 validation.md 为准。
 
+#### 2026-11-11：受控审计导出 0.16.0
 
-## 23. 架构决策 0001
+新增 User/BFF 审计批次读取与 UI JSON 下载，管理/机器来源独立、固定投影、最多 100 条、同空间/来源游标，支持 audit.read 只读委托。User 合同增至 55 项，Playground 可执行 54 项，一次性 SK 创建仍使用专页。实际主库、原生 API、浏览器下载/取消/迟到响应证据见 validation.md / ADR 0018。归档、签名存证及跨批冻结快照仍未实现；后续继续受控对账和邀请生命周期。
+
+
+## 24. 架构决策 0001
 
 来源：[adr/0001-platform-boundaries.md](adr/0001-platform-boundaries.md)。
 
@@ -8203,7 +8535,7 @@ Go 服务端验证器、独立回环身份服务及私有 stdin 输入客户端�
 实施：先完成可运行 M0 和测试报告，再依次开展 M1–M5。UI 规格先完成，生产控制台后续交付。此次 Git push 是源码/文档交付，不是云部署或生产发布。上传原文保持不变供追溯。
 
 
-## 24. 架构决策 0002
+## 25. 架构决策 0002
 
 来源：[adr/0002-hydra-m0-findings.md](adr/0002-hydra-m0-findings.md)。
 
@@ -8239,7 +8571,7 @@ Hydra Admin 在本地为测试绑定 loopback，HTTP/--dev 仅此实验允许。
 每交易/refresh chain 绑定、logout/remembered consent/prompt=none/max_age、签名 key 轮换的本地真实引擎验证已补充。用户随后明确 Cloud SQL 由其准备且本轮无需验证，因此云端 HA/DR 不作为本轮本地代码推进阻塞项，也不记为通过。镜像漏洞/维护确认及生产部署前的云端验收仍需另行完成。M1 已开始内部数据与仓储切片，未开放生产功能。
 
 
-## 25. 架构决策 0003
+## 26. 架构决策 0003
 
 来源：[adr/0003-transaction-bindings-and-m1.md](adr/0003-transaction-bindings-and-m1.md)。
 
@@ -8282,7 +8614,7 @@ M0 实验资格表与 M1 业务表尚未连通；不把两个独立测试库的�
 用户进一步明确：本轮尽可能完成本地开发和验收，GCP 部署/云端运维由专门 SRE 负责。后续开发不等待 GCP 项目、实例或云凭证；本地迁移、接口合同和运行说明作为交接材料。云端 HA/DR、KMS 与上线 SLO 属于 SRE/联合生产验收，不由本轮代理执行，也不记为本地测试通过。
 
 
-## 26. 架构决策 0004
+## 27. 架构决策 0004
 
 来源：[adr/0004-account-proof-lifecycle.md](adr/0004-account-proof-lifecycle.md)。
 
@@ -8319,7 +8651,7 @@ worker 用 SELECT FOR UPDATE SKIP LOCKED 获取一条待投递记录，仅向私
 尚无 Hydra 可信登录交互、中央会话、MFA、BFF、真实邮件供应商、生产账号恢复审批与通知。M0 合成授权仍与此业务 User 权威状态分离；不能据 security_version 递增宣称现有 M0 JWT/refresh 已全部撤销。下一步必须把账户因素接入受 CSRF/Origin/交易状态保护的 Hydra 登录，再实施 MFA 与会话版本检查，而非新增 password-to-token 路由。
 
 
-## 27. 架构决策 0005
+## 28. 架构决策 0005
 
 来源：[adr/0005-trusted-login-mfa-bff.md](adr/0005-trusted-login-mfa-bff.md)。
 
@@ -8362,7 +8694,7 @@ BFF 会话绝对 8 小时、空闲 30 分钟。refresh 在会话行锁内串行�
 未实现正式 React 控制台、完整 scoped RBAC、MFA 撤销/更换及受控恢复、30 天 refresh 策略、产品级邮件供应商和全部业务事件消费者。GCP 部署、Cloud SQL HA/DR 验证由 SRE 负责；本地通过不代表生产验收。
 
 
-## 28. 架构决策 0006
+## 29. 架构决策 0006
 
 来源：[adr/0006-public-platform-api.md](adr/0006-public-platform-api.md)。
 
@@ -8409,7 +8741,7 @@ Owner 可列出成员、停用/恢复成员，创建组织、预览/执行移动
 本地固定域名/明文/loopback、开发 SQL 账号和单进程限流不得直接当作生产配置。正式域名、TLS、issuer/JWKS 接线、ingress、专用最小权限数据库账号、分布式限流、监控与容量由后续实施和 SRE 验收。没有部署公网、动态第三方 client 注册、通用机器身份凭证或完整控制台；已有 M0 机器 grant 仍是独立实验，不能调用此用户管理 API。
 
 
-## 29. 架构决策 0007
+## 30. 架构决策 0007
 
 来源：[adr/0007-console-bff-contexts.md](adr/0007-console-bff-contexts.md)。
 
@@ -8454,7 +8786,7 @@ BFF SQL 账号不能读取密码、MFA 密文、中央 cookie 摘要、login_ali
 后续实现更新：租户角色/委托见 ADR 0008，个人安全见 ADR 0010，认证器更换见 ADR 0011；本 ADR 的第一切片边界不代表后续能力仍未实现。
 
 
-## 30. 架构决策 0009
+## 31. 架构决策 0009
 
 来源：[adr/0009-api-playground-and-handbook.md](adr/0009-api-playground-and-handbook.md)。
 
@@ -8483,7 +8815,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 验收覆盖真实注册/密码/MFA/Hydra/BFF/API、写入确认/单次发送、ETag/412、普通成员 403、MFA 过期、凭证脱敏、输出转义、导航清理与桌面/手机；离线 HTML 检查目录锚点、无外部请求、无脚本/表单及布局，导出包校验每个摘要。受管 Chromium 禁止 file:// 导航，HTML 测试通过临时 loopback 只读服务加载同一文件，不将该测试描述为云端部署。GCP 部署与运维仍由 SRE 负责。
 
 
-## 31. 架构决策 0010
+## 32. 架构决策 0010
 
 来源：[adr/0010-self-service-account-security.md](adr/0010-self-service-account-security.md)。
 
@@ -8504,7 +8836,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 测试同时验证主库绑定/尝试次数/过期、密码重置竞态、并发仅一次成功，以及真实密码/TOTP/恢复码登录、旧授权失效、当前/其他用户会话隔离。未把普通 Go 中跳过的 fixture 用例当作数据库通过；SSO profile 明确运行新增 TestSSO 用例。生产 TLS/Secure cookie、分布式限流和 KMS 仍须后续由 SRE 实施验收。
 
 
-## 32. 架构决策 0011
+## 33. 架构决策 0011
 
 来源：[adr/0011-staged-authenticator-replacement.md](adr/0011-staged-authenticator-replacement.md)。
 
@@ -8525,7 +8857,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 公共/BFF/security 合同版本统一 0.9.0，公共操作数仍为 28；仅可信合同增加管理页和 start/confirm/cancel。生产 TLS、分布式限流和 KMS 仍按既有边界后续实施。此次不修改 SRE 的 CI 或部署配置。
 
 
-## 33. 架构决策 0012
+## 34. 架构决策 0012
 
 来源：[adr/0012-personal-security-events.md](adr/0012-personal-security-events.md)。
 
@@ -8544,7 +8876,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 本轮不改 CI、部署、既有迁移及 GCP；不可变归档、登录失败/设备监控、正式通知及事件消费者仍需继续实施。
 
 
-## 34. 架构决策 0013
+## 35. 架构决策 0013
 
 来源：[adr/0013-tenant-application-access.md](adr/0013-tenant-application-access.md)。
 
@@ -8563,7 +8895,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 无迁移或 CI/GCP 配置变更。演示基线固定为 demo-friday-2026-11-13 / 5d8b46b，源码/文档已分别备份；变更使用独立合成测试数据，演示账户保留并最后复验。公共/BFF/可信安全合同统一 0.11.0，公共业务 34 操作。
 
 
-## 35. 架构决策 0014
+## 36. 架构决策 0014
 
 来源：[adr/0014-organization-lifecycle.md](adr/0014-organization-lifecycle.md)。
 
@@ -8582,7 +8914,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 本地 DB 和真实浏览器验证隔离、双读取权限、权限委托/显式拒绝、根/非空保护、陈旧/缺失 ETag、近期 MFA、闭包删除、并发创建/删除、其他空间保留、旧授权失效及 UI 晚响应。实际结果写 validation.md。GCP/CI/部署仍由 SRE 负责，本切片不改动。
 
 
-## 36. 架构决策 0015
+## 37. 架构决策 0015
 
 来源：[adr/0015-owned-public-client-registration.md](adr/0015-owned-public-client-registration.md)。
 
@@ -8603,7 +8935,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 业务主库注入响应丢失/冲突并验证回滚、恢复、no-op 和并发；真实 Hydra 独立验证 code/PKCE、scope、refresh/撤销和所有权 metadata；真实浏览器检查 owner/member/错空间/MFA、冲突拒绝恢复、核对/撤销/清理、Playground 和手机布局。演示账号不作可变 fixture。
 
 
-## 37. 架构决策 0016
+## 38. 架构决策 0016
 
 来源：[adr/0016-machine-principals-and-one-time-credentials.md](adr/0016-machine-principals-and-one-time-credentials.md)。
 
@@ -8632,7 +8964,7 @@ SK 使用至少 256-bit 随机，只在首次成功创建响应交付，不存�
 SP 属于租户集体所有者，而非创建者持续个人所有。创建者离开后，新 owner 可以管理；旧 tenant revision 的 JWT 失效，但仍有效凭证可以按当前主库版本换取新 token。没有把创建者 membership 假作机器事件 actor，也没有另行实现命名 SP owner 的转移模型。
 
 
-## 38. 架构决策 0017
+## 39. 架构决策 0017
 
 来源：[adr/0017-external-machine-verifier-sdk.md](adr/0017-external-machine-verifier-sdk.md)。
 
@@ -8649,7 +8981,22 @@ SP 属于租户集体所有者，而非创建者持续个人所有。创建者�
 SDK/独立示例使用各自清晰的合同与错误格式，不向 User Playground 自动加入机器 Bearer。固定周五数据与基线保留，CI/GCP/部署仍由 SRE 对应。Go HTTP/TLS 模拟边界和真实 Hydra、主库、独立服务的验收分别记录；不将真实 SSO 身份资源验证冒充外部任意业务 ACL 验收。
 
 
-## 39. 验收证据
+## 40. 架构决策 0018
+
+来源：[adr/0018-bounded-audit-export.md](adr/0018-bounded-audit-export.md)。
+
+### ADR 0018：按当前权限读取审计导出批次
+
+状态：已接受并实施。真实主库、原生 Bearer 和浏览器下载验收通过；证据见 validation.md。
+
+User GET 提供管理/机器两类受控 JSON 批次，每批 1–100 条。audit.read 与普通审计读取一致；显式拒绝、会话/grant/成员/租户版本在主库检查。游标必须属于本空间/同类型，返回单批主库读取时间与 authz_version。GET 不改变权限或写入新的管理动作。
+
+导出版本 sso.audit.batch.v1 使用独立冻结 DTO，只投影受控 ID/action/time 与角色绑定快照；机器事件没有虚构人类 actor。模板不包含原始请求、秘密或目录邮箱。前端下载重新读取资格，校验 schema/namespace/字段与分页关系，取消/切换上下文/迟到响应不保存旧结果，文件名固定生成。
+
+这是审计批次读取/下载，持续归档、签名证明和跨批次冻结快照另行建设。完整平台/BFF/OpenAPI/Playground/UI 同步，演示数据与现有稳定节点保留，不介入 CI/GCP/部署。实际主库、原生 Bearer、BFF/浏览器与故障注入证据记录在 validation.md。
+
+
+## 41. 验收证据
 
 来源：[validation.md](validation.md)。
 
@@ -8918,3 +9265,19 @@ Go test/vet、7 项前端边界模型、spec/YAML/JSON/BFF/手册同步、格式
 | 完整资料 | OpenAPI/示例合同/手册同步，文档包包括 SDK/示例最小公开源码与模块文件 | 导出后检查 SHA-256 清单、已配置/演示秘密排除、离线 HTML 桌面/手机无外部请求，并在解压后的独立目录、空模块缓存、关闭模块网络下载下编译验证 SDK/示例。实际包摘要见同名 sha256 文件 |
 
 本切片不提供业务 ACL 引擎、凭证轮换/token 缓存 SDK 或生产部署/HA 验收。没有 marketstars 实际联调；CI/GCP/部署仍由 SRE 负责。固定周五源码/原文档与私有演示资料保留。交付 SHA 以包含本节的 Git 提交为准。
+
+#### 2026-11-11：受控审计批次导出（0.16.0）
+
+新增 User/BFF 只读审计批次资源和控制台真实 JSON 下载，管理/机器来源独立、固定 sso.audit.batch.v1 投影。公共合同 55 项，Playground 可执行 54 项，一次性 SK 创建继续使用专用页面。无新迁移，已应用 001–009 的源码与校验和保留。见 audit-exports.md / ADR 0018。
+
+| 检查 | 实际结果 | 边界 |
+| --- | --- | --- |
+| 主库与查询 | scripts/m1 test 的 38 项顶层检查全部通过，无跳过；其中 37 项真实 MySQL，1 项纯回调配置 | 新增三项覆盖固定投影/秘密排除、同空间与来源游标、分页、只读委托/即时 deny 和越界 limit，GET 不改变授权版本/审计/outbox；纯 HTTP 参数边界另由 Go 单元测试覆盖 |
+| 原生 API | scripts/console exports-api-test 通过 66 个真实合同响应 | 真实 User PKCE 与机器交换/主库，管理/机器投影、默认/空批次、大小/重复/未知查询/GET body、跨空间/来源/未知/零游标、User/机器 realm、read-only/write-only scope、审计委托与当前 deny；旧 MFA 允许有效 User 审计读取，写入仍拒绝 |
+| 浏览器下载 | scripts/console exports-test 通过 43 个合同校验响应及实际 React/BFF 下载 | 真实 25 条分页/JSON 文件名与内容、两类来源、只读审计员、凭证管理仍拒绝、桌面/手机无页面横溢。另以受控 403 和延迟真实响应验证下载重新读取权限、清除旧预览、取消及切换空间后不保存迟到文件；这类浏览器注入与原生真实 deny 分别记录 |
+| 既有完整回归 | 16 套依次全部通过 | 机器 UI 24 响应、SDK/独立进程 45 检查及机器原生 69 响应、客户端 30、公开原生 147、应用 27、组织 43、完整控制台、RBAC 96、55 项 Playground（54 项可执行）、安全 13、认证器 18、安全事件 16、15 项真实 SSO 主库检查、两组网络隔离、55 操作在线文档桌面/手机和完整 scripts/demo rehearse |
+| 构建与输入 | go test ./...、go vet ./...、11 项前端边界模型、8 项清理保护、格式/差异检查、所有合同与手册同步通过 | Playground 实际调用新增导出的默认管理来源、机器来源和非法类型 400；普通 Go 测试不冒充数据库 profile，未重新执行旧 M0 全协议或云端检查 |
+| 秘密与资料 | 两个新增专项以本轮实际 proof/SK/JWT 检查候选文件和运行日志通过；最终配置/演示秘密及导出 SHA-256 清单另行复核 | 只保留元数据截图；无自动失败页面截图或原始 Playwright/SQL 异常输出。完整 ZIP 含新架构/UI/安全/API/Playground 手册、独立机器示例合同与 SDK 最小公开源码；解压后以空模块缓存/关闭下载编译 SDK/示例，离线 HTML 桌面/手机无外部请求 |
+| 保留版与清理 | 完整周五彩排后，原账号/数据 ID 私有指纹、未用恢复码、固定 tag/源码/文档备份及 9 项迁移摘要一致 | 主库保留 3 个用户，额外合成用户、自有 fixture 应用/客户端/SP/credential 均为零；私有恢复资料不进入 Git/文档。CI/GCP/部署与原始上传参考未变 |
+
+跨批次按 UUID keyset 延续，每批记录本次读取时间/权限版本；不是冻结全局快照、持久归档或签名存证。下载文件含受控身份标识，已有本地文件不具远程撤销语义。下一项邀请凭证更新仅保留实施约束，尚未交付。当前节点建立在 893c5cc 上，交付 SHA 以包含本节的 Git 提交为准。

@@ -54,7 +54,7 @@ async function read(page, operation, code = 200) {
     await p.getByLabel("选择 API", { exact: true }).waitFor();
     assert.equal(
       await p.getByLabel("选择 API", { exact: true }).locator("option").count(),
-      54,
+      55,
     );
     await choose(p, "createMachineCredential");
     await p
@@ -72,6 +72,25 @@ async function read(page, operation, code = 200) {
         me.tenant_id,
       ),
     );
+    phase = "real-audit-export-query-and-default";
+    await read(p, "exportAuditBatch");
+    const exported = JSON.parse(
+      await p.getByTestId("playground-response").textContent(),
+    );
+    assert.equal(exported.format, "sso.audit.batch.v1");
+    assert.equal(exported.kind, "management");
+    assert.equal(exported.tenant_id, me.tenant_id);
+    await p.getByLabel("kind", { exact: true }).fill("machine");
+    await p.getByRole("button", { name: "发送读取请求", exact: true }).click();
+    await status(p, 200);
+    assert.equal(
+      JSON.parse(await p.getByTestId("playground-response").textContent()).kind,
+      "machine",
+    );
+    await p.getByLabel("kind", { exact: true }).fill("invalid");
+    await p.getByRole("button", { name: "发送读取请求", exact: true }).click();
+    await status(p, 400);
+    await read(p, "getMe");
     await p.getByText("外部客户端 cURL 模板", { exact: true }).click();
     assert(
       (await p.locator(".playground details pre").textContent()).includes(
@@ -197,7 +216,7 @@ async function read(page, operation, code = 200) {
   }
   if (success)
     console.log(
-      "Playground acceptance passed: 54 management contracts (53 executable; one-time SK uses dedicated UI), real reads/writes, explicit confirmation, one send per action, ETag/412, member denial, MFA, redaction, escaping, navigation reset and desktop/mobile",
+      "Playground acceptance passed: 55 management contracts (54 executable; one-time SK uses dedicated UI), real reads/writes, explicit confirmation, one send per action, ETag/412, member denial, MFA, redaction, escaping, navigation reset and desktop/mobile",
     );
 })().catch((e) => {
   console.error(

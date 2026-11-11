@@ -8,6 +8,7 @@ import AccountSecurity from "./AccountSecurity.jsx";
 import ApplicationManagement from "./ApplicationManagement.jsx";
 import OrganizationActions from "./OrganizationActions.jsx";
 import MachineEvents from "./MachineEvents.jsx";
+import AuditExport from "./AuditExport.jsx";
 
 const tabs = [
   ["overview", "空间概览", "◈"],
@@ -932,6 +933,16 @@ function App() {
               {tab === "audit" && (
                 <MachineEvents
                   key={context + "machine-events"}
+                  context={context}
+                  csrf={csrf.current}
+                  tenant={me.tenant_id}
+                  revision={revision}
+                  onFailure={fail}
+                />
+              )}
+              {tab === "audit" && (
+                <AuditExport
+                  key={context + "audit-export"}
                   context={context}
                   csrf={csrf.current}
                   tenant={me.tenant_id}

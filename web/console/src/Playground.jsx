@@ -177,7 +177,9 @@ export default function Playground({
                       ? "默认 50，最多 100"
                       : p.name === "after"
                         ? "上页 next_cursor"
-                        : "32 位资源 ID"
+                        : p.schema?.enum
+                          ? p.schema.enum.join(" / ")
+                          : "32 位资源 ID"
                   }
                   onChange={(e) => {
                     clear();

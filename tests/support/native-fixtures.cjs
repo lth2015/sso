@@ -66,10 +66,16 @@ function operationPath(url) {
     .replace(/\/tenants\/[a-f0-9]{32}/, "/tenants/{tenant}")
     .replace(/\/organizations\/[a-f0-9]{32}/, "/organizations/{org}")
     .replace(/\/members\/[a-f0-9]{32}/, "/members/{member}")
+    .replace(/\/roles\/[a-f0-9]{32}/, "/roles/{role}")
     .replace(/\/invitations\/[a-f0-9]{32}/, "/invitations/{invitation}")
     .replace(/\/sessions\/[a-f0-9]{32}/, "/sessions/{session}")
     .replace(/\/applications\/[a-f0-9]{32}/, "/applications/{application}")
-    .replace(/\/clients\/[a-f0-9]{32}/, "/clients/{client}");
+    .replace(/\/clients\/[a-f0-9]{32}/, "/clients/{client}")
+    .replace(
+      /\/service-principals\/[a-f0-9]{32}/,
+      "/service-principals/{principal}",
+    )
+    .replace(/\/credentials\/[a-f0-9]{32}/, "/credentials/{credential}");
 }
 async function api(
   method,

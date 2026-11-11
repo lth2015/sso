@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SSO Public Platform API
-  version: 0.15.0
+  version: 0.16.0
   description: External server/native-client contract. Local reference server only;
     production requires TLS and configured public origins. OAuth code+S256 PKCE, platform
     audience https://api.sso.local. No cookie authentication or wildcard CORS; browser
@@ -2294,6 +2294,75 @@ paths:
               $ref: '#/components/schemas/InvitationProof'
             example:
               token: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  /v1/tenants/{tenant}/audit-exports:
+    get:
+      operationId: exportAuditBatch
+      summary: Read one bounded audit export batch
+      description: 'Requires audit.read on the token tenant. Explicit deny overrides
+        other allows, including owner operational privileges. User platform:read and
+        current audit.read, including delegated auditors. Kind management (default)
+        or machine; 1–100 rows, default 50. Reads current primary authority and data
+        in one transaction; no recent-MFA requirement beyond the valid User grant/session.
+        Cursor must exist in this tenant and kind; unknown/foreign/cross-kind cursor
+        is 404. Frozen sso.audit.batch.v1 projection: IDs, controlled action/time
+        and optional role-binding snapshot; no raw request, email, token/proof/secret
+        or creator-as-machine-actor. Empty items is [], next_cursor is null or the
+        last included ID when more rows exist. No query/body tenant override or request
+        body. No mutation/audit of the GET itself. Individual batches describe their
+        own primary read time/authorization version; multiple batches are not a frozen
+        global snapshot or signed archival proof. Browser downloads reread authority
+        instead of saving a stale preview.'
+      tags:
+      - Tenant management
+      security:
+      - OAuth2:
+        - platform:read
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/After'
+      - in: query
+        name: kind
+        description: Separate management or machine audit source; cursor cannot cross
+          kinds.
+        schema:
+          enum:
+          - management
+          - machine
+          default: management
+      responses:
+        '200':
+          description: Read one bounded audit export batch
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditBatch'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: permission:audit.read
   /v1/tenants/{tenant}/audit-events:
     get:
       operationId: listAuditEvents
@@ -3994,6 +4063,115 @@ components:
           items:
             $ref: '#/components/schemas/MachineEvent'
         next_cursor: *id005
+    ManagementExportEvent:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - actor_membership_id
+      - action
+      - target_id
+      - occurred_at
+      - role_id
+      - role_code
+      - membership_id
+      properties:
+        id: *id003
+        actor_membership_id: *id003
+        action:
+          type: string
+          minLength: 1
+          maxLength: 64
+        target_id: *id003
+        occurred_at:
+          type: string
+          format: date-time
+        role_id: *id005
+        role_code:
+          type:
+          - string
+          - 'null'
+          minLength: 1
+          maxLength: 64
+        membership_id: *id005
+    MachineExportEvent:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - application_id
+      - service_principal_id
+      - credential_id
+      - action
+      - occurred_at
+      properties:
+        id: *id003
+        application_id: *id003
+        service_principal_id: *id003
+        credential_id: *id003
+        action:
+          const: token.client_credentials
+        occurred_at:
+          type: string
+          format: date-time
+    ManagementAuditBatch:
+      type: object
+      additionalProperties: false
+      required:
+      - format
+      - kind
+      - tenant_id
+      - generated_at
+      - authz_version
+      - items
+      - next_cursor
+      properties:
+        format:
+          const: sso.audit.batch.v1
+        kind:
+          const: management
+        tenant_id: *id003
+        generated_at:
+          type: string
+          format: date-time
+        authz_version: *id004
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/ManagementExportEvent'
+        next_cursor: *id005
+    MachineAuditBatch:
+      type: object
+      additionalProperties: false
+      required:
+      - format
+      - kind
+      - tenant_id
+      - generated_at
+      - authz_version
+      - items
+      - next_cursor
+      properties:
+        format:
+          const: sso.audit.batch.v1
+        kind:
+          const: machine
+        tenant_id: *id003
+        generated_at:
+          type: string
+          format: date-time
+        authz_version: *id004
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/MachineExportEvent'
+        next_cursor: *id005
+    AuditBatch:
+      oneOf:
+      - $ref: '#/components/schemas/ManagementAuditBatch'
+      - $ref: '#/components/schemas/MachineAuditBatch'
   parameters:
     PrincipalMatch:
       in: header

@@ -70,7 +70,7 @@ node tests/sso/browser.cjs
 
 ## 公共业务 API 与 OpenAPI
 
-现有 54 个面向外部服务端/原生客户端的业务操作（包含角色与绑定管理）：身份/空间、成员停用恢复、组织创建移动/归属、一次性邀请、审计分页和用户会话撤销。采用独立平台 audience、OAuth code+PKCE、Bearer scope、租户角色权限和最近 MFA；在业务事务内复查权威资格。公网部署仍由 SRE 负责。
+现有 55 个面向外部服务端/原生客户端的业务操作（包含角色与绑定管理）：身份/空间、成员停用恢复、组织创建移动/归属、一次性邀请、审计分页、受控批次导出和用户会话撤销。采用独立平台 audience、OAuth code+PKCE、Bearer scope、租户角色权限和最近 MFA；在业务事务内复查权威资格。公网部署仍由 SRE 负责。
 
 ```sh
 scripts/api prepare
@@ -92,13 +92,13 @@ scripts/console up
 scripts/console test
 ```
 
-见 [控制台手册](docs/runbooks/console.md)、[ADR 0007](docs/adr/0007-console-bff-contexts.md)、[浏览器 BFF OpenAPI](api/console.openapi.yaml) 和 [界面截图](docs/ui/console-overview.png)。React/Vite 用精确 npm lockfile 构建并嵌入 Go 服务，实际运行不需要 Vite 开发服务器。公共 API 0.15.0 共 54 个业务操作，包含租户角色与成员绑定；成员邮箱读取需要 members.read。
+见 [控制台手册](docs/runbooks/console.md)、[ADR 0007](docs/adr/0007-console-bff-contexts.md)、[浏览器 BFF OpenAPI](api/console.openapi.yaml) 和 [界面截图](docs/ui/console-overview.png)。React/Vite 用精确 npm lockfile 构建并嵌入 Go 服务，实际运行不需要 Vite 开发服务器。公共 API 0.16.0 共 55 个业务操作，包含租户角色与成员绑定；成员邮箱读取需要 members.read。
 
 
 租户角色与权限已接入真实 API 和控制台：可分别委托成员、组织、邀请和审计能力，显式拒绝优先；owner 保留角色管理恢复能力。支持角色创建/编辑/删除、成员绑定/解绑和 owner 移交，最后 owner 受并发保护。角色变更使旧授权失效，需重新确认空间。见 [ADR 0008](docs/adr/0008-tenant-roles-and-deny.md)、[角色界面](docs/ui/rbac-roles.png)，验收运行 `scripts/console rbac-test`。当前范围为整个租户，组织子树、应用/资源范围授权仍待实现。
 
 
-完整文档入口：[设计与开发手册](docs/handbook.md)、[逐接口 API 参考](docs/api-reference.md)、[API Playground](docs/playground.md)。控制台登录后选择 API Playground，展示 54 项 User 管理合同，其中 53 项可真实执行；一次性 SK 创建使用专用机器凭证页面，支持写入前确认、ETag、MFA/权限错误和响应凭证脱敏。公开 `/docs` 现提供逐接口参数、示例、schema 与响应。`scripts/docs export` 构建离线 HTML 和完整 ZIP，详见 [文档目录](docs/README.md)。
+完整文档入口：[设计与开发手册](docs/handbook.md)、[逐接口 API 参考](docs/api-reference.md)、[API Playground](docs/playground.md)。控制台登录后选择 API Playground，展示 55 项 User 管理合同，其中 54 项可真实执行；一次性 SK 创建使用专用机器凭证页面，支持写入前确认、ETag、MFA/权限错误和响应凭证脱敏。公开 `/docs` 现提供逐接口参数、示例、schema 与响应。`scripts/docs export` 构建离线 HTML 和完整 ZIP，详见 [文档目录](docs/README.md)。
 
 
 新增个人账户安全：MFA/恢复码/会话概览、撤销其他会话，以及统一认证域的密码+新 TOTP 恢复码重生成。旧码和全部旧会话在重生成后失效，新码只显示一次，认证器密钥保持不变。见 [账户安全手册](docs/account-security.md)；本地验收 `scripts/console security-test`。可信管理合同单列为 `api/security.openapi.yaml`。
@@ -118,3 +118,5 @@ scripts/console test
 机器身份新增 SP 创建/停用恢复、一次性 AK/SK、双凭证轮换、先本地撤销后协议清理、独立签发审计。机器令牌只访问对应应用的独立资源样例，每次查询主库资格；不进入平台管理/BFF。完整约束见 [机器凭证手册](docs/machine-credentials.md) 与 [机器协议 OpenAPI](api/machine.openapi.yaml)。本地验收运行 `scripts/console machine-api-test` / `scripts/console machine-test`；private_key_jwt、自定义机器业务授权与周期对账尚未提供。
 
 外部业务服务现有 Go 在线机器身份验证器与独立服务/客户端参考：每次通过 SSO 主库检查身份，固定 namespace、拒绝缓存/重定向/错误 realm；独立 whoami 与匿名 OpenAPI 不进入平台管理/BFF。见 [Go SDK 与完整本地示例](docs/external-machine-integration.md)，验收 `scripts/console machine-sdk-test`。
+
+审计页新增 [受控 JSON 批次导出](docs/audit-exports.md)：管理/机器来源独立、每批最多 100 条，下载时重新读取当前资格；支持只读审计委托、分页与取消，不包含邮箱或秘密。

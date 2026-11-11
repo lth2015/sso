@@ -1012,3 +1012,32 @@ dialog .secret {
   margin: 0;
   overflow-wrap: anywhere;
 }
+.audit-export-options {
+  border: 0;
+  padding: 0;
+  margin: 0 0 18px;
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.audit-export-options label {
+  min-width: 150px;
+  margin: 0;
+}
+.audit-export details {
+  margin-top: 18px;
+}
+.audit-export pre {
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.7;
+  background: #f3f6fb;
+  padding: 16px;
+  border-radius: 8px;
+}
+.audit-export > p {
+  overflow-wrap: anywhere;
+}

@@ -72,6 +72,7 @@ export const errorText = (error) =>
     already_exists: "相同记录已存在，请核对后再操作。",
     root_cannot_move: "空间根组织不能移动。",
     organization_cycle: "不能把组织移动到它自身或下级组织中。",
+    invalid_export_data: "导出数据格式不正确，请重新生成。",
     forbidden: "你没有执行这项管理操作的权限。",
     insufficient_scope: "当前授权不包含这项操作，请重新登录。",
     invalid_request: "请检查必填内容、字段格式、长度及请求内容后再试。",
