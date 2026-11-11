@@ -894,3 +894,5 @@ dialog .secret {
 .security-overview .summary-grid {
   margin: 18px 0;
 }
+
+.event-code { display: block; color: #526079; overflow-wrap: anywhere; }

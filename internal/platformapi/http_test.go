@@ -52,6 +52,7 @@ func TestAPIRevocationBetweenAuthenticationAndWrite(t *testing.T) {
 	if err = db.QueryRow(`SELECT normalized_email FROM login_aliases WHERE user_id=?`, a.User).Scan(&email); err != nil || !regexp.MustCompile(`^browser-[a-f0-9]{32}@example\.invalid$`).MatchString(email) {
 		t.Fatal("refusing non-fixture mutation")
 	}
+	verifySecurityEventBoundary(t, db, repo, a)
 	tenant, err := repo.APITenant(context.Background(), a)
 	if err != nil || !tenant.Owner {
 		t.Fatal("owner fixture required")

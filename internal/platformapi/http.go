@@ -449,7 +449,7 @@ func Handler(auth *Authenticator) http.Handler {
 	})
 }
 func isList(path string) bool {
-	return path == "/v1/tenants" || path == "/v1/sessions" || strings.HasSuffix(path, "/members") || strings.HasSuffix(path, "/organizations") || strings.HasSuffix(path, "/invitations") || strings.HasSuffix(path, "/audit-events") || (strings.HasSuffix(path, "/roles") && !strings.Contains(path, "/members/"))
+	return path == "/v1/me/security-events" || path == "/v1/tenants" || path == "/v1/sessions" || strings.HasSuffix(path, "/members") || strings.HasSuffix(path, "/organizations") || strings.HasSuffix(path, "/invitations") || strings.HasSuffix(path, "/audit-events") || (strings.HasSuffix(path, "/roles") && !strings.Contains(path, "/members/"))
 }
 func respond(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")

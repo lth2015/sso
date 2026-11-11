@@ -15,7 +15,7 @@ const all = operations(spec),
   tenant = "a".repeat(32);
 const op = (name) => all.find((x) => x.operationId === name);
 test("tenant path is bound to the session; query and resource IDs are constrained", () => {
-  assert.equal(all.length, 28);
+  assert.equal(all.length, 29);
   assert.equal(
     buildCall(
       op("listMembers"),

@@ -15,7 +15,7 @@
 
 ## API 与安全边界
 
-可信浏览器合同在 [security.openapi.yaml](../api/security.openapi.yaml)，运行时 `/sso/security/openapi.yaml`。它与公共 Bearer API、控制台 BFF 和 Playground 分开；公共业务操作仍为 28 个，没有给外部应用增加读取/替换 MFA 秘密的权限。
+可信浏览器合同在 [security.openapi.yaml](../api/security.openapi.yaml)，运行时 `/sso/security/openapi.yaml`。它与公共 Bearer API、控制台 BFF 和 Playground 分开；公共业务操作为 29 个，没有给外部应用增加读取/替换 MFA 秘密的权限。
 
 | 方法与路径 | 请求 | 成功响应 |
 | --- | --- | --- |

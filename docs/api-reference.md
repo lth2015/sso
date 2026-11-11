@@ -1,6 +1,6 @@
 # 完整 API 参考
 
-OpenAPI 0.9.0；公共 Bearer API 共 28 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
+OpenAPI 0.10.0；公共 Bearer API 共 29 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
 
 真实交互入口见 [Playground 手册](playground.md)；外部接入见 [公共 API 手册](runbooks/public-api.md)。JSON/YAML 合同见 [OpenAPI](../api/openapi.yaml)。
 
@@ -13,6 +13,7 @@ OpenAPI 0.9.0；公共 Bearer API 共 28 个业务操作。此文件由 OpenAPI 
 | POST | `/v1/invitations/accept` | `acceptInvitation` |
 | GET | `/v1/me` | `getMe` |
 | GET | `/v1/me/security` | `getMySecurity` |
+| GET | `/v1/me/security-events` | `listMySecurityEvents` |
 | GET | `/v1/sessions` | `listMySessions` |
 | POST | `/v1/sessions/revoke-others` | `revokeOtherSessions` |
 | POST | `/v1/sessions/{session}/revoke` | `revokeMySession` |
@@ -251,6 +252,113 @@ HTTP 200
               "otp",
               "recovery"
             ]
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## GET /v1/me/security-events
+
+List own security events newest first
+
+Current User only, across spaces; platform:read and a valid current tenant grant required, no tenant audit permission. Returns only reviewed event ID, action and timestamp; excludes internal targets, email, password, MFA proofs, IP and payloads. Order: occurred_at DESC, id DESC. after is the last event ID from this same user; unknown, hidden or another user cursor returns 404. Same-timestamp events use descending ID as a stable tie-breaker. No pagination snapshot, immutable-archive or complete security-monitoring guarantee. Reset-request events record receipt of a request, not proof that the user initiated it.
+
+OAuth scope：`platform:read`。权限：`当前有效 User/Session/grant`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "query",
+    "name": "limit",
+    "description": "Bounded keyset page size.",
+    "schema": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 50
+    }
+  },
+  {
+    "in": "query",
+    "name": "after",
+    "description": "Previous next_cursor; ascending UUID keyset, not a snapshot or timestamp ordering guarantee.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "List own security events newest first",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "action",
+                "occurred_at"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "action": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_.]{0,63}$",
+                  "description": "Reviewed security event code; never includes a private target/challenge ID or arbitrary payload."
+                },
+                "occurred_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
           }
         }
       }
@@ -3043,7 +3151,7 @@ HTTP 204
 }
 ```
 
-401：授权无效/已撤销；403：scope/权限不足或 recent_mfa_required；404：当前空间资源不存在；409：already_exists、last_active_owner、reserved_role、role_in_use、组织环/root 保护；412：版本冲突；428：缺少前置条件；429：限流，按 Retry-After 等待；503：权威服务暂不可用。
+401：授权无效/已撤销；403：scope/权限不足或 recent_mfa_required；404：资源或当前用户的游标不存在；409：already_exists、last_active_owner、reserved_role、role_in_use、组织环/root 保护；412：版本冲突；428：缺少前置条件；429：限流，按 Retry-After 等待；503：权威服务暂不可用。
 
 BFF 会话错误还可能返回 `{ "code": "session_unavailable" }`。两类边界合同不可混用。
 

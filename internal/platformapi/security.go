@@ -6,6 +6,22 @@ import (
 )
 
 func mountSecurity(mux *http.ServeMux, repo store.Store) {
+	mux.HandleFunc("GET /v1/me/security-events", func(w http.ResponseWriter, r *http.Request) {
+		n, after, ok := pagination(w, r)
+		if !ok {
+			return
+		}
+		if r.URL.Query().Has("after") && after == (store.ID{}) {
+			problem(w, 404, "not_found")
+			return
+		}
+		items, err := repo.APISecurityEvents(r.Context(), authority(r), n+1, after)
+		if err != nil {
+			failure(w, err)
+			return
+		}
+		page(w, items, n, func(v store.SecurityEventSummary) string { return v.ID })
+	})
 	mux.HandleFunc("GET /v1/me/security", func(w http.ResponseWriter, r *http.Request) {
 		value, err := repo.APISecurity(r.Context(), authority(r))
 		if err != nil {
