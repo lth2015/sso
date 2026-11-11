@@ -106,3 +106,5 @@ scripts/console test
 已增加两阶段认证器更换：验证密码与旧 TOTP，验证新 TOTP 后切换密钥并撤销旧恢复码/全部旧会话；取消保留原认证器。见 [认证器管理](docs/authenticator-management.md) 与 [ADR 0011](docs/adr/0011-staged-authenticator-replacement.md)，验收 `scripts/console authenticator-test`。
 
 个人安全记录现已接入控制台、公共 API 与 Playground：`GET /v1/me/security-events`，只返回当前用户的受控事件、时间和事件 ID，支持时间倒序分页。见 [使用手册](docs/security-events.md) 与 [ADR 0012](docs/adr/0012-personal-security-events.md)，验收 `scripts/console events-test`。
+
+周五本地演示已提供固定数据与彩排工具：`scripts/demo prepare`、`scripts/demo rehearse`、`scripts/demo check`。含两个隔离空间、组织树、管理员/只读审计员、真实双应用 SSO 和 API Playground；登录资料仅写本地私有文件，重置保留其他开发数据。见 [10 分钟演示手卡](docs/runbooks/friday-demo.md)。

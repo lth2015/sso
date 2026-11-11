@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+case "${1:-}" in
+ prepare)
+  scripts/console prepare
+  scripts/console up
+  node scripts/demo-data.cjs seed
+  ;;
+ seed|check|rehearse|reset) node scripts/demo-data.cjs "$1" ;;
+ *) echo 'Usage: scripts/demo {prepare|seed|check|rehearse|reset}' >&2; exit 2 ;;
+esac

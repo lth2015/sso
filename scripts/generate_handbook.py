@@ -85,6 +85,7 @@ sources = [
     ('个人账户安全', 'account-security.md'),
     ('认证器更换', 'authenticator-management.md'),
     ('个人安全事件', 'security-events.md'),
+    ('周五演示与彩排', 'runbooks/friday-demo.md'),
     ('React 控制台', 'runbooks/console.md'),
     ('可信登录与双应用', 'runbooks/local-sso.md'),
     ('账户生命周期', 'runbooks/m2-accounts.md'),

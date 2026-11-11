@@ -5,6 +5,7 @@
 | 文档 | 内容 |
 | --- | --- |
 | [完整 API 参考](api-reference.md) | 29 个操作的参数、输入示例、schema、响应和错误 |
+| [周五本地演示](runbooks/friday-demo.md) | 数据准备、私有账号、10 分钟主线、彩排与重置 |
 | [个人安全记录](security-events.md) | 自己的安全事件、时间分页、隐私与游标边界 |
 | [认证器更换](authenticator-management.md) | 密码/旧 TOTP 验证、新 TOTP 确认、取消与结果不明处理 |
 | [个人账户安全](account-security.md) | 会话撤销、密码+TOTP 恢复码管理与重试边界 |

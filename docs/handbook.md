@@ -3752,7 +3752,109 @@ GCP、公网域名、TLS 和部署由 SRE 负责。本地验收不代表生产�
 `scripts/console events-test` 验证真实 BFF/主库记录、控制台分页/刷新、导航后的迟到响应丢弃、手机布局和真实 Playground；测试账户和事件夹具在退出后清理。不使用认证 stub，不截图或记录登录秘密。设计见 [ADR 0012](adr/0012-personal-security-events.md)。
 
 
-## 11. React 控制台
+## 11. 周五演示与彩排
+
+来源：[runbooks/friday-demo.md](runbooks/friday-demo.md)。
+
+### 周五演示：10 分钟主线与彩排
+
+本演示面向 2026-11-13（周五）。现有 SSO、MFA、空间/组织、租户角色、公共 API、Playground 与个人安全记录组成一期演示范围。演示使用真实 Hydra、MySQL、BFF 和权限检查；合成业务数据由本地工具通过真实账户流程与公开 API 创建。
+
+#### 准备入口
+
+在 `/workspace/sso` 执行：
+
+```sh
+scripts/demo prepare       # 构建/启动本地服务，建立独立演示数据
+scripts/demo rehearse      # 真实密码/TOTP、双应用 SSO、权限和 UI 全流程彩排
+scripts/demo check         # 演示前快速检查，可重复运行
+```
+
+已准备好的环境可直接使用 `scripts/demo seed` 创建数据。重复 seed 会检查现有数据，不重复建空间或覆盖密码。失败的部分数据会保留，只能显式 reset 后重新创建，避免网络结果不明时重复写入。
+
+| 入口 | 地址 |
+| --- | --- |
+| 主控制台 | http://console.localhost:3003 |
+| 应用 A | http://app-a.localhost:3001 |
+| 应用 B | http://app-b.localhost:3002 |
+| 公开 API 参考与合同下载 | http://api.localhost:8083/docs |
+
+.localhost 入口请在当前托管工作区的 Desktop 面板浏览器中访问；自己电脑的 localhost 不会自动指向这个工作区。也可以在自己的电脑启动同一仓库后访问。
+
+这些入口由服务所在机器上的浏览器访问；`.localhost` 指向浏览器所在机器。远程演示入口/正式域名由 SRE 提供，本工具只用于本地参考环境。SRE 环境是否能演示须在实际入口另行验收；不得把本地彩排记为云端验收。本工具不改变 CI、网络暴露或部署配置。
+
+登录资料仅写入 `.local/demo/presenter.md` 和 `.local/demo/manifest.json`（目录 0700、文件 0600，均被 Git 忽略）。其中包含随机密码、TOTP 密钥和恢复码，不进入公开文档包、截图或工具日志。请提前从私有文件将两个账号导入认证器（SHA-1、6 位、30 秒）；也可使用尚未消费的单次恢复码。不要在共享的演示画面中打开私有资料文件。
+
+管理员和审计员使用两个独立浏览器用户配置/浏览器应用，避免中央会话互相影响。不要用同一普通配置的两个窗口假装两个独立身份。可以提前登录备用配置，主线仍从管理员的真实登录开始。
+
+#### 固定演示数据
+
+- **星河科技**：主要演示空间，含“研发中心 → 平台组 / 产品组”与“商务协作”。
+- **远山合作社**：独立空间，用于解释空间隔离；审计员未加入。
+- **管理员**：两个演示空间的 owner，可管理组织、成员与角色。
+- **只读审计员**：加入星河科技，绑定 demo_auditor；允许 members.read / organizations.read / audit.read，显式拒绝 organizations.write。
+
+个人空间仍保留用于正常账户行为。演示时明确选择“星河科技”；切换空间要重新确认授权。同一用户在各空间的个人安全记录仍属于该用户。数据 ID 与无凭证的操作提示位于 `.local/demo/dataset.md`。
+
+#### 10 分钟讲解顺序
+
+| 时间 | 操作 | 讲解与成功标准 |
+| --- | --- | --- |
+| 0:00–1:30 | 管理员从控制台登录，输入密码和认证器动态码，选择“星河科技”并同意 | 登录、第二因素和空间授权分开；进入有真实组织/成员数据的控制台 |
+| 1:30–2:30 | 在同一浏览器配置依次打开应用 A/B 的“使用统一登录”，选择星河科技 | 复用中央登录，无需再次输入密码/TOTP；两个应用具有独立会话，显示相同用户/空间 |
+| 2:30–4:00 | 回控制台查看“组织”“成员”“角色与权限” | 展示研发中心/两个小组、两名成员和 demo_auditor 的允许/拒绝规则。可创建一个“周五演示组”；写入最近 MFA 过期时先重新验证 |
+| 4:00–5:30 | 切到另一个浏览器配置中的只读审计员，打开组织/审计 | 能读组织和审计，组织创建控件不可用；在其 Playground 选择 listRoles，发送后得到 403，说明隐藏按钮之外还有服务端鉴权 |
+| 5:30–7:00 | 管理员打开 API Playground，选择 listOrganizations → 发送；再选 listMySecurityEvents | 展示真实 200、JSON、所需 scope、当前空间与受控 cURL 模板；打开公开 API 页下载 OpenAPI 3.1，公共业务共 29 操作 |
+| 7:00–8:00 | 管理员“安全会话”，展示 MFA/恢复码数量、登录会话和个人安全记录 | 只展示元数据；重置请求仅代表收到请求，时间线不等于完整设备/异常登录监控 |
+| 8:00–9:00 | 应用 B 点击“仅退出此应用”，再查看应用 A | B 退出而 A 仍可用，展示应用会话与中央登录的边界 |
+| 9:00–10:00 | 展示一期范围和后续清单 | 动态 client/机器凭证、细粒度资源授权、遗失认证器受控恢复、正式通知与独立归档继续开发，部署交付由 SRE 负责 |
+
+彩排自动验证：组织树、owner/委托权限、审计读取、组织写入 403、跨空间资源 404、两应用 SSO/续期、真实控制台与 Playground 200/403、安全记录和应用局部退出。彩排不消费恢复码、不改变组织结构；会追加正常认证事件及应用会话。结果写入本地私有 `.local/demo/verification.json`，不保存 token/cookie。
+
+#### 演示前检查与备用路线
+
+周五演示前运行 `scripts/demo check`，确认命令成功且 verification.json 时间为本次检查。TOTP 时间片被登录使用过时等下一组，脚本最多等待下一周期并重试一次。检查按真实身份流程执行，不关闭 MFA、跳过邮箱证明或放宽权限。
+
+提前打开控制台、应用 A/B、API 文档和审计员独立配置。高风险的认证器更换、恢复码重生成、全设备退出会撤销现有会话，放在主线结束后的备用环节；它们有单独手册。演示途中若需要 step-up，完成验证后明确重新提交原操作，系统不会自动重放写入。
+
+备用材料使用以下真实彩排截图，也包含在完整离线文档包中。现场入口不可用时可按这些截图讲解，并明确当时展示的是彩排记录。
+
+##### 组织数据
+
+![星河科技组织树](ui/friday-organizations.png)
+
+##### 角色与委托
+
+![演示角色](ui/friday-roles.png)
+
+##### 只读审计员
+
+![审计员视图](ui/friday-auditor.png)
+
+##### 真实 API Playground
+
+![演示 API 调用](ui/friday-playground.png)
+
+##### 账户安全
+
+![演示安全记录](ui/friday-security.png)
+
+#### 重置与故障处理
+
+```sh
+scripts/demo reset         # 只删除工具清单中的合成账户和封闭演示空间
+scripts/demo seed          # 新账号/密码/密钥与新空间；重新导入认证器
+scripts/demo rehearse
+```
+
+reset 使用封闭账户集合检查：如果演示空间中出现了清单之外的账户，会拒绝删除；先核实这些真实关系，不自动扩大删除范围。不要把真实用户邀请进这套可重置数据。工具不会 down -v 或删除其他开发数据。状态清单与当前本地密钥 fingerprint 绑定，切换环境时拒绝使用旧清单操作新数据库。
+
+同一时间只运行一个 demo 命令。崩溃可能留下 `.local/demo/command.lock`；它只含进程号。确认对应进程已经退出后才能手工移除这个锁，再运行 reset/seed；不要在命令仍运行时解锁。日志只输出阶段与受控失败信息，禁止为排障打印整个清单、邮箱、浏览器 cookie 或原始 Playwright 异常。
+
+准备/检查失败时先确认本地服务健康和数据库仍是当前环境，再重跑相应命令；已有完整演示数据不需要每天重建。SRE 环境的部署和访问问题由 SRE 对应，本地彩排包可供其核对数据与演示顺序。
+
+
+## 12. React 控制台
 
 来源：[runbooks/console.md](runbooks/console.md)。
 
@@ -3821,7 +3923,7 @@ scripts/console enable --email YOUR_LOCAL_ADDRESS --second-tenant
 个人安全记录位于安全会话页，20 条分页与刷新，使用当前 User 的公开只读接口；跨空间仍只读本人记录，未公开内部目标标识。验收 `scripts/console events-test`；语义及限制见 [手册](security-events.md)。
 
 
-## 12. 可信登录与双应用
+## 13. 可信登录与双应用
 
 来源：[runbooks/local-sso.md](runbooks/local-sso.md)。
 
@@ -3880,7 +3982,7 @@ scripts/sso enable --email YOUR_LOCAL_ADDRESS --second-tenant
 生产边界见 [ADR 0005](adr/0005-trusted-login-mfa-bff.md)。这些示范应用使用同一 Application，完整权限控制台、MFA 管理、正式邮件与生产 TLS/KMS 等仍待后续开发。
 
 
-## 13. 账户生命周期
+## 14. 账户生命周期
 
 来源：[runbooks/m2-accounts.md](runbooks/m2-accounts.md)。
 
@@ -3918,7 +4020,7 @@ m2 test 暂停本项目 mail-worker，防止真实 worker 与集成 fixture 争�
 已实现注册邮箱证明、原子个人空间引导、Argon2id 密码、恢复挑战、安全版本递增、通知加密/本地可靠落盘、四个 HTTP API 和真实账户页面。账户接口不提供 token 旁路；可信登录、中央会话、MFA 与 BFF 现由 [本地 SSO 手册](runbooks/local-sso.md) 说明。管理接口仍未公开；M0 合成身份实验继续独立。GCP 部署交由 SRE，对应生产邮箱、密钥托管和分布式限流留作正式集成。
 
 
-## 14. 数据库与组织
+## 15. 数据库与组织
 
 来源：[runbooks/m1.md](runbooks/m1.md)。
 
@@ -3953,7 +4055,7 @@ GCP 部署和云端运维由 SRE 专门负责，不作为后续本地开发前�
 新增 RBAC 数据检查：allow/deny 与撤销、委托边界、邀请创建者权限复查、非法/跨租户/内置角色拒绝、owner 操作 deny 的恢复能力、角色删除后的绑定审计和并发 owner 移除。迁移 005 增加策略/绑定事件表；勿修改已应用迁移的校验和。
 
 
-## 15. 协议实验
+## 16. 协议实验
 
 来源：[runbooks/m0.md](runbooks/m0.md)。
 
@@ -4009,7 +4111,7 @@ Go 的 GOPATH/GOMODCACHE/GOCACHE 全部位于 .local，避免受限 HOME 路径�
 M1 数据仓储的运行方式见 [M1 手册](runbooks/m1.md)。Cloud SQL 按用户要求本轮不验证，不把该项写成通过。
 
 
-## 16. 实施计划与剩余功能
+## 17. 实施计划与剩余功能
 
 来源：[implementation-plan.md](implementation-plan.md)。
 
@@ -4056,8 +4158,10 @@ API/文档切片已增加真实 Playground、逐操作运行时参考页、完�
 
 个人安全事件已接入公共 API、控制台和 Playground。公共合同 0.10.0 增至 29 个业务操作；复用已有身份事件表与索引，按当前 User 查询与时间/ID 游标分页，不提供其他用户或私有 target/payload。此切片不替代独立审计归档、设备/登录失败监测和通知消费者，见 ADR 0012。
 
+周五演示优先冻结一期主线：真实 MFA/双应用 SSO、空间/组织、只读角色、公开 API/Playground 和个人安全记录。通过本地私有演示数据与可重置彩排工具验收；完整 client/机器凭证、细粒度授权、受控恢复与正式通知/归档继续按后续切片实施。Marketstars 的实际接入尚待独立联调，不将两个示范 BFF 的结果记作该业务系统已经接通。见周五演示手卡。
 
-## 17. 架构决策 0001
+
+## 18. 架构决策 0001
 
 来源：[adr/0001-platform-boundaries.md](adr/0001-platform-boundaries.md)。
 
@@ -4074,7 +4178,7 @@ API/文档切片已增加真实 Playground、逐操作运行时参考页、完�
 实施：先完成可运行 M0 和测试报告，再依次开展 M1–M5。UI 规格先完成，生产控制台后续交付。此次 Git push 是源码/文档交付，不是云部署或生产发布。上传原文保持不变供追溯。
 
 
-## 18. 架构决策 0002
+## 19. 架构决策 0002
 
 来源：[adr/0002-hydra-m0-findings.md](adr/0002-hydra-m0-findings.md)。
 
@@ -4110,7 +4214,7 @@ Hydra Admin 在本地为测试绑定 loopback，HTTP/--dev 仅此实验允许。
 每交易/refresh chain 绑定、logout/remembered consent/prompt=none/max_age、签名 key 轮换的本地真实引擎验证已补充。用户随后明确 Cloud SQL 由其准备且本轮无需验证，因此云端 HA/DR 不作为本轮本地代码推进阻塞项，也不记为通过。镜像漏洞/维护确认及生产部署前的云端验收仍需另行完成。M1 已开始内部数据与仓储切片，未开放生产功能。
 
 
-## 19. 架构决策 0003
+## 20. 架构决策 0003
 
 来源：[adr/0003-transaction-bindings-and-m1.md](adr/0003-transaction-bindings-and-m1.md)。
 
@@ -4153,7 +4257,7 @@ M0 实验资格表与 M1 业务表尚未连通；不把两个独立测试库的�
 用户进一步明确：本轮尽可能完成本地开发和验收，GCP 部署/云端运维由专门 SRE 负责。后续开发不等待 GCP 项目、实例或云凭证；本地迁移、接口合同和运行说明作为交接材料。云端 HA/DR、KMS 与上线 SLO 属于 SRE/联合生产验收，不由本轮代理执行，也不记为本地测试通过。
 
 
-## 20. 架构决策 0004
+## 21. 架构决策 0004
 
 来源：[adr/0004-account-proof-lifecycle.md](adr/0004-account-proof-lifecycle.md)。
 
@@ -4190,7 +4294,7 @@ worker 用 SELECT FOR UPDATE SKIP LOCKED 获取一条待投递记录，仅向私
 尚无 Hydra 可信登录交互、中央会话、MFA、BFF、真实邮件供应商、生产账号恢复审批与通知。M0 合成授权仍与此业务 User 权威状态分离；不能据 security_version 递增宣称现有 M0 JWT/refresh 已全部撤销。下一步必须把账户因素接入受 CSRF/Origin/交易状态保护的 Hydra 登录，再实施 MFA 与会话版本检查，而非新增 password-to-token 路由。
 
 
-## 21. 架构决策 0005
+## 22. 架构决策 0005
 
 来源：[adr/0005-trusted-login-mfa-bff.md](adr/0005-trusted-login-mfa-bff.md)。
 
@@ -4233,7 +4337,7 @@ BFF 会话绝对 8 小时、空闲 30 分钟。refresh 在会话行锁内串行�
 未实现正式 React 控制台、完整 scoped RBAC、MFA 撤销/更换及受控恢复、30 天 refresh 策略、产品级邮件供应商和全部业务事件消费者。GCP 部署、Cloud SQL HA/DR 验证由 SRE 负责；本地通过不代表生产验收。
 
 
-## 22. 架构决策 0006
+## 23. 架构决策 0006
 
 来源：[adr/0006-public-platform-api.md](adr/0006-public-platform-api.md)。
 
@@ -4280,7 +4384,7 @@ Owner 可列出成员、停用/恢复成员，创建组织、预览/执行移动
 本地固定域名/明文/loopback、开发 SQL 账号和单进程限流不得直接当作生产配置。正式域名、TLS、issuer/JWKS 接线、ingress、专用最小权限数据库账号、分布式限流、监控与容量由后续实施和 SRE 验收。没有部署公网、动态第三方 client 注册、通用机器身份凭证或完整控制台；已有 M0 机器 grant 仍是独立实验，不能调用此用户管理 API。
 
 
-## 23. 架构决策 0007
+## 24. 架构决策 0007
 
 来源：[adr/0007-console-bff-contexts.md](adr/0007-console-bff-contexts.md)。
 
@@ -4325,7 +4429,7 @@ BFF SQL 账号不能读取密码、MFA 密文、中央 cookie 摘要、login_ali
 后续实现更新：租户角色/委托见 ADR 0008，个人安全见 ADR 0010，认证器更换见 ADR 0011；本 ADR 的第一切片边界不代表后续能力仍未实现。
 
 
-## 24. 架构决策 0009
+## 25. 架构决策 0009
 
 来源：[adr/0009-api-playground-and-handbook.md](adr/0009-api-playground-and-handbook.md)。
 
@@ -4354,7 +4458,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 验收覆盖真实注册/密码/MFA/Hydra/BFF/API、写入确认/单次发送、ETag/412、普通成员 403、MFA 过期、凭证脱敏、输出转义、导航清理与桌面/手机；离线 HTML 检查目录锚点、无外部请求、无脚本/表单及布局，导出包校验每个摘要。受管 Chromium 禁止 file:// 导航，HTML 测试通过临时 loopback 只读服务加载同一文件，不将该测试描述为云端部署。GCP 部署与运维仍由 SRE 负责。
 
 
-## 25. 架构决策 0010
+## 26. 架构决策 0010
 
 来源：[adr/0010-self-service-account-security.md](adr/0010-self-service-account-security.md)。
 
@@ -4375,7 +4479,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 测试同时验证主库绑定/尝试次数/过期、密码重置竞态、并发仅一次成功，以及真实密码/TOTP/恢复码登录、旧授权失效、当前/其他用户会话隔离。未把普通 Go 中跳过的 fixture 用例当作数据库通过；SSO profile 明确运行新增 TestSSO 用例。生产 TLS/Secure cookie、分布式限流和 KMS 仍须后续由 SRE 实施验收。
 
 
-## 26. 架构决策 0011
+## 27. 架构决策 0011
 
 来源：[adr/0011-staged-authenticator-replacement.md](adr/0011-staged-authenticator-replacement.md)。
 
@@ -4396,7 +4500,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 公共/BFF/security 合同版本统一 0.9.0，公共操作数仍为 28；仅可信合同增加管理页和 start/confirm/cancel。生产 TLS、分布式限流和 KMS 仍按既有边界后续实施。此次不修改 SRE 的 CI 或部署配置。
 
 
-## 27. 架构决策 0012
+## 28. 架构决策 0012
 
 来源：[adr/0012-personal-security-events.md](adr/0012-personal-security-events.md)。
 
@@ -4415,7 +4519,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 本轮不改 CI、部署、既有迁移及 GCP；不可变归档、登录失败/设备监控、正式通知及事件消费者仍需继续实施。
 
 
-## 28. 验收证据
+## 29. 验收证据
 
 来源：[validation.md](validation.md)。
 
@@ -4574,3 +4678,18 @@ M0/M1 既有证据仍包括跨租户/授权链隔离、会话/退出与签名轮
 | 构建/文档 | Go vet/普通 Go 测试、5 项前端边界测试、OpenAPI 引用/唯一 ID/同步、格式、npm audit（0 已知漏洞）、离线 HTML 与完整 ZIP 摘要校验通过 | 普通 Go 中跳过的服务 fixture 不算真实 SQL 证据；本轮无协议/迁移实现变更，未把前批整库/协议结果写成本轮重新执行 |
 
 合成账户、独立 SQL 夹具和私有 mailbox 均已清理，原有开发用户/数据保留，服务保持运行。旧迁移及原始上传参考未改动，CI/部署文件未改动，也未执行 GCP 或公网部署。此时间线不代表登录失败/IP/设备监测、不可变归档、正式通知或完整身份事件消费者已交付。
+
+#### 2026-11-11：周五本地演示包
+
+冻结一期演示主线并新增 scripts/demo、真实账户/数据准备、可重复检查与彩排、封闭数据重置，以及 10 分钟讲解手卡和五张真实彩排截图。公共合同仍为 0.10.0 / 29 操作，没有增加业务 API、迁移或生产配置。
+
+| 检查 | 实际结果 | 边界 |
+| --- | --- | --- |
+| 数据准备 | 在已运行的本地服务执行 seed，通过真实邮箱证明、随机密码、TOTP 和公开 API 建立管理员/审计员、星河科技/远山合作社、组织树和只读角色 | 无登录 bypass，不关闭 MFA；工具只针对本地参考服务；账户私有资料不进入 Git/文档包 |
+| 完整彩排 | 两轮 rehearse 均通过真实密码/TOTP、双应用 SSO/续期、组织数据、owner/委托权限、跨空间拒绝、控制台和 Playground 200/403、个人安全记录及应用局部退出 | 使用独立浏览器上下文；不消费恢复码，不更改组织结构；每轮会产生正常认证事件/应用会话 |
+| 重置与重建 | reset 删除本工具的封闭合成数据后，原有开发用户数量仍为 1；重新 seed/rehearse 后保留原用户和两名有意保留的演示用户 | 不执行 down -v，不改变原开发账户；含外部用户的空间由既有封闭集合清理器拒绝删除 |
+| 重复执行 | 已有完整数据再次 seed 走真实检查并成功，未重复创建空间/角色或覆盖密码 | 可在周五用 check 重新确认；TOTP 时间片冲突等待下一周期，最多再试一次 |
+| 私密/并发 | 目录 0700、四份私有文件 0600、两组恢复码各 10 个且均未消费、私有 mailbox 无残留；已有命令锁时拒绝并保留原锁/数据 | 明文材料只留忽略目录，日志仅受控阶段/错误；崩溃锁需先核实进程退出再移除 |
+| 工具与文档 | Bash/Node 语法、锁定格式检查、完整手册同步、离线 HTML/ZIP 摘要和秘密排除检查通过 | prepare 复用已验证的 console 构建/启动链，本轮实际验收命令为 seed/rehearse/reset/重复 seed；没有把未重新执行的后端整库套件计为本轮结果 |
+
+当前本地演示数据保持可用，登录资料位于 .local/demo/presenter.md，讲解见 runbooks/friday-demo.md。应使用服务所在工作区的 Desktop 浏览器访问 .localhost；其他机器不能直接复用这些回环地址。Marketstars 暂未独立接入验收；用户已要求先完成当前本地演示，未把示范 A/B 的通过结果记作该业务系统已经接通。CI、部署和 GCP 未改动。
