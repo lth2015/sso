@@ -21,6 +21,7 @@ type ApplicationSummary struct {
 	Protected   bool   `json:"protected"`
 	Version     int64  `json:"version"`
 	ClientCount int    `json:"client_count"`
+	Managed     bool   `json:"managed"`
 }
 type ApplicationClientSummary struct {
 	Client   string   `json:"client_id"`
@@ -29,12 +30,14 @@ type ApplicationClientSummary struct {
 	Audience string   `json:"audience"`
 	Active   bool     `json:"active"`
 	Version  int64    `json:"version"`
+	Managed  bool     `json:"managed"`
+	State    string   `json:"state"`
 }
 
-const applicationSelect = `SELECT LOWER(HEX(a.id)),a.code,a.name,ta.active,a.active,a.code='local-platform',ta.security_version,(SELECT COUNT(*) FROM oauth_clients c WHERE c.application_id=a.id) FROM tenant_applications ta JOIN applications a ON a.id=ta.application_id WHERE ta.tenant_id=?`
+const applicationSelect = `SELECT LOWER(HEX(a.id)),a.code,a.name,ta.active,a.active,a.code='local-platform',ta.security_version,(SELECT COUNT(*) FROM oauth_clients c WHERE c.application_id=a.id) ,EXISTS(SELECT 1 FROM managed_applications ma WHERE ma.tenant_id=ta.tenant_id AND ma.application_id=a.id) FROM tenant_applications ta JOIN applications a ON a.id=ta.application_id WHERE ta.tenant_id=?`
 
 func scanApplication(row interface{ Scan(...any) error }) (v ApplicationSummary, err error) {
-	err = row.Scan(&v.ID, &v.Code, &v.Name, &v.Enabled, &v.Available, &v.Protected, &v.Version, &v.ClientCount)
+	err = row.Scan(&v.ID, &v.Code, &v.Name, &v.Enabled, &v.Available, &v.Protected, &v.Version, &v.ClientCount, &v.Managed)
 	if err == sql.ErrNoRows {
 		err = ErrNotFound
 	}
@@ -79,7 +82,7 @@ func (s TenantStore) APIApplicationClients(ctx context.Context, app ID, limit in
 		if _, e := scanApplication(tx.QueryRowContext(ctx, applicationSelect+` AND a.id=?`, s.tenant, app)); e != nil {
 			return e
 		}
-		rows, e := tx.QueryContext(ctx, `SELECT client_id,redirect_uri,scopes,audience,active,security_version FROM oauth_clients WHERE application_id=? AND client_id>? ORDER BY client_id LIMIT ?`, app, after, limit)
+		rows, e := tx.QueryContext(ctx, `SELECT c.client_id,c.redirect_uri,c.scopes,c.audience,c.active,c.security_version,mc.client_id IS NOT NULL,COALESCE(mc.state,'external') FROM oauth_clients c LEFT JOIN managed_oauth_clients mc ON mc.client_id=c.client_id AND mc.tenant_id=? AND mc.application_id=c.application_id WHERE c.application_id=? AND c.client_id>? ORDER BY c.client_id LIMIT ?`, s.tenant, app, after, limit)
 		if e != nil {
 			return e
 		}
@@ -87,7 +90,7 @@ func (s TenantStore) APIApplicationClients(ctx context.Context, app ID, limit in
 		for rows.Next() {
 			var v ApplicationClientSummary
 			var scopes string
-			if e = rows.Scan(&v.Client, &v.Redirect, &scopes, &v.Audience, &v.Active, &v.Version); e != nil {
+			if e = rows.Scan(&v.Client, &v.Redirect, &scopes, &v.Audience, &v.Active, &v.Version, &v.Managed, &v.State); e != nil {
 				return e
 			}
 			v.Scopes = strings.Fields(scopes)

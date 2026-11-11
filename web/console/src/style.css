@@ -558,6 +558,7 @@ button.danger-link:hover {
 }
 .confirmation {
   display: flex;
+  flex-direction: row;
   align-items: flex-start;
   gap: 8px;
 }
@@ -926,4 +927,44 @@ dialog .secret {
 .integration-value {
   margin-left: 0;
   overflow-wrap: anywhere;
+}
+
+.application-directory .actions button {
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .application-directory table,
+  .application-directory tbody,
+  .application-directory tr,
+  .application-directory td {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+  .application-directory thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .application-directory tr {
+    padding: 16px 0;
+    border-bottom: 1px solid #e2e8f2;
+  }
+  .application-directory tr:last-child {
+    border-bottom: 0;
+  }
+  .application-directory td {
+    padding: 6px 0;
+    border: 0;
+  }
+  .application-directory td[data-label]::before {
+    content: attr(data-label) "：";
+    color: #637189;
+  }
+  .application-directory .actions {
+    margin-top: 6px;
+    gap: 8px;
+  }
 }

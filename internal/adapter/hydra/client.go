@@ -21,8 +21,12 @@ type Client struct {
 	Base string
 }
 
+// New targets only the private fixed Admin service. Like the private protocol
+// transport, it must not send internal control-plane calls through an outbound
+// HTTP proxy or depend on a deployment NO_PROXY list. Browser input never
+// selects this destination. Redirects remain forbidden.
 func New() *Client {
-	return &Client{Base: "http://hydra-login:4445", HTTP: &http.Client{Timeout: 3 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
+	return &Client{Base: "http://hydra-login:4445", HTTP: &http.Client{Transport: &http.Transport{Proxy: nil}, Timeout: 3 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 }
 func (c *Client) Do(ctx context.Context, method, path string, body, result any) error {
 	var input io.Reader

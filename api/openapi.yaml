@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SSO Public Platform API
-  version: 0.12.0
+  version: 0.13.0
   description: External server/native-client contract. Local reference server only;
     production requires TLS and configured public origins. OAuth code+S256 PKCE, platform
     audience https://api.sso.local. No cookie authentication or wildcard CORS; browser
@@ -26,12 +26,77 @@ tags:
 - name: Tenant management
 paths:
   /v1/tenants/{tenant}/applications:
+    post:
+      operationId: createApplication
+      summary: Create a tenant-owned application
+      description: Active owner and recent MFA required. Creates application, this
+        tenant association, immutable ownership and audit/outbox atomically. Maximum
+        20 owned apps per tenant. Other tenants and built-in/shared applications are
+        not made owned by this call. No OAuth client or secret is issued; no unrelated
+        tenant authorization version change.
+      tags:
+      - Tenant management
+      security:
+      - OAuth2:
+        - platform:write
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      responses:
+        '201':
+          description: Create a tenant-owned application
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+            ETag:
+              $ref: '#/components/headers/ETag'
+            Location:
+              description: Created resource path; read metadata here after a result
+                is known.
+              schema: &id001
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: reserved_owner:roles.manage
+      x-recent-mfa-seconds: 300
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationInput'
+            example:
+              name: 本地客户端演示
     get:
       operationId: listTenantApplications
       summary: List applications explicitly associated with this space
       description: Active owner only. Includes disabled associations for recovery;
-        no global application discovery, implicit enablement, client creation or secret
-        access.
+        no global application discovery, implicit enablement or secret access. The
+        managed flag identifies this tenant ownership; separate owner-only creation
+        handles owned apps.
       tags:
       - Tenant management
       security:
@@ -74,6 +139,311 @@ paths:
         '503':
           $ref: '#/components/responses/Problem'
       x-authorization: reserved_owner:roles.manage
+  /v1/tenants/{tenant}/applications/{application}/clients:
+    post:
+      operationId: createManagedClient
+      summary: Register a pending public PKCE client
+      description: 'Active owner/recent MFA; only applications owned by this tenant
+        and currently available/enabled. Maximum 100 lifetime registrations per app,
+        including revoked tombstones. Server chooses a random client_id. Starts pending
+        and inactive, requiring separate reconcile to register and verify the engine.
+        Fixed authorization_code/refresh_token, S256 PKCE, no client secret, fixed
+        scopes openid offline_access platform:read and platform audience. No custom
+        scopes/audience/grants/authentication/JWKS fields. Response loss: read application
+        clients before creating another registration.'
+      tags:
+      - Tenant management
+      security:
+      - OAuth2:
+        - platform:write
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/applicationID'
+      responses:
+        '201':
+          description: Register a pending public PKCE client
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+            ETag:
+              $ref: '#/components/headers/ETag'
+            Location:
+              description: Created resource path; read metadata here after a result
+                is known.
+              schema: *id001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagedClient'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: reserved_owner:roles.manage
+      x-recent-mfa-seconds: 300
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagedClientInput'
+            example:
+              name: 桌面客户端
+              redirect_uri: http://127.0.0.1:9876/callback
+    get:
+      operationId: listApplicationClients
+      summary: Read registered client metadata for an associated application
+      description: Active owner only, including disabled associations. Exact registered
+        client_id, redirect URI, scopes, audience, active flag and version; never
+        client secrets, cookies or token material. Cursor is printable client_id (not
+        UUID), sorted ascending within this application. This GET does not change
+        protocol configuration. managed/state distinguish tenant-owned lifecycle rows
+        from external built-in registrations; no secret/authentication credential
+        is returned.
+      tags:
+      - Tenant management
+      security:
+      - OAuth2:
+        - platform:read
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/applicationID'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/ClientAfter'
+      responses:
+        '200':
+          description: Read registered client metadata for an associated application
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationClientPage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: reserved_owner:roles.manage
+  /v1/tenants/{tenant}/applications/{application}/clients/{client}:
+    get:
+      operationId: getManagedClient
+      summary: Read this tenant owned managed-client state and version
+      description: Active owner only. Database metadata without a protocol Admin fetch
+        or secrets. client path is a server-generated 32-hex ID; existing shared/external
+        registrations remain metadata-only via the application client list. Root application
+        path and client must belong to this tenant ownership record.
+      tags:
+      - Tenant management
+      security:
+      - OAuth2:
+        - platform:read
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/applicationID'
+      - $ref: '#/components/parameters/clientID'
+      responses:
+        '200':
+          description: Read this tenant owned managed-client state and version
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagedClient'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: reserved_owner:roles.manage
+  /v1/tenants/{tenant}/applications/{application}/clients/{client}/revoke:
+    post:
+      operationId: revokeManagedClient
+      summary: Irreversibly revoke a managed client in the authority database
+      description: Active owner and recent MFA. First commits inactive and a higher
+        client version with audit/outbox, invalidating this client grants immediately.
+        No engine call or shared SID logout; other clients and central SSO remain
+        valid. Pending or active can be revoked, never restored. Same-state/current
+        ETag no-op. Separate reconcile can clean up an owned engine object; failed
+        protocol cleanup never restores authority.
+      tags:
+      - Tenant management
+      security:
+      - OAuth2:
+        - platform:write
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/applicationID'
+      - $ref: '#/components/parameters/clientID'
+      - $ref: '#/components/parameters/ClientMatch'
+      responses:
+        '200':
+          description: Irreversibly revoke a managed client in the authority database
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagedClient'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: reserved_owner:roles.manage
+      x-recent-mfa-seconds: 300
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Empty'
+            example: &id002 {}
+  /v1/tenants/{tenant}/applications/{application}/clients/{client}/reconcile:
+    post:
+      operationId: reconcileManagedClient
+      summary: Reconcile the exact owned protocol client profile
+      description: 'Active owner and recent MFA, exact ETag, total four-second authority
+        transaction bound. Pending: read the fixed Admin destination, create if absent,
+        read back and verify exact profile and ownership before activation/version/audit
+        commit. Active: verify profile without changing authority. Revoked: delete
+        only a matching owned engine object, retaining the revoked tombstone and auditing
+        the cleanup check. Foreign/drifted profile is 409 protocol_client_conflict
+        and never overwritten/deleted/adopted. Global/local app disable blocks activation,
+        not revocation/cleanup. Unknown transport/commit outcome is not auto-replayed:
+        reread state and choose a fresh reconciliation. Local pending/revoked clients
+        cannot issue usable business tokens, including remote orphans. Absence is
+        observed, not permanent physical-deletion assurance.'
+      tags:
+      - Tenant management
+      security:
+      - OAuth2:
+        - platform:write
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/applicationID'
+      - $ref: '#/components/parameters/clientID'
+      - $ref: '#/components/parameters/ClientMatch'
+      responses:
+        '200':
+          description: Reconcile the exact owned protocol client profile
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientReconciliation'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: reserved_owner:roles.manage
+      x-recent-mfa-seconds: 300
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Empty'
+            example: *id002
   /v1/tenants/{tenant}/applications/{application}:
     get:
       operationId: getTenantApplication
@@ -101,58 +471,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Application'
-        '400':
-          $ref: '#/components/responses/Problem'
-        '401':
-          $ref: '#/components/responses/Problem'
-        '403':
-          $ref: '#/components/responses/Problem'
-        '404':
-          $ref: '#/components/responses/Problem'
-        '409':
-          $ref: '#/components/responses/Problem'
-        '412':
-          $ref: '#/components/responses/Problem'
-        '413':
-          $ref: '#/components/responses/Problem'
-        '415':
-          $ref: '#/components/responses/Problem'
-        '428':
-          $ref: '#/components/responses/Problem'
-        '429':
-          $ref: '#/components/responses/Problem'
-        '503':
-          $ref: '#/components/responses/Problem'
-      x-authorization: reserved_owner:roles.manage
-  /v1/tenants/{tenant}/applications/{application}/clients:
-    get:
-      operationId: listApplicationClients
-      summary: Read registered client metadata for an associated application
-      description: Active owner only, including disabled associations. Exact registered
-        client_id, redirect URI, scopes, audience, active flag and version; never
-        client secrets, cookies or token material. Cursor is printable client_id (not
-        UUID), sorted ascending within this application. This registry view does not
-        create clients or change protocol configuration/authentication methods.
-      tags:
-      - Tenant management
-      security:
-      - OAuth2:
-        - platform:read
-      parameters:
-      - $ref: '#/components/parameters/TenantID'
-      - $ref: '#/components/parameters/applicationID'
-      - $ref: '#/components/parameters/Limit'
-      - $ref: '#/components/parameters/ClientAfter'
-      responses:
-        '200':
-          description: Read registered client metadata for an associated application
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestID'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApplicationClientPage'
         '400':
           $ref: '#/components/responses/Problem'
         '401':
@@ -239,7 +557,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
-            example: &id001 {}
+            example: *id002
   /v1/tenants/{tenant}/applications/{application}/disable:
     post:
       operationId: disableTenantApplication
@@ -303,7 +621,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
-            example: *id001
+            example: *id002
   /v1/me:
     get:
       operationId: getMe
@@ -413,8 +731,7 @@ paths:
             Location:
               description: Created tenant path; obtain a new tenant-bound authorization
                 before using it.
-              schema: &id002
-                type: string
+              schema: *id001
           content:
             application/json:
               schema:
@@ -601,7 +918,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
-            example: *id001
+            example: *id002
   /v1/tenants/{tenant}/members/{member}/restore:
     post:
       operationId: restoreMember
@@ -656,7 +973,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
-            example: *id001
+            example: *id002
   /v1/tenants/{tenant}/organizations:
     get:
       operationId: listOrganizations
@@ -891,7 +1208,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
-            example: *id001
+            example: *id002
   /v1/tenants/{tenant}/organizations/{org}/members:
     get:
       operationId: listOrganizationMembers
@@ -1006,7 +1323,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
-            example: *id001
+            example: *id002
     put:
       operationId: assignOrganization
       summary: Associate a membership with an organization
@@ -1060,7 +1377,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
-            example: *id001
+            example: *id002
   /v1/tenants/{tenant}/organizations/{org}/move:
     post:
       operationId: moveOrganization
@@ -1279,7 +1596,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
-            example: *id001
+            example: *id002
   /v1/invitations/accept:
     post:
       operationId: acceptInvitation
@@ -1477,7 +1794,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
-            example: *id001
+            example: *id002
   /v1/me/security-events:
     get:
       operationId: listMySecurityEvents
@@ -1631,7 +1948,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
-            example: *id001
+            example: *id002
   /v1/tenants/{tenant}/permissions:
     get:
       operationId: getMyPermissions
@@ -1895,7 +2212,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
-            example: *id001
+            example: *id002
   /v1/tenants/{tenant}/members/{member}/roles:
     get:
       operationId: listMemberRoles
@@ -2000,7 +2317,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
-            example: *id001
+            example: *id002
     delete:
       operationId: unbindRole
       summary: Unbind a tenant role to a membership
@@ -2056,7 +2373,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Empty'
-            example: *id001
+            example: *id002
   /openapi.yaml:
     get:
       operationId: getOpenapiyaml
@@ -2124,13 +2441,13 @@ components:
         type:
           type: string
           format: uri
-        title: *id002
+        title: *id001
         status:
           type: integer
           minimum: 400
           maximum: 599
-        code: *id002
-        request_id: *id002
+        code: *id001
+        request_id: *id001
     Me:
       type: object
       additionalProperties: false
@@ -2160,7 +2477,7 @@ components:
       - root_id
       properties:
         id: *id003
-        name: *id002
+        name: *id001
         slug:
           type: string
           pattern: ^[a-z0-9][a-z0-9-]{0,62}$
@@ -2238,7 +2555,7 @@ components:
           - string
           - 'null'
           pattern: ^[a-f0-9]{32}$
-        name: *id002
+        name: *id001
     OrganizationInput:
       type: object
       additionalProperties: false
@@ -2382,14 +2699,14 @@ components:
       properties:
         id: *id003
         actor_membership_id: *id003
-        action: *id002
+        action: *id001
         target_id: *id003
         occurred_at:
           type: string
           format: date-time
         role_id: *id003
         membership_id: *id003
-        role_code: *id002
+        role_code: *id001
     SecurityEvent:
       type: object
       additionalProperties: false
@@ -2586,7 +2903,7 @@ components:
       - binding_count
       properties:
         id: *id003
-        code: *id002
+        code: *id001
         built_in:
           type: boolean
         scope:
@@ -2711,10 +3028,11 @@ components:
       - protected
       - version
       - client_count
+      - managed
       properties:
         id: *id003
-        code: *id002
-        name: *id002
+        code: *id001
+        name: *id001
         enabled:
           type: boolean
           description: Enabled for this token-bound tenant.
@@ -2729,6 +3047,9 @@ components:
         client_count:
           type: integer
           minimum: 0
+        managed:
+          type: boolean
+          description: Owned by this tenant; only such applications may register clients.
     ApplicationPage:
       type: object
       additionalProperties: false
@@ -2752,6 +3073,8 @@ components:
       - audience
       - active
       - version
+      - managed
+      - state
       properties:
         client_id:
           type: string
@@ -2762,13 +3085,21 @@ components:
           format: uri
         scopes:
           type: array
-          items: *id002
+          items: *id001
         audience:
           type: string
           format: uri
         active:
           type: boolean
         version: *id004
+        managed:
+          type: boolean
+        state:
+          enum:
+          - external
+          - pending
+          - active
+          - revoked
     ApplicationClientPage:
       type: object
       additionalProperties: false
@@ -2792,7 +3123,92 @@ components:
           minLength: 1
           maxLength: 128
           pattern: ^[!-~]{1,128}$
+    ApplicationInput:
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      properties:
+        name: &id008
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Trimmed nonblank display name, maximum 128 UTF-8 bytes. Code
+            is generated, not a global namespace chosen by this caller.
+    ManagedClientInput:
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      - redirect_uri
+      properties:
+        name: *id008
+        redirect_uri:
+          type: string
+          format: uri
+          maxLength: 255
+          description: Exact absolute HTTPS callback with path, or explicit HTTP IP
+            loopback 127.0.0.1/[::1] on a fixed port 1024–65535. No wildcard, fragment,
+            userinfo, backslash or whitespace. Never fetched by the platform.
+    ManagedClient:
+      type: object
+      additionalProperties: false
+      required:
+      - client_id
+      - application_id
+      - name
+      - redirect_uri
+      - scopes
+      - audience
+      - state
+      - active
+      - version
+      properties:
+        client_id: *id003
+        application_id: *id003
+        name: *id001
+        redirect_uri:
+          type: string
+          format: uri
+        scopes:
+          type: array
+          items: *id001
+        audience:
+          type: string
+          const: https://api.sso.local
+        state:
+          enum:
+          - pending
+          - active
+          - revoked
+        active:
+          type: boolean
+        version: *id004
+    ClientReconciliation:
+      type: object
+      additionalProperties: false
+      required:
+      - client
+      - protocol_observation
+      properties:
+        client:
+          $ref: '#/components/schemas/ManagedClient'
+        protocol_observation:
+          enum:
+          - present
+          - absent
+          description: Observation during this bounded reconciliation, not a permanent
+            guarantee that a timed-out upstream transaction cannot finish later.
   parameters:
+    ClientMatch:
+      in: header
+      name: If-Match
+      required: true
+      description: Exact managed-client detail ETag bound to tenant/client/version.
+        Missing 428, malformed 400, stale/other resource 412.
+      schema:
+        type: string
+        pattern: ^"client-[a-f0-9]{32}-[a-f0-9]{32}-[1-9][0-9]*"$
     TenantID:
       in: path
       name: tenant
@@ -2880,14 +3296,20 @@ components:
       name: application
       required: true
       schema: *id003
+    clientID:
+      in: path
+      name: client
+      required: true
+      schema: *id003
   responses:
     Problem:
       description: RFC 9457 problem. Fixed code only; no input, token or SQL echoed.
-        Codes include protected_organization, organization_not_empty, protected_application,
-        application_unavailable, invalid_token, forbidden, insufficient_scope, recent_mfa_required,
-        tenant_mismatch, invalid_request, not_found, already_exists, reserved_role,
-        role_in_use, last_active_owner, root_cannot_move, organization_cycle, version_conflict,
-        precondition_required, invalid_precondition, rate_limited, temporarily_unavailable.
+        Codes include application_unmanaged, invalid_client_state, protocol_client_conflict,
+        protected_organization, organization_not_empty, protected_application, application_unavailable,
+        invalid_token, forbidden, insufficient_scope, recent_mfa_required, tenant_mismatch,
+        invalid_request, not_found, already_exists, reserved_role, role_in_use, last_active_owner,
+        root_cannot_move, organization_cycle, version_conflict, precondition_required,
+        invalid_precondition, rate_limited, temporarily_unavailable.
       headers:
         X-Request-ID:
           $ref: '#/components/headers/RequestID'
@@ -2902,13 +3324,13 @@ components:
   headers:
     RequestID:
       description: Server-generated request correlation ID.
-      schema: *id002
+      schema: *id001
     ETag:
       description: Quoted collection version for If-Match.
-      schema: *id002
+      schema: *id001
     Authenticate:
       description: Bearer challenge, including invalid_token or insufficient_scope.
-      schema: *id002
+      schema: *id001
     RetryAfter:
       description: Seconds before retrying.
       schema:

@@ -53,6 +53,10 @@ export const errorText = (error) =>
       "连接中断，操作结果可能已保存。请刷新核对后再决定是否重试。",
     recent_mfa_required: "请重新验证身份，再发起这项操作。",
     reserved_role: "内置所有者角色不能编辑或删除。",
+    protocol_client_conflict:
+      "协议配置与此登记不一致，请先核对；不会覆盖或删除不匹配的登记。",
+    application_unmanaged: "当前空间仅能查看此共享应用，不能改写其客户端登记。",
+    invalid_client_state: "此客户端状态不允许执行当前操作。",
     protected_organization: "空间根组织不能重命名或删除。",
     organization_not_empty:
       "请先移动子组织并移除所有直接成员归属，再删除空组织。",
@@ -66,7 +70,7 @@ export const errorText = (error) =>
     organization_cycle: "不能把组织移动到它自身或下级组织中。",
     forbidden: "你没有执行这项管理操作的权限。",
     insufficient_scope: "当前授权不包含这项操作，请重新登录。",
-    invalid_request: "请检查输入。邀请码需有效、未过期且尚未使用。",
+    invalid_request: "请检查必填内容、字段格式、长度及请求内容后再试。",
     not_found: "找不到这项记录，或它不属于当前空间。",
     rate_limited: "操作过于频繁，请稍后再试。",
     temporarily_unavailable: "服务暂时不可用，请稍后刷新。",

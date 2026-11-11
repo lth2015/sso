@@ -1,6 +1,6 @@
 # 完整 API 参考
 
-OpenAPI 0.12.0；公共 Bearer API 共 38 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
+OpenAPI 0.13.0；公共 Bearer API 共 43 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
 
 真实交互入口见 [Playground 手册](playground.md)；外部接入见 [公共 API 手册](runbooks/public-api.md)。JSON/YAML 合同见 [OpenAPI](../api/openapi.yaml)。
 
@@ -21,8 +21,13 @@ OpenAPI 0.12.0；公共 Bearer API 共 38 个业务操作。此文件由 OpenAPI
 | POST | `/v1/tenants` | `createTenant` |
 | GET | `/v1/tenants/{tenant}` | `getTenant` |
 | GET | `/v1/tenants/{tenant}/applications` | `listTenantApplications` |
+| POST | `/v1/tenants/{tenant}/applications` | `createApplication` |
 | GET | `/v1/tenants/{tenant}/applications/{application}` | `getTenantApplication` |
 | GET | `/v1/tenants/{tenant}/applications/{application}/clients` | `listApplicationClients` |
+| POST | `/v1/tenants/{tenant}/applications/{application}/clients` | `createManagedClient` |
+| GET | `/v1/tenants/{tenant}/applications/{application}/clients/{client}` | `getManagedClient` |
+| POST | `/v1/tenants/{tenant}/applications/{application}/clients/{client}/reconcile` | `reconcileManagedClient` |
+| POST | `/v1/tenants/{tenant}/applications/{application}/clients/{client}/revoke` | `revokeManagedClient` |
 | POST | `/v1/tenants/{tenant}/applications/{application}/disable` | `disableTenantApplication` |
 | POST | `/v1/tenants/{tenant}/applications/{application}/enable` | `enableTenantApplication` |
 | GET | `/v1/tenants/{tenant}/audit-events` | `listAuditEvents` |
@@ -972,7 +977,7 @@ HTTP 200
 
 List applications explicitly associated with this space
 
-Active owner only. Includes disabled associations for recovery; no global application discovery, implicit enablement, client creation or secret access.
+Active owner only. Includes disabled associations for recovery; no global application discovery, implicit enablement or secret access. The managed flag identifies this tenant ownership; separate owner-only creation handles owned apps.
 
 OAuth scope：`platform:read`。权限：`reserved_owner:roles.manage`。
 
@@ -1054,7 +1059,8 @@ HTTP 200
                 "available",
                 "protected",
                 "version",
-                "client_count"
+                "client_count",
+                "managed"
               ],
               "properties": {
                 "id": {
@@ -1086,6 +1092,10 @@ HTTP 200
                 "client_count": {
                   "type": "integer",
                   "minimum": 0
+                },
+                "managed": {
+                  "type": "boolean",
+                  "description": "Owned by this tenant; only such applications may register clients."
                 }
               }
             }
@@ -1096,6 +1106,147 @@ HTTP 200
               "null"
             ],
             "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## POST /v1/tenants/{tenant}/applications
+
+Create a tenant-owned application
+
+Active owner and recent MFA required. Creates application, this tenant association, immutable ownership and audit/outbox atomically. Maximum 20 owned apps per tenant. Other tenants and built-in/shared applications are not made owned by this call. No OAuth client or secret is issued; no unrelated tenant authorization version change.
+
+OAuth scope：`platform:write`。权限：`reserved_owner:roles.manage`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+### 请求示例
+
+```json
+{
+  "name": "本地客户端演示"
+}
+```
+
+### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "name"
+  ],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Trimmed nonblank display name, maximum 128 UTF-8 bytes. Code is generated, not a global namespace chosen by this caller."
+    }
+  }
+}
+```
+
+### 成功响应
+
+HTTP 201
+
+```json
+{
+  "description": "Create a tenant-owned application",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "Location": {
+      "description": "Created resource path; read metadata here after a result is known.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "code",
+          "name",
+          "enabled",
+          "available",
+          "protected",
+          "version",
+          "client_count",
+          "managed"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Enabled for this token-bound tenant."
+          },
+          "available": {
+            "type": "boolean",
+            "description": "Global application registry is active; tenant owners cannot override global suspension."
+          },
+          "protected": {
+            "type": "boolean",
+            "description": "Platform management entry cannot be disabled through this API."
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "client_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "managed": {
+            "type": "boolean",
+            "description": "Owned by this tenant; only such applications may register clients."
           }
         }
       }
@@ -1177,7 +1328,8 @@ HTTP 200
           "available",
           "protected",
           "version",
-          "client_count"
+          "client_count",
+          "managed"
         ],
         "properties": {
           "id": {
@@ -1209,6 +1361,10 @@ HTTP 200
           "client_count": {
             "type": "integer",
             "minimum": 0
+          },
+          "managed": {
+            "type": "boolean",
+            "description": "Owned by this tenant; only such applications may register clients."
           }
         }
       }
@@ -1224,7 +1380,7 @@ HTTP 200
 
 Read registered client metadata for an associated application
 
-Active owner only, including disabled associations. Exact registered client_id, redirect URI, scopes, audience, active flag and version; never client secrets, cookies or token material. Cursor is printable client_id (not UUID), sorted ascending within this application. This registry view does not create clients or change protocol configuration/authentication methods.
+Active owner only, including disabled associations. Exact registered client_id, redirect URI, scopes, audience, active flag and version; never client secrets, cookies or token material. Cursor is printable client_id (not UUID), sorted ascending within this application. This GET does not change protocol configuration. managed/state distinguish tenant-owned lifecycle rows from external built-in registrations; no secret/authentication credential is returned.
 
 OAuth scope：`platform:read`。权限：`reserved_owner:roles.manage`。
 
@@ -1320,7 +1476,9 @@ HTTP 200
                 "scopes",
                 "audience",
                 "active",
-                "version"
+                "version",
+                "managed",
+                "state"
               ],
               "properties": {
                 "client_id": {
@@ -1348,6 +1506,17 @@ HTTP 200
                 "version": {
                   "type": "integer",
                   "minimum": 1
+                },
+                "managed": {
+                  "type": "boolean"
+                },
+                "state": {
+                  "enum": [
+                    "external",
+                    "pending",
+                    "active",
+                    "revoked"
+                  ]
                 }
               }
             }
@@ -1360,6 +1529,632 @@ HTTP 200
             "minLength": 1,
             "maxLength": 128,
             "pattern": "^[!-~]{1,128}$"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## POST /v1/tenants/{tenant}/applications/{application}/clients
+
+Register a pending public PKCE client
+
+Active owner/recent MFA; only applications owned by this tenant and currently available/enabled. Maximum 100 lifetime registrations per app, including revoked tombstones. Server chooses a random client_id. Starts pending and inactive, requiring separate reconcile to register and verify the engine. Fixed authorization_code/refresh_token, S256 PKCE, no client secret, fixed scopes openid offline_access platform:read and platform audience. No custom scopes/audience/grants/authentication/JWKS fields. Response loss: read application clients before creating another registration.
+
+OAuth scope：`platform:write`。权限：`reserved_owner:roles.manage`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+### 请求示例
+
+```json
+{
+  "name": "桌面客户端",
+  "redirect_uri": "http://127.0.0.1:9876/callback"
+}
+```
+
+### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "redirect_uri"
+  ],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Trimmed nonblank display name, maximum 128 UTF-8 bytes. Code is generated, not a global namespace chosen by this caller."
+    },
+    "redirect_uri": {
+      "type": "string",
+      "format": "uri",
+      "maxLength": 255,
+      "description": "Exact absolute HTTPS callback with path, or explicit HTTP IP loopback 127.0.0.1/[::1] on a fixed port 1024–65535. No wildcard, fragment, userinfo, backslash or whitespace. Never fetched by the platform."
+    }
+  }
+}
+```
+
+### 成功响应
+
+HTTP 201
+
+```json
+{
+  "description": "Register a pending public PKCE client",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "Location": {
+      "description": "Created resource path; read metadata here after a result is known.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "client_id",
+          "application_id",
+          "name",
+          "redirect_uri",
+          "scopes",
+          "audience",
+          "state",
+          "active",
+          "version"
+        ],
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "application_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "redirect_uri": {
+            "type": "string",
+            "format": "uri"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "audience": {
+            "type": "string",
+            "const": "https://api.sso.local"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "active",
+              "revoked"
+            ]
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## GET /v1/tenants/{tenant}/applications/{application}/clients/{client}
+
+Read this tenant owned managed-client state and version
+
+Active owner only. Database metadata without a protocol Admin fetch or secrets. client path is a server-generated 32-hex ID; existing shared/external registrations remain metadata-only via the application client list. Root application path and client must belong to this tenant ownership record.
+
+OAuth scope：`platform:read`。权限：`reserved_owner:roles.manage`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "client",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Read this tenant owned managed-client state and version",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "client_id",
+          "application_id",
+          "name",
+          "redirect_uri",
+          "scopes",
+          "audience",
+          "state",
+          "active",
+          "version"
+        ],
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "application_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "redirect_uri": {
+            "type": "string",
+            "format": "uri"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "audience": {
+            "type": "string",
+            "const": "https://api.sso.local"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "active",
+              "revoked"
+            ]
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## POST /v1/tenants/{tenant}/applications/{application}/clients/{client}/reconcile
+
+Reconcile the exact owned protocol client profile
+
+Active owner and recent MFA, exact ETag, total four-second authority transaction bound. Pending: read the fixed Admin destination, create if absent, read back and verify exact profile and ownership before activation/version/audit commit. Active: verify profile without changing authority. Revoked: delete only a matching owned engine object, retaining the revoked tombstone and auditing the cleanup check. Foreign/drifted profile is 409 protocol_client_conflict and never overwritten/deleted/adopted. Global/local app disable blocks activation, not revocation/cleanup. Unknown transport/commit outcome is not auto-replayed: reread state and choose a fresh reconciliation. Local pending/revoked clients cannot issue usable business tokens, including remote orphans. Absence is observed, not permanent physical-deletion assurance.
+
+OAuth scope：`platform:write`。权限：`reserved_owner:roles.manage`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "client",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Exact managed-client detail ETag bound to tenant/client/version. Missing 428, malformed 400, stale/other resource 412.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"client-[a-f0-9]{32}-[a-f0-9]{32}-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+### 请求示例
+
+```json
+{}
+```
+
+### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
+```
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Reconcile the exact owned protocol client profile",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "client",
+          "protocol_observation"
+        ],
+        "properties": {
+          "client": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "client_id",
+              "application_id",
+              "name",
+              "redirect_uri",
+              "scopes",
+              "audience",
+              "state",
+              "active",
+              "version"
+            ],
+            "properties": {
+              "client_id": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              "application_id": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              "name": {
+                "type": "string"
+              },
+              "redirect_uri": {
+                "type": "string",
+                "format": "uri"
+              },
+              "scopes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "audience": {
+                "type": "string",
+                "const": "https://api.sso.local"
+              },
+              "state": {
+                "enum": [
+                  "pending",
+                  "active",
+                  "revoked"
+                ]
+              },
+              "active": {
+                "type": "boolean"
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          "protocol_observation": {
+            "enum": [
+              "present",
+              "absent"
+            ],
+            "description": "Observation during this bounded reconciliation, not a permanent guarantee that a timed-out upstream transaction cannot finish later."
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## POST /v1/tenants/{tenant}/applications/{application}/clients/{client}/revoke
+
+Irreversibly revoke a managed client in the authority database
+
+Active owner and recent MFA. First commits inactive and a higher client version with audit/outbox, invalidating this client grants immediately. No engine call or shared SID logout; other clients and central SSO remain valid. Pending or active can be revoked, never restored. Same-state/current ETag no-op. Separate reconcile can clean up an owned engine object; failed protocol cleanup never restores authority.
+
+OAuth scope：`platform:write`。权限：`reserved_owner:roles.manage`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "client",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Exact managed-client detail ETag bound to tenant/client/version. Missing 428, malformed 400, stale/other resource 412.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"client-[a-f0-9]{32}-[a-f0-9]{32}-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+### 请求示例
+
+```json
+{}
+```
+
+### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
+```
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Irreversibly revoke a managed client in the authority database",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "client_id",
+          "application_id",
+          "name",
+          "redirect_uri",
+          "scopes",
+          "audience",
+          "state",
+          "active",
+          "version"
+        ],
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "application_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "redirect_uri": {
+            "type": "string",
+            "format": "uri"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "audience": {
+            "type": "string",
+            "const": "https://api.sso.local"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "active",
+              "revoked"
+            ]
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
           }
         }
       }
@@ -1466,7 +2261,8 @@ HTTP 200
           "available",
           "protected",
           "version",
-          "client_count"
+          "client_count",
+          "managed"
         ],
         "properties": {
           "id": {
@@ -1498,6 +2294,10 @@ HTTP 200
           "client_count": {
             "type": "integer",
             "minimum": 0
+          },
+          "managed": {
+            "type": "boolean",
+            "description": "Owned by this tenant; only such applications may register clients."
           }
         }
       }
@@ -1604,7 +2404,8 @@ HTTP 200
           "available",
           "protected",
           "version",
-          "client_count"
+          "client_count",
+          "managed"
         ],
         "properties": {
           "id": {
@@ -1636,6 +2437,10 @@ HTTP 200
           "client_count": {
             "type": "integer",
             "minimum": 0
+          },
+          "managed": {
+            "type": "boolean",
+            "description": "Owned by this tenant; only such applications may register clients."
           }
         }
       }

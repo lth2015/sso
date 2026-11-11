@@ -206,6 +206,18 @@ export default function Playground({
                 type="button"
                 onClick={() => {
                   clear();
+                  const clientVersion =
+                    match.schema.pattern.includes("client-");
+                  if (
+                    clientVersion &&
+                    (!/^[a-f0-9]{32}$/.test(values.application || "") ||
+                      !/^[a-f0-9]{32}$/.test(values.client || ""))
+                  ) {
+                    setError(
+                      "请先填写目标 application 和 client ID，再读取最新版本。",
+                    );
+                    return;
+                  }
                   const applicationVersion =
                     match.schema.pattern.includes("app-");
                   if (
@@ -223,11 +235,16 @@ export default function Playground({
                       path:
                         "/v1/tenants/" +
                         me.tenant_id +
-                        (applicationVersion
-                          ? "/applications/" + values.application
-                          : match.schema.pattern.includes("org-")
-                            ? "/organizations?limit=1"
-                            : ""),
+                        (clientVersion
+                          ? "/applications/" +
+                            values.application +
+                            "/clients/" +
+                            values.client
+                          : applicationVersion
+                            ? "/applications/" + values.application
+                            : match.schema.pattern.includes("org-")
+                              ? "/organizations?limit=1"
+                              : ""),
                     },
                     true,
                   );

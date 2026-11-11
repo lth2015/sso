@@ -74,3 +74,7 @@ Playground 沿用固定 BFF 目标/路径白名单、cookie/context、Origin/CSR
 ## 组织生命周期安全
 
 组织直属成员读取需 organizations.read 与 members.read 同时有效，显式 deny 优先，禁止以组织结构读取推导成员邮箱访问。新写入在事务内强制近期 MFA、租户权限/资格和版本。根不可重命名/删除，任何子组织或成员引用均阻止删除；全租户串行锁与复合外键保护闭包/边界，审计和 outbox 同事务。重命名不变权限，删除与真实归属移除增加租户授权版本；不撤销 membership 或 owner/角色。详见 ADR 0014。
+
+## 公开客户端登记与隔离
+
+应用所有权与关联启用分离，关联 owner 不能改写共享/其他空间的全局客户端。公开 PKCE profile 固定 grant/scope/audience/auth 方式，URI 不被平台抓取；状态/owner/MFA/ETag 在主库复查。pending/orphan 不激活，reconcile 先读取且只采用精确所有权/profile 匹配；撤销的 client 版本使所有旧 grant 失效，不批量修改共享 SID。私有协议错误只记录受控字段名与请求 ID，不返回上游正文或秘密。控制台/Playground 不接收 Admin 目标/凭证。见 ADR 0015 和 managed-clients.md。

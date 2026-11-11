@@ -54,7 +54,7 @@ async function read(page, operation, code = 200) {
     await p.getByLabel("选择 API", { exact: true }).waitFor();
     assert.equal(
       await p.getByLabel("选择 API", { exact: true }).locator("option").count(),
-      38,
+      43,
     );
     await read(p, "getMe");
     assert(
@@ -187,7 +187,7 @@ async function read(page, operation, code = 200) {
   }
   if (success)
     console.log(
-      "Playground acceptance passed: 38 live operations, real reads/writes, explicit confirmation, one send per action, ETag/412, member denial, MFA, redaction, escaping, navigation reset and desktop/mobile",
+      "Playground acceptance passed: 43 live operations, real reads/writes, explicit confirmation, one send per action, ETag/412, member denial, MFA, redaction, escaping, navigation reset and desktop/mobile",
     );
 })().catch((e) => {
   console.error(

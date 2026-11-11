@@ -74,3 +74,7 @@ Hydra 稳定版本、镜像 digest、Go/SDK 版本、MySQL 8.4 兼容性必须�
 
 
 控制台的实际 BFF 使用独立 confidential client/key/SQL 视图和 console 网桥，只有公开协议窄代理、业务 API 和受限 SQL 路径。每个标签页对应独立 context cookie 与授权链，浏览器只持有非秘密 context ID/CSRF/业务响应。React 生产构建嵌入 Go，运行时没有 Node/Vite 服务；具体决策见 [ADR 0007](adr/0007-console-bff-contexts.md)。
+
+## 自有应用与公开客户端登记
+
+新增 migration 008 将自有 Application 绑定到唯一拥有空间，区别于已有共享应用的 tenant_applications 启用资格。管理仍只授予当前空间 owner；可信平台 API 通过固定内部 Admin 适配器执行受控公开客户端 profile 核对，不向 BFF 提供任意协议代理。客户端先 pending/inactive，精确核对后才 active；撤销先提交本地 inactive/version，再核对远端清理。普通核对/撤销复用有界租户事务锁，超时/未知提交先读取，不自动重放。当前没有周期性补偿 worker，见 [ADR 0015](adr/0015-owned-public-client-registration.md)。

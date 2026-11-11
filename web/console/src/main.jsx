@@ -37,6 +37,11 @@ const date = (value) =>
 const actionNames = {
   "role.created": "创建角色",
   "application.enabled": "恢复空间应用",
+  "application.created": "创建应用",
+  "client.registration_pending": "登记公开客户端",
+  "client.activated": "客户端登记生效",
+  "client.revoked": "撤销客户端",
+  "client.protocol_cleanup_checked": "核对协议清理",
   "application.disabled": "停用空间应用",
   "role.updated": "更新角色规则",
   "role.deleted": "删除角色",

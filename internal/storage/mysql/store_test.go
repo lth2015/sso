@@ -75,6 +75,7 @@ func fixture(t *testing.T, s Store) Bootstrap {
 			}
 			rows.Close()
 		}
+		cleanupManagedApplications(t, s, b.Tenant)
 		// Remove only this test's freshly generated tenant and related identities.
 		for _, table := range []string{"role_binding_changes", "role_policies", "outbox_events", "audit_events", "invitations", "org_memberships", "role_bindings", "roles", "org_closure", "tenant_roots"} {
 			if _, err := s.db.Exec("DELETE FROM "+table+" WHERE tenant_id=?", b.Tenant); err != nil {

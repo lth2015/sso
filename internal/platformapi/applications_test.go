@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lth2015/sso/internal/adapter/hydra"
 	store "github.com/lth2015/sso/internal/storage/mysql"
 )
 
@@ -80,6 +81,29 @@ func verifyApplicationPrimaryChecks(t *testing.T, db *sql.DB, repo store.Store, 
 	}
 	if err = repo.ForAuthorization(a).UnassignOrganization(ctx, a.Member, root, 1); !errors.Is(err, store.ErrStepUp) {
 		t.Fatal("unassign trusted caller Recent flag")
+	}
+	if _, err = repo.ForAuthorization(a).APICreateApplication(ctx, "Aged MFA"); !errors.Is(err, store.ErrStepUp) {
+		t.Fatal("application creation trusted caller Recent flag")
+	}
+	for _, owned := range items {
+		if !owned.Managed {
+			continue
+		}
+		ownedID, _ := store.ParseID(owned.ID)
+		if _, err = repo.ForAuthorization(a).APICreateManagedClient(ctx, ownedID, "Aged MFA", "http://127.0.0.1:9876/callback"); !errors.Is(err, store.ErrStepUp) {
+			t.Fatal("client registration trusted caller Recent flag")
+		}
+		clients, e := repo.ForAuthorization(a).APIApplicationClients(ctx, ownedID, 2, "")
+		if e != nil || len(clients) == 0 {
+			t.Fatal("managed MFA client fixture unavailable")
+		}
+		client, _ := store.ParseID(clients[0].Client)
+		if _, err = repo.ForAuthorization(a).RevokeManagedClient(ctx, ownedID, client, clients[0].Version); !errors.Is(err, store.ErrStepUp) {
+			t.Fatal("client revoke trusted caller Recent flag")
+		}
+		if _, _, err = repo.ForAuthorization(a).ReconcileManagedClient(ctx, ownedID, client, clients[0].Version, hydra.New()); !errors.Is(err, store.ErrStepUp) {
+			t.Fatal("client reconcile trusted caller Recent flag")
+		}
 	}
 	if _, err = repo.ForAuthorization(a).APIApplication(ctx, app); err != nil {
 		t.Fatal("application read incorrectly required recent MFA")

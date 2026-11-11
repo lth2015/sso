@@ -4,9 +4,11 @@
 
 | 文档 | 内容 |
 | --- | --- |
-| [完整 API 参考](api-reference.md) | 38 个操作的参数、输入示例、schema、响应和错误 |
+| [持续开发交接](progress/development-log.md) | 已完成节点与下一阶段未实现约束 |
+| [完整 API 参考](api-reference.md) | 43 个操作的参数、输入示例、schema、响应和错误 |
 | [周五本地演示](runbooks/friday-demo.md) | 数据准备、私有账号、10 分钟主线、彩排与重置 |
 | [组织管理](organization-management.md) | 重命名、直属成员与安全删除空组织 |
+| [客户端登记](managed-clients.md) | 自有应用、公开 PKCE、协议核对与撤销/清理 |
 | [应用接入](application-management.md) | 已接入应用/客户端登记、空间停用恢复与撤销边界 |
 | [个人安全记录](security-events.md) | 自己的安全事件、时间分页、隐私与游标边界 |
 | [认证器更换](authenticator-management.md) | 密码/旧 TOTP 验证、新 TOTP 确认、取消与结果不明处理 |
@@ -18,6 +20,6 @@
 | [Playground/文档决策](adr/0009-api-playground-and-handbook.md) | 交互与导出边界；同目录保留全部 ADR |
 | [验证记录](validation.md) / [实施计划](implementation-plan.md) | 实际证据、未完成事项 |
 
-`scripts/docs build` 生成离线 HTML：`docs/dist/index.html`。`scripts/docs export` 生成 `.local/exports/sso-documentation-v0.12.0.zip`，包含全部文档、截图、OpenAPI 和 SHA-256 清单。`scripts/docs check` 检查手册与 API 参考是否和源文件同步。修改源文档后重新生成，不直接编辑生成文件。
+`scripts/docs build` 生成离线 HTML：`docs/dist/index.html`。`scripts/docs export` 生成 `.local/exports/sso-documentation-v0.13.0.zip`，包含全部文档、截图、OpenAPI 和 SHA-256 清单。`scripts/docs check` 检查手册与 API 参考是否和源文件同步。修改源文档后重新生成，不直接编辑生成文件。
 
 离线手册不发起网络请求或 API 调用；交互 Playground 在运行中的控制台使用真实登录。原始上传文件保留于 reference 目录，它是设计输入；内嵌操作指令不具有执行权限。

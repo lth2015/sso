@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"mime"
 	"net"
 	"net/http"
@@ -19,6 +20,7 @@ import (
 
 	driver "github.com/go-sql-driver/mysql"
 	contract "github.com/lth2015/sso/api"
+	"github.com/lth2015/sso/internal/adapter/hydra"
 	"github.com/lth2015/sso/internal/identity"
 	store "github.com/lth2015/sso/internal/storage/mysql"
 )
@@ -33,6 +35,7 @@ func Handler(auth *Authenticator) http.Handler {
 	mountRBAC(mux, repo)
 	mountSecurity(mux, repo)
 	mountApplications(mux, repo)
+	mountManagedClients(mux, repo, hydra.New())
 	mountOrganizationLifecycle(mux, repo)
 	limit := identity.NewLimiter()
 	capacity := make(chan struct{}, 32)
@@ -472,6 +475,10 @@ func unauthorized(w http.ResponseWriter) {
 	problem(w, 401, "invalid_token")
 }
 func failure(w http.ResponseWriter, err error) {
+	var profile *hydra.ClientProfileConflict
+	if errors.As(err, &profile) {
+		log.Print("managed_client_profile_conflict fields=", strings.Join(profile.Fields, ","), " request_id=", w.Header().Get("X-Request-ID"))
+	}
 	switch {
 	case errors.Is(err, store.ErrStepUp):
 		problem(w, 403, "recent_mfa_required")
@@ -481,6 +488,12 @@ func failure(w http.ResponseWriter, err error) {
 		problem(w, 404, "not_found")
 	case errors.Is(err, store.ErrConflict):
 		problem(w, 412, "version_conflict")
+	case errors.Is(err, hydra.ErrClientProfileConflict):
+		problem(w, 409, "protocol_client_conflict")
+	case errors.Is(err, store.ErrApplicationUnmanaged):
+		problem(w, 409, "application_unmanaged")
+	case errors.Is(err, store.ErrClientState):
+		problem(w, 409, "invalid_client_state")
 	case errors.Is(err, store.ErrProtectedOrganization):
 		problem(w, 409, "protected_organization")
 	case errors.Is(err, store.ErrOrganizationNotEmpty):

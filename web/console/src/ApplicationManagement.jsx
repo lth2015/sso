@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { request, errorText } from "./api.js";
+import ManagedRegistration from "./ManagedRegistration.jsx";
 function Dialog({ title, busy, close, children }) {
   const ref = useRef(null);
   useEffect(() => {
@@ -45,6 +46,7 @@ export default function ApplicationManagement({
     [error, setError] = useState(null),
     [notice, setNotice] = useState(""),
     [confirmed, setConfirmed] = useState(false);
+  const [registration, setRegistration] = useState(null);
   const alive = useRef(true),
     generation = useRef(0),
     dialogAbort = useRef(null);
@@ -163,6 +165,9 @@ export default function ApplicationManagement({
     <section className="panel" aria-label="应用接入管理">
       <div className="panel-heading">
         <h2>已接入应用</h2>
+        <button onClick={() => setRegistration({ kind: "create-app" })}>
+          创建应用
+        </button>
         <button
           className="secondary"
           disabled={busy}
@@ -177,7 +182,8 @@ export default function ApplicationManagement({
         </button>
       </div>
       <p className="section-note">
-        查看当前空间的应用和登记配置。停用只影响本空间中目标应用的授权；恢复后需要重新登录。平台管理入口保持启用。
+        查看当前空间的应用和登记配置。自有应用支持公开 PKCE
+        客户端登记；停用只影响本空间中目标应用，恢复后需要重新登录。平台管理入口保持启用。
       </p>
       {notice && (
         <p role="status" className="notice">
@@ -190,7 +196,7 @@ export default function ApplicationManagement({
       ) : items.length === 0 ? (
         <p role="status">当前空间暂无已接入应用。</p>
       ) : (
-        <div className="table-scroll">
+        <div className="table-scroll application-directory">
           <table>
             <thead>
               <tr>
@@ -207,7 +213,7 @@ export default function ApplicationManagement({
                     <strong>{app.name}</strong>
                     <small className="event-code">{app.code}</small>
                   </td>
-                  <td>
+                  <td data-label="状态">
                     {app.enabled ? "已启用" : "已停用"}
                     {!app.available && (
                       <small className="event-code">平台已暂停此应用</small>
@@ -216,9 +222,20 @@ export default function ApplicationManagement({
                       <small className="event-code">平台管理入口</small>
                     )}
                   </td>
-                  <td>{app.client_count}</td>
+                  <td data-label="客户端数量">{app.client_count}</td>
                   <td>
                     <div className="actions">
+                      {app.managed && (
+                        <button
+                          className="secondary"
+                          disabled={busy || !app.enabled || !app.available}
+                          onClick={() =>
+                            setRegistration({ kind: "create-client", app })
+                          }
+                        >
+                          登记公开客户端
+                        </button>
+                      )}
                       <button
                         className="secondary"
                         disabled={busy}
@@ -282,7 +299,7 @@ export default function ApplicationManagement({
                 OIDC issuer：<code>{dialog.data.issuer}</code>
               </p>
               <p className="section-note">
-                这里只显示登记元数据。客户端创建、认证方式配置及凭证发布由后续接入流程管理。
+                共享客户端只显示登记元数据。自有公开客户端可查看状态、完成登记或撤销；密钥类凭证由后续流程提供。
               </p>
               {dialog.data.items.map((client) => (
                 <article className="summary-card" key={client.client_id}>
@@ -297,8 +314,33 @@ export default function ApplicationManagement({
                     <dt>Audience</dt>
                     <dd className="integration-value">{client.audience}</dd>
                     <dt>客户端状态</dt>
-                    <dd>{client.active ? "有效" : "已暂停"}</dd>
+                    <dd>
+                      {client.managed
+                        ? {
+                            pending: "待完成登记",
+                            active: "有效",
+                            revoked: "已撤销",
+                          }[client.state]
+                        : client.active
+                          ? "有效"
+                          : "已暂停"}
+                    </dd>
                   </dl>
+                  {client.managed && (
+                    <button
+                      className="secondary"
+                      onClick={() => {
+                        setDialog(null);
+                        setRegistration({
+                          kind: "inspect",
+                          app: dialog.app,
+                          client: client.client_id,
+                        });
+                      }}
+                    >
+                      管理登记
+                    </button>
+                  )}
                 </article>
               ))}
               {dialog.data.items.length === 0 && <p>暂无已登记客户端。</p>}
@@ -348,6 +390,24 @@ export default function ApplicationManagement({
             </form>
           )}
         </Dialog>
+      )}
+      {registration && (
+        <ManagedRegistration
+          key={
+            identity +
+            registration.kind +
+            (registration.client || registration.app?.id || "")
+          }
+          action={registration}
+          context={context}
+          csrf={csrf}
+          close={() => setRegistration(null)}
+          onFailure={onFailure}
+          onSaved={(message) => {
+            setNotice(message);
+            setReload((n) => n + 1);
+          }}
+        />
       )}
     </section>
   );

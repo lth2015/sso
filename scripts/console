@@ -10,6 +10,7 @@ case "${1:-}" in
  security-test) node tests/security/browser.cjs ;;
  authenticator-test) node tests/authenticator/browser.cjs ;;
  events-test) node tests/events/browser.cjs ;;
+ clients-test) node tests/applications/managed-browser.cjs ;;
  organizations-test) node tests/organizations/browser.cjs ;;
  applications-test) node tests/applications/browser.cjs ;;
  verify-fixture)
@@ -18,5 +19,5 @@ case "${1:-}" in
   ;;
  enable) shift; scripts/api enable "$@" ;;
  down) scripts/sso down ;;
- *) echo 'Usage: scripts/console {prepare|up|test|rbac-test|playground-test|security-test|authenticator-test|events-test|applications-test|organizations-test|enable --email ADDRESS|down}' >&2; exit 2 ;;
+ *) echo 'Usage: scripts/console {prepare|up|test|rbac-test|playground-test|security-test|authenticator-test|events-test|applications-test|organizations-test|clients-test|enable --email ADDRESS|down}' >&2; exit 2 ;;
 esac

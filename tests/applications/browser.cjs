@@ -157,8 +157,10 @@ async function resource(p) {
       "active",
       "audience",
       "client_id",
+      "managed",
       "redirect_uri",
       "scopes",
+      "state",
       "version",
     ]);
     await call(

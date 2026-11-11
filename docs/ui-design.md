@@ -70,7 +70,7 @@ E2E 覆盖登录→租户选择→控制台、第二应用 SSO、双标签页隔
 
 ## 公共 API 参考页面
 
-新增实际服务的 `/docs` 页面，直接从嵌入 OpenAPI 渲染 38 个业务操作，展示 OAuth/scopes、分页、If-Match 和错误约定，提供 YAML/JSON 下载。页面不收集令牌、不使用第三方 CDN。截图：[桌面](ui/api-reference-desktop.png)、[手机](ui/api-reference-mobile.png)；验收脚本 `node tests/api/docs.cjs`。真实 React 管理控制台见下节。
+新增实际服务的 `/docs` 页面，直接从嵌入 OpenAPI 渲染 43 个业务操作，展示 OAuth/scopes、分页、If-Match 和错误约定，提供 YAML/JSON 下载。页面不收集令牌、不使用第三方 CDN。截图：[桌面](ui/api-reference-desktop.png)、[手机](ui/api-reference-mobile.png)；验收脚本 `node tests/api/docs.cjs`。真实 React 管理控制台见下节。
 
 
 ## 真实 React 控制台第一切片
@@ -96,3 +96,7 @@ API Playground 已接入真实控制台授权：接口选择、参数、JSON、I
 ## 组织管理操作
 
 组织行增加直属成员、非根重命名和删除空节点。直属成员入口同时检查两种读取权限；成员弹窗显示直接关联及停用状态、分页和显式移除。写入要求目标/影响确认，版本或网络错误后禁用旧表单，关闭刷新再决定，不自动重发；关闭/切换空间取消在途读取。见 [组织管理](organization-management.md)。
+
+## 自有应用与客户端登记
+
+应用接入页为 owner 提供创建应用和自有应用下的公开客户端登记，现有共享应用保持只读客户端元数据。显式区分 pending/active/revoked，核对、撤销和协议清理均需确认；失败后刷新状态，不自动重放。手机端应用列表使用纵向卡片保留所有操作，确认 checkbox 与说明同行，元数据不包含 secret。详见 [客户端登记](managed-clients.md)。

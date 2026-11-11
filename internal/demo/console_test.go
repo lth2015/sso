@@ -14,8 +14,12 @@ import (
 
 func TestConsoleGatewayAllowsOnlyPublicContract(t *testing.T) {
 	appPath := "/v1/tenants/0123456789abcdef0123456789abcdef/applications/0123456789abcdef0123456789abcdef"
-	if !consoleRouteAllowed("GET", appPath+"/clients") || !consoleRouteAllowed("POST", appPath+"/disable") || consoleRouteAllowed("POST", appPath+"/clients") || consoleRouteAllowed("GET", appPath+"/clients/private-secret") {
+	if !consoleRouteAllowed("GET", appPath+"/clients") || !consoleRouteAllowed("POST", appPath+"/disable") || !consoleRouteAllowed("POST", appPath+"/clients") || consoleRouteAllowed("GET", appPath+"/clients/private-secret") {
 		t.Fatal("application gateway method/path boundary mismatch")
+	}
+	clientPath := appPath + "/clients/0123456789abcdef0123456789abcdef"
+	if !consoleRouteAllowed("GET", clientPath) || !consoleRouteAllowed("POST", clientPath+"/reconcile") || !consoleRouteAllowed("POST", clientPath+"/revoke") || consoleRouteAllowed("POST", clientPath+"/rotate-secret") {
+		t.Fatal("managed client gateway boundary mismatch")
 	}
 	orgPath := "/v1/tenants/0123456789abcdef0123456789abcdef/organizations/0123456789abcdef0123456789abcdef"
 	for _, operation := range []struct{ method, suffix string }{{"GET", "/members"}, {"POST", "/rename"}, {"DELETE", ""}, {"DELETE", "/members/0123456789abcdef0123456789abcdef"}} {

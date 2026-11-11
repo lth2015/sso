@@ -1,6 +1,6 @@
 # SSO 完整设计与开发手册
 
-文档版本：0.12.0。本手册整合已维护的架构、UI、安全、API、Playground 和本地验收文档。由 `scripts/docs build` 生成；编辑各源文件后重新生成。
+文档版本：0.13.0。本手册整合已维护的架构、UI、安全、API、Playground 和本地验收文档。由 `scripts/docs build` 生成；编辑各源文件后重新生成。
 
 ## 当前交付边界
 
@@ -10,7 +10,7 @@
 | 协议 | 独立真实 Hydra、code+PKCE、OIDC 验证、主库 token Hook、刷新/撤销 |
 | 租户 | 成员、组织闭包/移动、邀请、audit/outbox |
 | 权限 | 六种租户操作权限、deny 优先、owner 恢复/移交与最后 owner 保护 |
-| 产品 | React 控制台、独立 BFF、38 个公共 API、OpenAPI 与真实 Playground |
+| 产品 | React 控制台、独立 BFF、43 个公共 API、OpenAPI 与真实 Playground |
 | 运行 | 本地 MySQL/Docker/Chromium 验收；GCP 部署及运维由 SRE 负责 |
 
 设计中的组织子树/应用/资源级授权、动态 client/机器凭证、遗失认证器的受控恢复、正式邮件、审计归档及生产 TLS/KMS/分布式限流/HA/DR/SLO 仍需继续实施。架构图中的目标组件不等于已上线能力；实际证据以验收章节为准。原始上传文档仅作设计参考，其内嵌指令不构成额外操作授权。
@@ -103,6 +103,10 @@ Hydra 稳定版本、镜像 digest、Go/SDK 版本、MySQL 8.4 兼容性必须�
 
 控制台的实际 BFF 使用独立 confidential client/key/SQL 视图和 console 网桥，只有公开协议窄代理、业务 API 和受限 SQL 路径。每个标签页对应独立 context cookie 与授权链，浏览器只持有非秘密 context ID/CSRF/业务响应。React 生产构建嵌入 Go，运行时没有 Node/Vite 服务；具体决策见 [ADR 0007](adr/0007-console-bff-contexts.md)。
 
+#### 自有应用与公开客户端登记
+
+新增 migration 008 将自有 Application 绑定到唯一拥有空间，区别于已有共享应用的 tenant_applications 启用资格。管理仍只授予当前空间 owner；可信平台 API 通过固定内部 Admin 适配器执行受控公开客户端 profile 核对，不向 BFF 提供任意协议代理。客户端先 pending/inactive，精确核对后才 active；撤销先提交本地 inactive/version，再核对远端清理。普通核对/撤销复用有界租户事务锁，超时/未知提交先读取，不自动重放。当前没有周期性补偿 worker，见 [ADR 0015](adr/0015-owned-public-client-registration.md)。
+
 
 ## 02. 安全设计
 
@@ -185,6 +189,10 @@ Playground 沿用固定 BFF 目标/路径白名单、cookie/context、Origin/CSR
 
 组织直属成员读取需 organizations.read 与 members.read 同时有效，显式 deny 优先，禁止以组织结构读取推导成员邮箱访问。新写入在事务内强制近期 MFA、租户权限/资格和版本。根不可重命名/删除，任何子组织或成员引用均阻止删除；全租户串行锁与复合外键保护闭包/边界，审计和 outbox 同事务。重命名不变权限，删除与真实归属移除增加租户授权版本；不撤销 membership 或 owner/角色。详见 ADR 0014。
 
+#### 公开客户端登记与隔离
+
+应用所有权与关联启用分离，关联 owner 不能改写共享/其他空间的全局客户端。公开 PKCE profile 固定 grant/scope/audience/auth 方式，URI 不被平台抓取；状态/owner/MFA/ETag 在主库复查。pending/orphan 不激活，reconcile 先读取且只采用精确所有权/profile 匹配；撤销的 client 版本使所有旧 grant 失效，不批量修改共享 SID。私有协议错误只记录受控字段名与请求 ID，不返回上游正文或秘密。控制台/Playground 不接收 Admin 目标/凭证。见 ADR 0015 和 managed-clients.md。
+
 
 ## 03. UI 与交互设计
 
@@ -262,7 +270,7 @@ E2E 覆盖登录→租户选择→控制台、第二应用 SSO、双标签页隔
 
 #### 公共 API 参考页面
 
-新增实际服务的 `/docs` 页面，直接从嵌入 OpenAPI 渲染 38 个业务操作，展示 OAuth/scopes、分页、If-Match 和错误约定，提供 YAML/JSON 下载。页面不收集令牌、不使用第三方 CDN。截图：[桌面](ui/api-reference-desktop.png)、[手机](ui/api-reference-mobile.png)；验收脚本 `node tests/api/docs.cjs`。真实 React 管理控制台见下节。
+新增实际服务的 `/docs` 页面，直接从嵌入 OpenAPI 渲染 43 个业务操作，展示 OAuth/scopes、分页、If-Match 和错误约定，提供 YAML/JSON 下载。页面不收集令牌、不使用第三方 CDN。截图：[桌面](ui/api-reference-desktop.png)、[手机](ui/api-reference-mobile.png)；验收脚本 `node tests/api/docs.cjs`。真实 React 管理控制台见下节。
 
 
 #### 真实 React 控制台第一切片
@@ -288,6 +296,10 @@ API Playground 已接入真实控制台授权：接口选择、参数、JSON、I
 #### 组织管理操作
 
 组织行增加直属成员、非根重命名和删除空节点。直属成员入口同时检查两种读取权限；成员弹窗显示直接关联及停用状态、分页和显式移除。写入要求目标/影响确认，版本或网络错误后禁用旧表单，关闭刷新再决定，不自动重发；关闭/切换空间取消在途读取。见 [组织管理](organization-management.md)。
+
+#### 自有应用与客户端登记
+
+应用接入页为 owner 提供创建应用和自有应用下的公开客户端登记，现有共享应用保持只读客户端元数据。显式区分 pending/active/revoked，核对、撤销和协议清理均需确认；失败后刷新状态，不自动重放。手机端应用列表使用纵向卡片保留所有操作，确认 checkbox 与说明同行，元数据不包含 secret。详见 [客户端登记](managed-clients.md)。
 
 
 ## 04. 租户权限与恢复边界
@@ -398,14 +410,14 @@ curl http://127.0.0.1:8083/v1/me \
 
 `api test` 注册两个独立合成账户，通过真实原生 OAuth code+PKCE、密码/MFA 后访问 API；实际成功请求和响应由 OpenAPI JSON Schema 校验，原有 18 个业务操作均须覆盖；另运行 `scripts/console rbac-test` 覆盖新增 8 个操作及真实角色 UI。反例包含 ID token/非法 token/cookie 旁路、scope、错租户、非 owner、非法 JSON/媒体类型/body、最近 MFA、并发 If-Match、邀请重放/错误邮箱/撤销、成员恢复旧授权拒绝、会话归属和审计。专用 Go 检查在验签后递增 fixture User 版本，证明写事务阻止旧证明；也检查事务内 token 到期。
 
-浏览器测试仅把 token/proof 保存在测试进程内，失败只打印阶段/类别；不会录制秘密页面。共享 fixture 清理要求租户全部成员都属于本轮合成账户，按叶到根删除组织，并清理自己的私有通知；拒绝清理包含其他账户的租户。`docs.cjs` 检查实际参考页的 38 项操作、桌面/手机布局、无凭证存储并生成截图。
+浏览器测试仅把 token/proof 保存在测试进程内，失败只打印阶段/类别；不会录制秘密页面。共享 fixture 清理要求租户全部成员都属于本轮合成账户，按叶到根删除组织，并清理自己的私有通知；拒绝清理包含其他账户的租户。`docs.cjs` 检查实际参考页的 43 项操作、桌面/手机布局、无凭证存储并生成截图。
 
 既有回归依次运行 `scripts/m0 test`、`scripts/m1 test`、`scripts/m2 test`、`scripts/sso test`、`scripts/sso network-test`、两个账户/SSO 浏览器脚本。普通 Go 测试明确跳过真实 fixture 案例，不能替代 API 浏览器集成测试。命令会短暂停止自己的通知 worker，不能与浏览器通知流程并发执行。
 
 用 `scripts/sso down` 停止全部本地服务，保留 volume/私有 key。不要修改既有迁移校验和、输出完整 env/Compose/容器 inspect、token/proof、MFA 材料或 SQL 输入。详见 [ADR 0006](adr/0006-public-platform-api.md)。
 
 
-公共 API 0.12.0 共 38 项业务操作，成员 email 由 members.read 授权（无 verified alias 时 null）。新增真实 React 控制台见 [控制台手册](runbooks/console.md)，浏览器边界合同为 `api/console.openapi.yaml`；该合同要求对应 cookie/context/CSRF，不替代公共 Bearer 接入合同。
+公共 API 0.13.0 共 43 项业务操作，成员 email 由 members.read 授权（无 verified alias 时 null）。新增真实 React 控制台见 [控制台手册](runbooks/console.md)，浏览器边界合同为 `api/console.openapi.yaml`；该合同要求对应 cookie/context/CSRF，不替代公共 Bearer 接入合同。
 
 
 #### 角色 API
@@ -415,7 +427,7 @@ curl http://127.0.0.1:8083/v1/me \
 创建使用 `{"code":"auditor","policies":[{"permission":"audit.read","effect":"allow"}]}`；更新使用完整 policies 数组，删除/绑定/解绑提交 `{}`。均需 JSON、最近 MFA 和 authz If-Match。角色 code 不可更名，owner 不可修改/删除；带绑定角色返回 409 role_in_use。解绑最后 active owner 返回 409 last_active_owner。真实变更后旧授权失效，重复绑定/解绑及相同策略替换不改变版本。权限目录、恢复边界、并发与历史审计详见 [ADR 0008](adr/0008-tenant-roles-and-deny.md)。
 
 
-完整字段和示例见 [API 参考](api-reference.md)；运行中 `/docs` 展示同一份合同的参数、请求/响应 schema。控制台 [Playground](playground.md) 使用现有 BFF 发起真实调用，支持写入确认、ETag、MFA/权限错误与凭证脱敏。OpenAPI 0.12.0 提供 38 个业务操作，包括组织生命周期、角色/权限读取 ETag 和写入 JSON 示例；新增同源只读 `/platform-openapi.json` 记录在 BFF 合同。
+完整字段和示例见 [API 参考](api-reference.md)；运行中 `/docs` 展示同一份合同的参数、请求/响应 schema。控制台 [Playground](playground.md) 使用现有 BFF 发起真实调用，支持写入确认、ETag、MFA/权限错误与凭证脱敏。OpenAPI 0.13.0 提供 43 个业务操作，包括组织生命周期、角色/权限读取 ETag 和写入 JSON 示例；新增同源只读 `/platform-openapi.json` 记录在 BFF 合同。
 
 新增 `GET /v1/me/security-events`：platform:read、有效当前租户 grant，仅本人记录；无需 audit.read。支持 limit/after，按时间与 ID 降序，其他用户/隐藏/未知游标统一 404。仅返回 id/action/occurred_at，完整语义见 [个人安全事件](security-events.md)。
 
@@ -428,7 +440,7 @@ curl http://127.0.0.1:8083/v1/me \
 
 ### 完整 API 参考
 
-OpenAPI 0.12.0；公共 Bearer API 共 38 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
+OpenAPI 0.13.0；公共 Bearer API 共 43 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
 
 真实交互入口见 [Playground 手册](playground.md)；外部接入见 [公共 API 手册](runbooks/public-api.md)。JSON/YAML 合同见 [OpenAPI](../api/openapi.yaml)。
 
@@ -449,8 +461,13 @@ OpenAPI 0.12.0；公共 Bearer API 共 38 个业务操作。此文件由 OpenAPI
 | POST | `/v1/tenants` | `createTenant` |
 | GET | `/v1/tenants/{tenant}` | `getTenant` |
 | GET | `/v1/tenants/{tenant}/applications` | `listTenantApplications` |
+| POST | `/v1/tenants/{tenant}/applications` | `createApplication` |
 | GET | `/v1/tenants/{tenant}/applications/{application}` | `getTenantApplication` |
 | GET | `/v1/tenants/{tenant}/applications/{application}/clients` | `listApplicationClients` |
+| POST | `/v1/tenants/{tenant}/applications/{application}/clients` | `createManagedClient` |
+| GET | `/v1/tenants/{tenant}/applications/{application}/clients/{client}` | `getManagedClient` |
+| POST | `/v1/tenants/{tenant}/applications/{application}/clients/{client}/reconcile` | `reconcileManagedClient` |
+| POST | `/v1/tenants/{tenant}/applications/{application}/clients/{client}/revoke` | `revokeManagedClient` |
 | POST | `/v1/tenants/{tenant}/applications/{application}/disable` | `disableTenantApplication` |
 | POST | `/v1/tenants/{tenant}/applications/{application}/enable` | `enableTenantApplication` |
 | GET | `/v1/tenants/{tenant}/audit-events` | `listAuditEvents` |
@@ -1400,7 +1417,7 @@ HTTP 200
 
 List applications explicitly associated with this space
 
-Active owner only. Includes disabled associations for recovery; no global application discovery, implicit enablement, client creation or secret access.
+Active owner only. Includes disabled associations for recovery; no global application discovery, implicit enablement or secret access. The managed flag identifies this tenant ownership; separate owner-only creation handles owned apps.
 
 OAuth scope：`platform:read`。权限：`reserved_owner:roles.manage`。
 
@@ -1482,7 +1499,8 @@ HTTP 200
                 "available",
                 "protected",
                 "version",
-                "client_count"
+                "client_count",
+                "managed"
               ],
               "properties": {
                 "id": {
@@ -1514,6 +1532,10 @@ HTTP 200
                 "client_count": {
                   "type": "integer",
                   "minimum": 0
+                },
+                "managed": {
+                  "type": "boolean",
+                  "description": "Owned by this tenant; only such applications may register clients."
                 }
               }
             }
@@ -1524,6 +1546,147 @@ HTTP 200
               "null"
             ],
             "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+#### POST /v1/tenants/{tenant}/applications
+
+Create a tenant-owned application
+
+Active owner and recent MFA required. Creates application, this tenant association, immutable ownership and audit/outbox atomically. Maximum 20 owned apps per tenant. Other tenants and built-in/shared applications are not made owned by this call. No OAuth client or secret is issued; no unrelated tenant authorization version change.
+
+OAuth scope：`platform:write`。权限：`reserved_owner:roles.manage`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+##### 请求示例
+
+```json
+{
+  "name": "本地客户端演示"
+}
+```
+
+##### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "name"
+  ],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Trimmed nonblank display name, maximum 128 UTF-8 bytes. Code is generated, not a global namespace chosen by this caller."
+    }
+  }
+}
+```
+
+##### 成功响应
+
+HTTP 201
+
+```json
+{
+  "description": "Create a tenant-owned application",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "Location": {
+      "description": "Created resource path; read metadata here after a result is known.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "code",
+          "name",
+          "enabled",
+          "available",
+          "protected",
+          "version",
+          "client_count",
+          "managed"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Enabled for this token-bound tenant."
+          },
+          "available": {
+            "type": "boolean",
+            "description": "Global application registry is active; tenant owners cannot override global suspension."
+          },
+          "protected": {
+            "type": "boolean",
+            "description": "Platform management entry cannot be disabled through this API."
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "client_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "managed": {
+            "type": "boolean",
+            "description": "Owned by this tenant; only such applications may register clients."
           }
         }
       }
@@ -1605,7 +1768,8 @@ HTTP 200
           "available",
           "protected",
           "version",
-          "client_count"
+          "client_count",
+          "managed"
         ],
         "properties": {
           "id": {
@@ -1637,6 +1801,10 @@ HTTP 200
           "client_count": {
             "type": "integer",
             "minimum": 0
+          },
+          "managed": {
+            "type": "boolean",
+            "description": "Owned by this tenant; only such applications may register clients."
           }
         }
       }
@@ -1652,7 +1820,7 @@ HTTP 200
 
 Read registered client metadata for an associated application
 
-Active owner only, including disabled associations. Exact registered client_id, redirect URI, scopes, audience, active flag and version; never client secrets, cookies or token material. Cursor is printable client_id (not UUID), sorted ascending within this application. This registry view does not create clients or change protocol configuration/authentication methods.
+Active owner only, including disabled associations. Exact registered client_id, redirect URI, scopes, audience, active flag and version; never client secrets, cookies or token material. Cursor is printable client_id (not UUID), sorted ascending within this application. This GET does not change protocol configuration. managed/state distinguish tenant-owned lifecycle rows from external built-in registrations; no secret/authentication credential is returned.
 
 OAuth scope：`platform:read`。权限：`reserved_owner:roles.manage`。
 
@@ -1748,7 +1916,9 @@ HTTP 200
                 "scopes",
                 "audience",
                 "active",
-                "version"
+                "version",
+                "managed",
+                "state"
               ],
               "properties": {
                 "client_id": {
@@ -1776,6 +1946,17 @@ HTTP 200
                 "version": {
                   "type": "integer",
                   "minimum": 1
+                },
+                "managed": {
+                  "type": "boolean"
+                },
+                "state": {
+                  "enum": [
+                    "external",
+                    "pending",
+                    "active",
+                    "revoked"
+                  ]
                 }
               }
             }
@@ -1788,6 +1969,632 @@ HTTP 200
             "minLength": 1,
             "maxLength": 128,
             "pattern": "^[!-~]{1,128}$"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+#### POST /v1/tenants/{tenant}/applications/{application}/clients
+
+Register a pending public PKCE client
+
+Active owner/recent MFA; only applications owned by this tenant and currently available/enabled. Maximum 100 lifetime registrations per app, including revoked tombstones. Server chooses a random client_id. Starts pending and inactive, requiring separate reconcile to register and verify the engine. Fixed authorization_code/refresh_token, S256 PKCE, no client secret, fixed scopes openid offline_access platform:read and platform audience. No custom scopes/audience/grants/authentication/JWKS fields. Response loss: read application clients before creating another registration.
+
+OAuth scope：`platform:write`。权限：`reserved_owner:roles.manage`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+##### 请求示例
+
+```json
+{
+  "name": "桌面客户端",
+  "redirect_uri": "http://127.0.0.1:9876/callback"
+}
+```
+
+##### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "redirect_uri"
+  ],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Trimmed nonblank display name, maximum 128 UTF-8 bytes. Code is generated, not a global namespace chosen by this caller."
+    },
+    "redirect_uri": {
+      "type": "string",
+      "format": "uri",
+      "maxLength": 255,
+      "description": "Exact absolute HTTPS callback with path, or explicit HTTP IP loopback 127.0.0.1/[::1] on a fixed port 1024–65535. No wildcard, fragment, userinfo, backslash or whitespace. Never fetched by the platform."
+    }
+  }
+}
+```
+
+##### 成功响应
+
+HTTP 201
+
+```json
+{
+  "description": "Register a pending public PKCE client",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "Location": {
+      "description": "Created resource path; read metadata here after a result is known.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "client_id",
+          "application_id",
+          "name",
+          "redirect_uri",
+          "scopes",
+          "audience",
+          "state",
+          "active",
+          "version"
+        ],
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "application_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "redirect_uri": {
+            "type": "string",
+            "format": "uri"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "audience": {
+            "type": "string",
+            "const": "https://api.sso.local"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "active",
+              "revoked"
+            ]
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+#### GET /v1/tenants/{tenant}/applications/{application}/clients/{client}
+
+Read this tenant owned managed-client state and version
+
+Active owner only. Database metadata without a protocol Admin fetch or secrets. client path is a server-generated 32-hex ID; existing shared/external registrations remain metadata-only via the application client list. Root application path and client must belong to this tenant ownership record.
+
+OAuth scope：`platform:read`。权限：`reserved_owner:roles.manage`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "client",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+##### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Read this tenant owned managed-client state and version",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "client_id",
+          "application_id",
+          "name",
+          "redirect_uri",
+          "scopes",
+          "audience",
+          "state",
+          "active",
+          "version"
+        ],
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "application_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "redirect_uri": {
+            "type": "string",
+            "format": "uri"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "audience": {
+            "type": "string",
+            "const": "https://api.sso.local"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "active",
+              "revoked"
+            ]
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+#### POST /v1/tenants/{tenant}/applications/{application}/clients/{client}/reconcile
+
+Reconcile the exact owned protocol client profile
+
+Active owner and recent MFA, exact ETag, total four-second authority transaction bound. Pending: read the fixed Admin destination, create if absent, read back and verify exact profile and ownership before activation/version/audit commit. Active: verify profile without changing authority. Revoked: delete only a matching owned engine object, retaining the revoked tombstone and auditing the cleanup check. Foreign/drifted profile is 409 protocol_client_conflict and never overwritten/deleted/adopted. Global/local app disable blocks activation, not revocation/cleanup. Unknown transport/commit outcome is not auto-replayed: reread state and choose a fresh reconciliation. Local pending/revoked clients cannot issue usable business tokens, including remote orphans. Absence is observed, not permanent physical-deletion assurance.
+
+OAuth scope：`platform:write`。权限：`reserved_owner:roles.manage`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "client",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Exact managed-client detail ETag bound to tenant/client/version. Missing 428, malformed 400, stale/other resource 412.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"client-[a-f0-9]{32}-[a-f0-9]{32}-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+##### 请求示例
+
+```json
+{}
+```
+
+##### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
+```
+
+##### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Reconcile the exact owned protocol client profile",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "client",
+          "protocol_observation"
+        ],
+        "properties": {
+          "client": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "client_id",
+              "application_id",
+              "name",
+              "redirect_uri",
+              "scopes",
+              "audience",
+              "state",
+              "active",
+              "version"
+            ],
+            "properties": {
+              "client_id": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              "application_id": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              "name": {
+                "type": "string"
+              },
+              "redirect_uri": {
+                "type": "string",
+                "format": "uri"
+              },
+              "scopes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "audience": {
+                "type": "string",
+                "const": "https://api.sso.local"
+              },
+              "state": {
+                "enum": [
+                  "pending",
+                  "active",
+                  "revoked"
+                ]
+              },
+              "active": {
+                "type": "boolean"
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          "protocol_observation": {
+            "enum": [
+              "present",
+              "absent"
+            ],
+            "description": "Observation during this bounded reconciliation, not a permanent guarantee that a timed-out upstream transaction cannot finish later."
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+#### POST /v1/tenants/{tenant}/applications/{application}/clients/{client}/revoke
+
+Irreversibly revoke a managed client in the authority database
+
+Active owner and recent MFA. First commits inactive and a higher client version with audit/outbox, invalidating this client grants immediately. No engine call or shared SID logout; other clients and central SSO remain valid. Pending or active can be revoked, never restored. Same-state/current ETag no-op. Separate reconcile can clean up an owned engine object; failed protocol cleanup never restores authority.
+
+OAuth scope：`platform:write`。权限：`reserved_owner:roles.manage`。
+
+##### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "client",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Exact managed-client detail ETag bound to tenant/client/version. Missing 428, malformed 400, stale/other resource 412.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"client-[a-f0-9]{32}-[a-f0-9]{32}-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+##### 请求示例
+
+```json
+{}
+```
+
+##### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
+```
+
+##### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Irreversibly revoke a managed client in the authority database",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "client_id",
+          "application_id",
+          "name",
+          "redirect_uri",
+          "scopes",
+          "audience",
+          "state",
+          "active",
+          "version"
+        ],
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "application_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "redirect_uri": {
+            "type": "string",
+            "format": "uri"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "audience": {
+            "type": "string",
+            "const": "https://api.sso.local"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "active",
+              "revoked"
+            ]
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
           }
         }
       }
@@ -1894,7 +2701,8 @@ HTTP 200
           "available",
           "protected",
           "version",
-          "client_count"
+          "client_count",
+          "managed"
         ],
         "properties": {
           "id": {
@@ -1926,6 +2734,10 @@ HTTP 200
           "client_count": {
             "type": "integer",
             "minimum": 0
+          },
+          "managed": {
+            "type": "boolean",
+            "description": "Owned by this tenant; only such applications may register clients."
           }
         }
       }
@@ -2032,7 +2844,8 @@ HTTP 200
           "available",
           "protected",
           "version",
-          "client_count"
+          "client_count",
+          "managed"
         ],
         "properties": {
           "id": {
@@ -2064,6 +2877,10 @@ HTTP 200
           "client_count": {
             "type": "integer",
             "minimum": 0
+          },
+          "managed": {
+            "type": "boolean",
+            "description": "Owned by this tenant; only such applications may register clients."
           }
         }
       }
@@ -4754,7 +5571,7 @@ If-Match 使用带双引号的 authz-N / org-N。权限版本变更使旧 grant 
 
 ### API Playground
 
-Playground 是登录后的真实 API 客户端。它读取与公共服务相同的 OpenAPI 0.12.0，通过控制台 BFF 调用现有 38 个业务操作。它使用真实 Hydra/主库授权，不创建演示身份或伪造 token。
+Playground 是登录后的真实 API 客户端。它读取与公共服务相同的 OpenAPI 0.13.0，通过控制台 BFF 调用现有 43 个业务操作。它使用真实 Hydra/主库授权，不创建演示身份或伪造 token。
 
 #### 启动与使用
 
@@ -5038,7 +5855,7 @@ reset 使用封闭账户集合检查：如果演示空间中出现了清单之�
 
 ### 应用接入管理
 
-这一切片提供当前空间已接入应用的目录、客户端登记元数据，以及应用在该空间的停用/恢复。动态客户端创建、client secret 发布/轮换、机器身份和全局应用登记仍在后续计划中。
+这一切片提供当前空间已接入应用的目录、客户端登记元数据，以及应用在该空间的停用/恢复。后续自有应用/公开 PKCE 登记见 [客户端登记](managed-clients.md)；client secret 发布/轮换、机器身份与任意共享应用管理仍在后续计划中。
 
 空间 owner 可在控制台“应用接入”查看名称、可用状态、启用状态和客户端数量，并分页查看已登记 client_id、精确回调 URI、scope、audience、客户端状态/版本和 issuer。它不读取协议管理端 secret 或令牌，也不对全体用户开放全局应用目录；普通成员及受委托审计员不能管理此入口。
 
@@ -5071,7 +5888,66 @@ reset 使用封闭账户集合检查：如果演示空间中出现了清单之�
 后续 OpenAPI 0.12.0 保留上述应用合同并增加组织管理，现共 38 个业务操作。Playground 的“读取最新 ETag”对应用操作须先填目标 application ID，读取该应用的详情版本，支持完整对象绑定 ETag；不会误用空间 authz 版本。
 
 
-## 13. 组织生命周期
+## 13. 自有应用与公开客户端
+
+来源：[managed-clients.md](managed-clients.md)。
+
+### 租户自有应用与公开 PKCE 客户端
+
+此功能提供 owner 管理的应用创建、公开客户端登记、协议核对和不可逆撤销。公开客户端适用于桌面/原生场景：authorization_code + S256 PKCE、可刷新、无 client secret。当前固定 `openid offline_access platform:read` 和平台 audience，不支持 client_credentials、自定义 audience/scope 或服务端 secret；这些能力继续分阶段实施。
+
+#### 所有权与权限
+
+新增应用由当前空间拥有，使用系统生成的唯一 code，并在创建事务中启用当前空间关联。已有平台/演示应用保持共享登记，不能被任意租户 owner 改写客户端。Application 的 managed 标记表示当前空间拥有它，而非“此空间已启用”。
+
+所有管理操作需 active owner；创建/核对/撤销还需 platform:write、最近 300 秒 MFA。读取需 platform:read。reserved roles.manage 不可通过自定义角色委托；这是第一期客户端管理边界。应用所有权属于空间，不随 creator 是否仍是 owner 改变。每空间最多 20 个自有应用，每应用最多 100 份登记（包括撤销墓碑）。
+
+#### 状态机与失败恢复
+
+1. 创建客户端先提交 pending/inactive 登记、随机 32-hex client_id、精确回调及审计/outbox，不调用引擎。pending 在可信登录和签发中均不可用。
+2. owner 确认后执行 reconcile：从固定私有 Admin 读取；不存在则创建；随后读取并校验 ID、名称、精确回调、grant/response、scopes、audience、认证方式和所有权 metadata。确认后才在主库事务中激活、增加 client version 和写审计。
+3. 任何协议配置/所有权冲突返回 409 protocol_client_conflict，不覆盖、不删除、不收编不匹配对象。协议创建成功但回包丢失或业务提交不明时，保留主库实际状态；先 GET 元数据，明确确认后再次核对，不能自动重发创建。匹配的 pending 协议对象可恢复登记。
+4. 撤销先将主库状态改为 revoked/inactive 并递增版本；该客户端所有旧授权立即失去权威，后续 refresh 拒绝，其他客户端及中央登录保留。撤销不可恢复，相同最新版本再撤销为 no-op。
+5. 对 revoked 执行 reconcile 仅核对并清理匹配的协议对象，保留撤销墓碑。即使协议对象尚未清理，Hook/资源检查仍拒绝。清理失败不恢复权威；不删除不匹配的对象。
+
+核对与撤销复用同一租户事务锁，整个核对事务有 4 秒 deadline，协议请求另有 3 秒上限，并禁止重定向。普通并发核对不能在撤销后重新激活。协议对象的 absent 响应是本次观察，不能保证此前超时的远端事务永远不会稍后完成；本地 pending/revoked 仍始终拒绝。当前提供显式 owner 核对，定期补偿/对账 worker、告警和长期孤立对象清理仍待实现。
+
+私有 Admin 适配器直接连接其固定内部服务，与外部出站 HTTP 代理分离；浏览器不能提交代理目标。公网 API 不暴露任意 Admin 路径/响应，公开客户端核对仅解码受控非秘密字段，不转发上游 client_secret、注册 token 或错误正文。
+
+#### 回调与协议边界
+
+回调是长度不超过 255 的精确 ASCII URI，要求 HTTPS 和明确路径，或使用 `127.0.0.1` / `[::1]` 的 HTTP 回环与固定 1024–65535 端口。禁止 userinfo、fragment、通配符、反斜线、空白和自定义 scheme，不通过 DNS 推断归属，平台不抓取该 URL。当前不支持 RFC 8252 随机回环端口扩展、域名证明或动态配置编辑。
+
+既有可信登录适配器仍复查实际请求 redirect、S256、scope 和 audience；Hook 每次 code/refresh 查询主库 active/版本。引擎注册本身不授予空间成员或 owner 资格，组织归属也不会授予客户端权限。新公开客户端没有 platform:write，不能用自己的 token 再创建客户端或管理平台。
+
+#### API 与 UI
+
+公共/BFF OpenAPI 0.13.0 共 43 个业务操作，Playground 和 API 参考使用同一合同。
+
+| 方法/路径（均以 `/v1/tenants/{tenant}` 为前缀） | 用途 |
+| --- | --- |
+| POST `/applications` | `{name}`，创建自有应用 |
+| POST `/applications/{application}/clients` | `{name,redirect_uri}`，提交 pending 公开客户端 |
+| GET `/applications/{application}/clients/{client}` | 读取自有客户端元数据与 ETag |
+| POST `/applications/{application}/clients/{client}/reconcile` | `{}` + If-Match，核对/激活或核对撤销后的清理 |
+| POST `/applications/{application}/clients/{client}/revoke` | `{}` + If-Match，不可逆撤销 |
+
+client path 仅接受此功能生成的 32-hex ID；旧的字符串 client_id 继续在已有只读客户端列表展示，state=external、managed=false。新列表增加 managed/state，应用列表增加 managed；均不泄露密钥。客户端 ETag 为 `"client-<tenant32>-<client32>-<version>"`，绑定空间和不可变客户端身份。缺失 428、非法 400、旧版本/其他对象 412。App 路径、客户端与空间所有权必须一致，不能借用一个合法 ID 管理其他应用。
+
+控制台“应用接入”提供创建应用、自有应用下登记公开客户端、查看/核对/撤销和清理。登记和生命周期均明确确认，协议错误/网络不明后禁用原提交，支持先刷新元数据；关闭或切换空间取消读取，不自动重放写入。Playground 的“读取最新 ETag”需同时填写 application/client ID，并读取对应客户端详情。
+
+创建应用/客户端或局部撤销不增加租户 authz_version，也不批量锁 grant/BFF 行。客户端撤销依靠单调 security_version，使该客户端的旧授权不复活。应用停用/恢复继续使用关联版本及原 ADR 0013 规则。
+
+#### 验证与边界
+
+界面截图：[桌面](ui/managed-client-desktop.png)、[手机登记](ui/managed-client-mobile.png)、[手机应用列表](ui/managed-applications-mobile.png)。
+
+运行 `scripts/console clients-test`，配合 `scripts/api test`、`scripts/m1 test`。使用独立合成账户/自有应用/协议对象，清理器核实封闭账户集合及所有权，禁止触碰其他空间或共享客户端。真实协议测试包含新客户端 code/PKCE、refresh、只读 scope、撤销后 access/refresh 拒绝及协议清理；不将注入 HTTP 故障的测试当成真实 Hydra 验证。
+
+新增 migration 008 只添加所有权/状态表，既有迁移校验和保留。周五演示固定标签与数据保留；CI/GCP/生产部署由 SRE 负责。本切片不构成 confidential/M2M、机器密钥轮换、生产 TLS/KMS 或外部 Marketstars 接通的声明。
+
+
+## 14. 组织生命周期
 
 来源：[organization-management.md](organization-management.md)。
 
@@ -5113,7 +5989,7 @@ reset 使用封闭账户集合检查：如果演示空间中出现了清单之�
 运行 `scripts/console organizations-test` 验证真实登录、BFF→API→MySQL、合同响应、MFA、根/非空保护、跨空间、成员分页及桌面/手机操作。`scripts/m1 test` 包含闭包完整性、停用成员清理、委托读取双权限和并发创建/删除测试；原演示账号和数据不作这些测试的 fixture。周五基线标签 demo-friday-2026-11-13 保持原提交，开发后另跑 scripts/demo check。
 
 
-## 14. React 控制台
+## 15. React 控制台
 
 来源：[runbooks/console.md](runbooks/console.md)。
 
@@ -5174,7 +6050,7 @@ scripts/console enable --email YOUR_LOCAL_ADDRESS --second-tenant
 `rbac-test` 使用三个合成账户，通过真实登录/API/BFF 验收默认拒绝、委托读写、deny 优先、撤销、跨租户对象拒绝、owner 恢复/移交及真实 React 角色管理。新增截图：[角色](ui/rbac-roles.png)、[受委托审计员](ui/rbac-auditor.png)。设计和 API 细节见 [ADR 0008](adr/0008-tenant-roles-and-deny.md)。
 
 
-新增 API Playground 导航，可读取同源 OpenAPI 并调用固定的 38 个业务操作。GET 直接发送，写入预览/确认后发送一次，支持 ETag 读取、HTTP 状态/错误、cURL 模板和凭证字段脱敏；离开页面清空内存并取消在途读取，不自动重发写入。使用及限制见 [Playground 手册](playground.md)。
+新增 API Playground 导航，可读取同源 OpenAPI 并调用固定的 43 个业务操作。GET 直接发送，写入预览/确认后发送一次，支持 ETag 读取、HTTP 状态/错误、cURL 模板和凭证字段脱敏；离开页面清空内存并取消在途读取，不自动重发写入。使用及限制见 [Playground 手册](playground.md)。
 
 
 安全会话页面已增加个人 MFA/恢复码/会话概览及“撤销其他会话”确认流程；同一中央会话的多个标签页保留。恢复码管理和认证器更换跳转可信认证域，不在 BFF/Playground 输入密码或验证码。认证器更换的两阶段/取消/结果不明处理见 [专门手册](authenticator-management.md)，验收 `scripts/console authenticator-test`。见 [个人安全](account-security.md)。
@@ -5182,7 +6058,7 @@ scripts/console enable --email YOUR_LOCAL_ADDRESS --second-tenant
 个人安全记录位于安全会话页，20 条分页与刷新，使用当前 User 的公开只读接口；跨空间仍只读本人记录，未公开内部目标标识。验收 `scripts/console events-test`；语义及限制见 [手册](security-events.md)。
 
 
-## 15. 可信登录与双应用
+## 16. 可信登录与双应用
 
 来源：[runbooks/local-sso.md](runbooks/local-sso.md)。
 
@@ -5241,7 +6117,7 @@ scripts/sso enable --email YOUR_LOCAL_ADDRESS --second-tenant
 生产边界见 [ADR 0005](adr/0005-trusted-login-mfa-bff.md)。这些示范应用使用同一 Application，完整权限控制台、MFA 管理、正式邮件与生产 TLS/KMS 等仍待后续开发。
 
 
-## 16. 账户生命周期
+## 17. 账户生命周期
 
 来源：[runbooks/m2-accounts.md](runbooks/m2-accounts.md)。
 
@@ -5279,7 +6155,7 @@ m2 test 暂停本项目 mail-worker，防止真实 worker 与集成 fixture 争�
 已实现注册邮箱证明、原子个人空间引导、Argon2id 密码、恢复挑战、安全版本递增、通知加密/本地可靠落盘、四个 HTTP API 和真实账户页面。账户接口不提供 token 旁路；可信登录、中央会话、MFA 与 BFF 现由 [本地 SSO 手册](runbooks/local-sso.md) 说明。管理接口仍未公开；M0 合成身份实验继续独立。GCP 部署交由 SRE，对应生产邮箱、密钥托管和分布式限流留作正式集成。
 
 
-## 17. 数据库与组织
+## 18. 数据库与组织
 
 来源：[runbooks/m1.md](runbooks/m1.md)。
 
@@ -5297,7 +6173,7 @@ scripts/m1 test
 
 prepare 复用 M0 依赖和镜像，新增私有 M1_DB_PASSWORD（保留既有值），编译 Go MySQL 集成测试二进制。up 启动 M0 服务，以本地初始化路径创建独立 sso_business 库和开发测试账号，再执行带互斥锁与 SHA256 记录的迁移。重复运行保留数据和凭证。迁移目前只支持本切片的幂等 DDL；修改已有 SQL 的 checksum 会失败，未来非幂等升级需专门 migration runner，不能修改历史 checksum 绕过。
 
-测试以非 root、只读文件系统容器执行，真实连接 MySQL；未设置 SSO_M1_TEST 时，普通 go test 中的数据集成测试会明确跳过，不能据此宣称已验证数据库。必须执行 scripts/m1 test；当前 23 项均须运行并通过。
+测试以非 root、只读文件系统容器执行，真实连接 MySQL；未设置 SSO_M1_TEST 时，普通 go test 中的数据集成测试会明确跳过，不能据此宣称已验证数据库。必须执行 scripts/m1 test；当前 28 项仓储/配置检查均须运行并通过。
 
 验证：原子租户引导/根唯一、跨租户 actor 与组合外键拒绝、组织移动 dry-run/闭包/环/root/版本、并发移动串行化、最后 owner 与并发暂停、审计 FK 失败时事务回滚、深度边界与停用 actor；邀请验证邮箱、一次性/过期/并发接受、不隐式提权，以及组织关联的跨租户拒绝。测试只清理自身新建的 tenant/user 数据，不删除既有开发数据。
 
@@ -5315,8 +6191,10 @@ GCP 部署和云端运维由 SRE 专门负责，不作为后续本地开发前�
 
 组织生命周期测试新增普通命名/no-op、根保护、非空引用（含停用成员）阻止删除、直属成员双权限/显式 deny/分页、归属移除保留角色、闭包完整性以及并发创建/删除单一赢家。新增应用接入测试同时纳入此数据库检查集合。
 
+008 新增自有应用/公开客户端管理：本轮共 28 项仓储/配置检查，其中 27 项实际连接主库，另 1 项为纯回调校验。覆盖所有权/共享应用拒绝、pending 拒绝、响应丢失、冲突、不复活、并发核对/撤销和取消 RPC 回滚。业务数据库与真实 Hydra 行为分别验证，不混算 HTTP 注入实验。
 
-## 18. 协议实验
+
+## 19. 协议实验
 
 来源：[runbooks/m0.md](runbooks/m0.md)。
 
@@ -5372,7 +6250,7 @@ Go 的 GOPATH/GOMODCACHE/GOCACHE 全部位于 .local，避免受限 HOME 路径�
 M1 数据仓储的运行方式见 [M1 手册](runbooks/m1.md)。Cloud SQL 按用户要求本轮不验证，不把该项写成通过。
 
 
-## 19. 实施计划与剩余功能
+## 20. 实施计划与剩余功能
 
 来源：[implementation-plan.md](implementation-plan.md)。
 
@@ -5397,11 +6275,11 @@ M0 不通过不扩写业务功能。选择版本需记录源码引用、许可�
 
 M0 已通过 28 项真实协议检查；本地证明每交易/授权链绑定、刷新/撤销与签名轮换。云端 HA 按用户要求不验证，不记为通过。
 
-M1 已提供组合外键隔离、组织闭包/移动、成员停用恢复、邀请、audit/outbox；M4 第一切片增加租户角色、六种操作权限、deny 优先及 owner 恢复边界。23 项业务数据库检查包含并发最后 owner 保护、邀请创建者权限复查及角色删除后的绑定审计。
+M1 已提供组合外键隔离、组织闭包/移动、成员停用恢复、邀请、audit/outbox；M4 第一切片增加租户角色、六种操作权限、deny 优先及 owner 恢复边界。27 项业务数据库检查及回调配置边界检查包含并发最后 owner 保护、邀请创建者权限复查及角色删除后的绑定审计。
 
 M2 已实现邮箱验证设密/恢复、个人空间原子创建、加密通知队列/本地私有邮箱、真实 Hydra 密码/TOTP/一次性恢复码、中央会话、按租户授权、主库 Hook、两个独立 BFF、串行刷新、单应用及全设备退出。BFF 各自使用独立 key、受限 SQL 视图和网桥；Admin/私有 Hook 不可从 BFF 网络访问。当前 Go 验证适配尚未作为多语言 SDK 发布。
 
-公共 API 0.12.0 已提供 38 个业务操作和 OpenAPI 3.1 YAML/JSON，覆盖身份/空间、成员、组织、邀请、审计、自己的会话及角色/绑定管理。外部客户端使用 OAuth code+PKCE、Bearer scope 和平台 audience；写入需最近 MFA，资格/权限在业务事务内复查。普通成员默认拒绝，操作权限可分别委托；角色管理仅 owner。见 ADR 0006/0008。
+公共 API 0.13.0 已提供 43 个业务操作和 OpenAPI 3.1 YAML/JSON，覆盖身份/空间、成员、组织、邀请、审计、自己的会话及角色/绑定管理。外部客户端使用 OAuth code+PKCE、Bearer scope 和平台 audience；写入需最近 MFA，资格/权限在业务事务内复查。普通成员默认拒绝，操作权限可分别委托；角色管理仅 owner。见 ADR 0006/0008。
 
 M3 控制台第一切片已接入真实 React→BFF→公共 API，含多标签页空间隔离、上述管理页面及角色 UI。OAuth token 留在服务端，控件可见性不代替授权。真实浏览器的合同、权限、撤销和 UI 证据见 [验证记录](validation.md)；构建及运行见控制台手册。
 
@@ -5425,8 +6303,10 @@ API/文档切片已增加真实 Playground、逐操作运行时参考页、完�
 
 组织生命周期已提供重命名、直属成员分页（organizations.read 与 members.read 同时成立）、移除归属、删除空叶子，公共合同 0.12.0 增至 38 操作。根组织受保护，非空节点不级联，结构删除/真实移除需重新授权；普通重命名仅改显示与 org_version。详见 ADR 0014。
 
+自有应用与公开客户端登记切片：migration 008 提供所有权、pending/active/revoked 管理表；公开 PKCE 固定只读平台范围，无 secret，owner/近期 MFA/客户端 ETag；协议核对匹配后才激活，本地撤销先于远端清理，真实证据见 validation.md。共享应用客户端不能被任意租户改写。confidential/M2M/SP/机器凭证、周期性补偿/对账仍未交付。
 
-## 20. 架构决策 0001
+
+## 21. 架构决策 0001
 
 来源：[adr/0001-platform-boundaries.md](adr/0001-platform-boundaries.md)。
 
@@ -5443,7 +6323,7 @@ API/文档切片已增加真实 Playground、逐操作运行时参考页、完�
 实施：先完成可运行 M0 和测试报告，再依次开展 M1–M5。UI 规格先完成，生产控制台后续交付。此次 Git push 是源码/文档交付，不是云部署或生产发布。上传原文保持不变供追溯。
 
 
-## 21. 架构决策 0002
+## 22. 架构决策 0002
 
 来源：[adr/0002-hydra-m0-findings.md](adr/0002-hydra-m0-findings.md)。
 
@@ -5479,7 +6359,7 @@ Hydra Admin 在本地为测试绑定 loopback，HTTP/--dev 仅此实验允许。
 每交易/refresh chain 绑定、logout/remembered consent/prompt=none/max_age、签名 key 轮换的本地真实引擎验证已补充。用户随后明确 Cloud SQL 由其准备且本轮无需验证，因此云端 HA/DR 不作为本轮本地代码推进阻塞项，也不记为通过。镜像漏洞/维护确认及生产部署前的云端验收仍需另行完成。M1 已开始内部数据与仓储切片，未开放生产功能。
 
 
-## 22. 架构决策 0003
+## 23. 架构决策 0003
 
 来源：[adr/0003-transaction-bindings-and-m1.md](adr/0003-transaction-bindings-and-m1.md)。
 
@@ -5522,7 +6402,7 @@ M0 实验资格表与 M1 业务表尚未连通；不把两个独立测试库的�
 用户进一步明确：本轮尽可能完成本地开发和验收，GCP 部署/云端运维由专门 SRE 负责。后续开发不等待 GCP 项目、实例或云凭证；本地迁移、接口合同和运行说明作为交接材料。云端 HA/DR、KMS 与上线 SLO 属于 SRE/联合生产验收，不由本轮代理执行，也不记为本地测试通过。
 
 
-## 23. 架构决策 0004
+## 24. 架构决策 0004
 
 来源：[adr/0004-account-proof-lifecycle.md](adr/0004-account-proof-lifecycle.md)。
 
@@ -5559,7 +6439,7 @@ worker 用 SELECT FOR UPDATE SKIP LOCKED 获取一条待投递记录，仅向私
 尚无 Hydra 可信登录交互、中央会话、MFA、BFF、真实邮件供应商、生产账号恢复审批与通知。M0 合成授权仍与此业务 User 权威状态分离；不能据 security_version 递增宣称现有 M0 JWT/refresh 已全部撤销。下一步必须把账户因素接入受 CSRF/Origin/交易状态保护的 Hydra 登录，再实施 MFA 与会话版本检查，而非新增 password-to-token 路由。
 
 
-## 24. 架构决策 0005
+## 25. 架构决策 0005
 
 来源：[adr/0005-trusted-login-mfa-bff.md](adr/0005-trusted-login-mfa-bff.md)。
 
@@ -5602,7 +6482,7 @@ BFF 会话绝对 8 小时、空闲 30 分钟。refresh 在会话行锁内串行�
 未实现正式 React 控制台、完整 scoped RBAC、MFA 撤销/更换及受控恢复、30 天 refresh 策略、产品级邮件供应商和全部业务事件消费者。GCP 部署、Cloud SQL HA/DR 验证由 SRE 负责；本地通过不代表生产验收。
 
 
-## 25. 架构决策 0006
+## 26. 架构决策 0006
 
 来源：[adr/0006-public-platform-api.md](adr/0006-public-platform-api.md)。
 
@@ -5649,7 +6529,7 @@ Owner 可列出成员、停用/恢复成员，创建组织、预览/执行移动
 本地固定域名/明文/loopback、开发 SQL 账号和单进程限流不得直接当作生产配置。正式域名、TLS、issuer/JWKS 接线、ingress、专用最小权限数据库账号、分布式限流、监控与容量由后续实施和 SRE 验收。没有部署公网、动态第三方 client 注册、通用机器身份凭证或完整控制台；已有 M0 机器 grant 仍是独立实验，不能调用此用户管理 API。
 
 
-## 26. 架构决策 0007
+## 27. 架构决策 0007
 
 来源：[adr/0007-console-bff-contexts.md](adr/0007-console-bff-contexts.md)。
 
@@ -5694,7 +6574,7 @@ BFF SQL 账号不能读取密码、MFA 密文、中央 cookie 摘要、login_ali
 后续实现更新：租户角色/委托见 ADR 0008，个人安全见 ADR 0010，认证器更换见 ADR 0011；本 ADR 的第一切片边界不代表后续能力仍未实现。
 
 
-## 27. 架构决策 0009
+## 28. 架构决策 0009
 
 来源：[adr/0009-api-playground-and-handbook.md](adr/0009-api-playground-and-handbook.md)。
 
@@ -5723,7 +6603,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 验收覆盖真实注册/密码/MFA/Hydra/BFF/API、写入确认/单次发送、ETag/412、普通成员 403、MFA 过期、凭证脱敏、输出转义、导航清理与桌面/手机；离线 HTML 检查目录锚点、无外部请求、无脚本/表单及布局，导出包校验每个摘要。受管 Chromium 禁止 file:// 导航，HTML 测试通过临时 loopback 只读服务加载同一文件，不将该测试描述为云端部署。GCP 部署与运维仍由 SRE 负责。
 
 
-## 28. 架构决策 0010
+## 29. 架构决策 0010
 
 来源：[adr/0010-self-service-account-security.md](adr/0010-self-service-account-security.md)。
 
@@ -5744,7 +6624,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 测试同时验证主库绑定/尝试次数/过期、密码重置竞态、并发仅一次成功，以及真实密码/TOTP/恢复码登录、旧授权失效、当前/其他用户会话隔离。未把普通 Go 中跳过的 fixture 用例当作数据库通过；SSO profile 明确运行新增 TestSSO 用例。生产 TLS/Secure cookie、分布式限流和 KMS 仍须后续由 SRE 实施验收。
 
 
-## 29. 架构决策 0011
+## 30. 架构决策 0011
 
 来源：[adr/0011-staged-authenticator-replacement.md](adr/0011-staged-authenticator-replacement.md)。
 
@@ -5765,7 +6645,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 公共/BFF/security 合同版本统一 0.9.0，公共操作数仍为 28；仅可信合同增加管理页和 start/confirm/cancel。生产 TLS、分布式限流和 KMS 仍按既有边界后续实施。此次不修改 SRE 的 CI 或部署配置。
 
 
-## 30. 架构决策 0012
+## 31. 架构决策 0012
 
 来源：[adr/0012-personal-security-events.md](adr/0012-personal-security-events.md)。
 
@@ -5784,7 +6664,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 本轮不改 CI、部署、既有迁移及 GCP；不可变归档、登录失败/设备监控、正式通知及事件消费者仍需继续实施。
 
 
-## 31. 架构决策 0013
+## 32. 架构决策 0013
 
 来源：[adr/0013-tenant-application-access.md](adr/0013-tenant-application-access.md)。
 
@@ -5803,7 +6683,7 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 无迁移或 CI/GCP 配置变更。演示基线固定为 demo-friday-2026-11-13 / 5d8b46b，源码/文档已分别备份；变更使用独立合成测试数据，演示账户保留并最后复验。公共/BFF/可信安全合同统一 0.11.0，公共业务 34 操作。
 
 
-## 32. 架构决策 0014
+## 33. 架构决策 0014
 
 来源：[adr/0014-organization-lifecycle.md](adr/0014-organization-lifecycle.md)。
 
@@ -5822,7 +6702,28 @@ ZIP 包包含文档、原始设计输入、截图、OpenAPI、离线 HTML 和逐
 本地 DB 和真实浏览器验证隔离、双读取权限、权限委托/显式拒绝、根/非空保护、陈旧/缺失 ETag、近期 MFA、闭包删除、并发创建/删除、其他空间保留、旧授权失效及 UI 晚响应。实际结果写 validation.md。GCP/CI/部署仍由 SRE 负责，本切片不改动。
 
 
-## 33. 验收证据
+## 34. 架构决策 0015
+
+来源：[adr/0015-owned-public-client-registration.md](adr/0015-owned-public-client-registration.md)。
+
+### ADR 0015：自有应用、公开客户端与权威优先的核对
+
+状态：接受为本地开发实现；实际验收见 validation.md。延续 ADR 0013/0014 的演示和权限恢复边界，不修改共享客户端或既有迁移。
+
+现有应用关联可管理启用/停用，但其全局客户端不能被任意关联租户修改。新增 managed_applications 将一个全局 Application 唯一绑定到拥有空间，并用组合 FK 约束其当前空间关联/创建者；managed_oauth_clients 将管理状态限制到该所有权，实际 oauth_clients 仍为签发/资源权威。服务读写同时核对 application/client 映射，不能只凭全局 client_id 行命中更新。
+
+先实现无 secret 的公开 PKCE profile，固定 audience 与只读平台 scope。平台公开 API 不接受 arbitrary grant/scope/audience/auth/JWKS，服务端/机器凭证另立边界。所有管理为 owner 和近期 MFA，名字/精确回调/配额有界。共享应用只读，其他租户不能通过 enabled 关联夺取所有权。
+
+业务库和引擎库不能原子提交。创建先提交 pending/inactive，reconcile 才创建/读取远端并核对不可变 profile 与 metadata，再原子激活和审计。未知回包可能产生远端 orphan，但主库未激活就不能完成可信登录或业务签发。恢复先读已有对象，不盲目重建、覆盖或采用。撤销本地先提交，令版本失效；协议清理不构成资格撤销的前提。
+
+普通并发核对/撤销在有界租户事务锁内串行，选择可审查的首个切片，代价是该租户管理可能短暂等待远端调用。总 deadline 4 秒，RPC 3 秒，不做任意网络重试。必须先完成现有基础行为验证后，再为规模引入细分锁/lease/job；不能在未经验证的跨库竞态中乐观提交 active。此前超时请求可能稍后完成，absent 只能描述当次观察；revoked 墓碑持续拒绝，后续显式核对可重复清理。当前没有周期性 reconciliation worker，不将此首期切片视作完成全部补偿运维。
+
+控制台明确 pending/active/revoked、目标 URI、固定范围和确认，失败先刷新，再由用户决定；Playground 沿用同一合同、只读元数据与资源绑定 ETag。新 UI 不接收/显示 Admin 或协议 secret，普通 browser BFF 的网络/SQL 隔离继续保留。
+
+业务主库注入响应丢失/冲突并验证回滚、恢复、no-op 和并发；真实 Hydra 独立验证 code/PKCE、scope、refresh/撤销和所有权 metadata；真实浏览器检查 owner/member/错空间/MFA、冲突拒绝恢复、核对/撤销/清理、Playground 和手机布局。演示账号不作可变 fixture。
+
+
+## 35. 验收证据
 
 来源：[validation.md](validation.md)。
 
@@ -6033,3 +6934,21 @@ M0/M1 既有证据仍包括跨租户/授权链隔离、会话/退出与签名轮
 新写入继续在主库事务内强制近期 MFA/权限/版本；根不可通过组织委托改名，空节点删除不级联，直接归属移除不改变成员资格/角色，结构删除及真实移除增加租户授权版本。租户锁与既有创建/移动/关联串行化，审计和 outbox 同事务。尚无组织归属历史对照/长期审计归档或组织范围授权，不能从界面归属推导权限。
 
 全部合成夹具已清理：主库用户保留 3 名，测试空间、fixture 应用、临时 OAuth 客户端和私有 mailbox 均为零。CI、部署、GCP、既有迁移和原始上传参考均未改动；未重新运行的 M0 全协议/云端检查不计入本轮结果。当前代码建立在 99e02f1 上，具体交付 SHA 以本节提交的 Git 历史为准。
+
+#### 2026-11-11：自有应用与公开 PKCE 客户端（0.13.0）
+
+新增 migration 008、应用空间所有权、公开客户端 pending/active/revoked、精确协议核对及撤销后清理；公共/BFF 合同为 0.13.0 / 43 操作。已有共享应用/客户端不转移所有权，不涉及 SK 或 client_credentials。当前为 owner 显式核对，周期性补偿 worker 和 confidential/SP/机器密钥仍未交付。见 ADR 0015 与 managed-clients.md。
+
+| 检查 | 实际结果 | 边界 |
+| --- | --- | --- |
+| 仓储/输入 | 28 项仓储/配置检查通过，其中 27 项实际连接 MySQL，1 项纯回调配置测试；另复验外部 profile 清理保护通过 | 所有权/错空间/共享应用拒绝、pending 拒绝、app 停用阻止创建/激活、no-op、注入已创建但回包失败后的回滚/恢复、profile/所有权冲突拒绝、并发核对/撤销、RPC 取消后保持 pending、撤销不等待清理、外部对象不删除 |
+| 原生公开 API | 最终代码 147 个真实响应通过 OpenAPI，包含新增五个操作与真实 Hydra code+PKCE/refresh | 新建自有应用/客户端→核对激活→只读 token/刷新成功→本地撤销后旧 access 与刷新 token 拒绝→协议清理；当前平台 token 保留。新写入在事务内不信任调用者 Recent=false，真实主库到期/MFA/版本撤销探针通过 |
+| 新浏览器 | 30 个合同校验响应及控制台交互通过 | 真实协议注入 scope drift 后返回 409 且保持 pending，恢复精确 profile 后激活；owner/member/错空间/MFA/ETag/no-op、撤销/清理、其他空间、审计及 Playground 客户端版本读取；桌面/手机、卡片完整按钮与确认框尺寸通过 |
+| 原功能回归 | 应用接入 27 响应、组织生命周期 43 响应、完整控制台、RBAC 96 响应、43 操作 Playground 全部通过 | 原始成员/组织/角色、跨标签页隔离/迟到响应、应用撤销、owner 恢复、最后 owner 和 ETag 保护保留 |
+| 身份与隔离 | 账户安全 13 响应、认证器更换 18 响应、个人安全事件 16 响应、15 项真实 SSO 数据库检查及两组网络隔离均通过 | 独立合成账户、真实密码/MFA/恢复/撤销；BFF 仍无法直接访问私有 Admin/Hook/其他应用状态；未把旧 M0 全套当作本轮重新执行 |
+| 构建/文档 | Go test/vet、六项前端边界模型、BFF 方法/路径白名单、spec/手册同步、引用/唯一操作检查、格式/差异检查、43 操作在线参考页桌面/手机通过 | 离线 HTML/完整 ZIP、摘要与已配置/演示秘密排除在导出后检查；UI 截图均不包含秘密页面 |
+| 演示保护 | 最后 scripts/demo check 通过，固定标签/原源码与原文档备份保留 | 真实密码/TOTP、双应用、数据、角色与空间隔离保留；没有重置演示账户或消费恢复码；原配置/长期密钥不轮换 |
+
+实测平台 API 内部 Admin 请求不应依赖出站代理/NO_PROXY 配置；私有固定目标适配器现在直接连接该内部服务并继续禁止重定向，不开放任意目的地。协议错误不透传上游 body，仅对 profile 冲突记录受控字段名和服务端请求 ID。测试注入工具显式使用 UTF-8，避免 CLI 默认 latin1 将中文登记名改变后造成额外冲突；未放宽生产 profile 精确校验。
+
+新增主库所有权表与状态表，旧迁移内容/校验和保留。所有可变协议/数据库夹具按封闭账户和所有权清理；不删除其他空间或共享 client。周五 tag、CI、部署、GCP 与原始上传参考均未改动。当前代码建立在 f8e5dbc 上，本节点交付 SHA 以包含本节的 Git 提交为准。机器身份/一次性凭证的下一阶段约束记录在 progress/machine-credentials-next.md，明确尚未实现。
