@@ -1,6 +1,6 @@
 # 自有应用的成员准入
 
-0.25.0 在应用接入主线加入 User 准入：全体有效成员，或仅指定成员和有效所有者。控制台、五个公开操作、OpenAPI/Playground 和独立本地应用组成可演示流程。当前 User/BFF 65 项，Playground 可执行 64 项；机器签发协议与业务身份验证继续独立。
+0.25.0 在应用接入主线加入 User 准入：全体有效成员，或仅指定成员和有效所有者。控制台、五个公开操作、OpenAPI/Playground 和独立本地应用组成可演示流程。当前 User/BFF 66 项，Playground 可执行 65 项；机器签发协议与业务身份验证继续独立。
 
 ## 业务语义
 
@@ -43,3 +43,5 @@ policy 固定 tenant_id/application_id/mode/version，version 为正 signed-int6
 更新本地服务用 scripts/api prepare/up，包含迁移及必要受限视图。BFF 只读新准入元数据、当前客户端 grant 和相关成员的 owner 标志，仍无基础库/密码/MFA 秘密访问或新配置写权限；控制台 readiness 会用实际 DB 角色探测 User grant 查询，缺视图/权限时 503，避免仅静态页面就绪。新表存在不代表旧二进制理解新规则；全部相关服务需采用同一实现，已有 selected_members 策略时不能直接回退旧二进制。CI/GCP/部署由 SRE 执行。
 
 真实 MySQL/原子回滚/并发、User 原生 OAuth 与机器隔离、独立应用及控制台浏览器、API/Playground 和原演示回归结果见 [验证记录](validation.md) / [ADR 0027](adr/0027-application-user-access.md)。源码/文档包仅含公开最小示例，无私有演示配置。截图：[控制台桌面](ui/application-user-access-desktop.png) / [手机](ui/application-user-access-mobile.png) / [独立应用手机](ui/user-application-mobile.png)。marketstars 尚未实际联调。
+
+0.26 可从自有应用行查看 [准入变更历史](application-access-history.md)，复用已捕获事务记录；不改变本页的实际准入规则。

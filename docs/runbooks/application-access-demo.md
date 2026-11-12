@@ -25,7 +25,7 @@ scripts/demo user-access
 4. 成员再次发起 SSO，选择新演示空间并同意，独立工作台显示“当前准入已确认”和已授权身份/空间。中央 SSO 可复用，无需重复输入密码；User Bearer 留在应用服务端。
 5. 管理员检查同一成员，确认后「移除显式授权」。成员点击「重新检查访问」或刷新，显示当前访问失效，旧身份资料清除。
 6. 管理员重新添加授权。成员刷新仍不会自动恢复旧会话；必须再次点击 SSO 登录，取得新授权后才能访问。所有者始终有隐式准入；全体成员模式也不会因移除某个显式条目就拒绝该成员。
-7. 可选：查看审计中的应用准入动作，或在 Playground 使用 getApplicationUserAccess / checkApplicationUserAccess。决定只是当次观察，实际 token/refresh/API 仍逐次主库核验。
+7. 查看同一应用行「访问历史」，核对真实操作者/目标成员、授予/撤销和当时模式/版本；可分页、重读。历史不会恢复授权。也可在 Playground 使用 listApplicationAccessHistory、getApplicationUserAccess / checkApplicationUserAccess。决定只是当次观察，实际 token/refresh/API 仍逐次主库核验。
 
 若要从“拒绝”重新演示，管理员明确切回 selected_members 并移除该成员显式条目；准备命令不会替你重置策略。访问模式或显式条目真正变化会使同一应用原有 User 授权失效，其他应用和机器凭证保持原有版本。
 

@@ -3,6 +3,7 @@ import { request, errorText } from "./api.js";
 import ManagedRegistration from "./ManagedRegistration.jsx";
 import MachineIdentityManagement from "./MachineIdentityManagement.jsx";
 import ApplicationUserAccess from "./ApplicationUserAccess.jsx";
+import ApplicationAccessHistory from "./ApplicationAccessHistory.jsx";
 function Dialog({ title, busy, close, children }) {
   const ref = useRef(null);
   useEffect(() => {
@@ -52,6 +53,7 @@ export default function ApplicationManagement({
   const [registration, setRegistration] = useState(null);
   const [machineApp, setMachineApp] = useState(null);
   const [userAccessApp, setUserAccessApp] = useState(null);
+  const [historyApp, setHistoryApp] = useState(null);
   const alive = useRef(true),
     generation = useRef(0),
     dialogAbort = useRef(null);
@@ -233,6 +235,14 @@ export default function ApplicationManagement({
                       {app.managed && (
                         <button
                           className="secondary"
+                          onClick={() => setHistoryApp(app)}
+                        >
+                          访问历史
+                        </button>
+                      )}
+                      {app.managed && (
+                        <button
+                          className="secondary"
                           onClick={() => setUserAccessApp(app)}
                         >
                           成员访问
@@ -300,6 +310,16 @@ export default function ApplicationManagement({
           app={userAccessApp}
           canReadMembers={canReadMembers}
           onClose={() => setUserAccessApp(null)}
+          onFailure={fail}
+        />
+      )}
+      {historyApp && (
+        <ApplicationAccessHistory
+          key={identity + historyApp.id}
+          context={context}
+          csrf={csrf}
+          app={historyApp}
+          onClose={() => setHistoryApp(null)}
           onFailure={fail}
         />
       )}

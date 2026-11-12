@@ -174,7 +174,7 @@ async function register() {
   const f = {
     email:
       "browser-" + crypto.randomBytes(16).toString("hex") + "@example.invalid",
-    password: "API private local passphrase 123!",
+    password: "API-" + crypto.randomBytes(24).toString("base64url"),
     codes: [],
     used: 0,
   };

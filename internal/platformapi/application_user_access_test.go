@@ -31,7 +31,7 @@ func TestUserApplicationAccessPreconditionsAndListShape(t *testing.T) {
 		}
 	}
 	path := "/v1/tenants/" + tenant.String() + "/applications/" + app.String() + "/user-access"
-	if !isList(path) || isList(path+"/members/"+tenant.String()) || isList("/admin/user-access") {
+	if !isList(path) || !isList(path+"/history") || isList(path+"/history/extra") || isList(path+"/members/"+tenant.String()) || isList("/admin/user-access") {
 		t.Fatal("User admission query surface is not fixed")
 	}
 	for _, length := range []int64{-1, 1, 4097} {

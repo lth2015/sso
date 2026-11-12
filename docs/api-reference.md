@@ -1,6 +1,6 @@
 # 完整 API 参考
 
-OpenAPI 0.25.0；公共 Bearer API 共 65 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
+OpenAPI 0.26.0；公共 Bearer API 共 66 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
 
 真实交互入口见 [Playground 手册](playground.md)；外部接入见 [公共 API 手册](runbooks/public-api.md)。JSON/YAML 合同见 [OpenAPI](../api/openapi.yaml)。
 
@@ -44,6 +44,7 @@ OpenAPI 0.25.0；公共 Bearer API 共 65 个业务操作。此文件由 OpenAPI
 | POST | `/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/enable` | `enableServicePrincipal` |
 | GET | `/v1/tenants/{tenant}/applications/{application}/user-access` | `getApplicationUserAccess` |
 | PUT | `/v1/tenants/{tenant}/applications/{application}/user-access` | `setApplicationUserAccess` |
+| GET | `/v1/tenants/{tenant}/applications/{application}/user-access/history` | `listApplicationAccessHistory` |
 | GET | `/v1/tenants/{tenant}/applications/{application}/user-access/members/{member}` | `checkApplicationUserAccess` |
 | PUT | `/v1/tenants/{tenant}/applications/{application}/user-access/members/{member}` | `grantApplicationUserAccess` |
 | DELETE | `/v1/tenants/{tenant}/applications/{application}/user-access/members/{member}` | `revokeApplicationUserAccess` |
@@ -4646,6 +4647,174 @@ HTTP 200
             "type": "string",
             "pattern": "^[1-9][0-9]{0,18}$",
             "description": "Positive signed-int64 decimal revision, transported losslessly as a string."
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## GET /v1/tenants/{tenant}/applications/{application}/user-access/history
+
+Read captured application User admission changes
+
+Current User/platform:read and current owner only, including aged MFA; app must be owned by the token tenant, shared associations return application_unmanaged. Current disabled application/member state does not rewrite captured history. Fixed event/actor/optional target member IDs, action, time, historical mode and lossless positive signed-int64 revision; no emails, secrets or raw audit payload. Mode changes have null membership_id; grants/revokes have a member ID. Uses existing atomic context/audit rows, not a reconstruction or permission restore. Unknown or cross-linked metadata returns no partial page. Limit 1-100/default 50, ascending event IDs; after must belong to this tenant/app captured history, explicit zero/unknown/foreign cursor is 404. No empty/duplicate/unknown queries or GET body. No HTTP ETag, snapshot, signature/WORM or archive guarantee; ordinary audit.read does not grant this access. Frozen audit exports and SDK types remain unchanged.
+
+OAuth scope：`platform:read`。权限：`reserved_owner:roles.manage`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "query",
+    "name": "limit",
+    "description": "Bounded keyset page size.",
+    "schema": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 50
+    }
+  },
+  {
+    "in": "query",
+    "name": "after",
+    "description": "Previous next_cursor; ascending UUID keyset, not a snapshot or timestamp ordering guarantee.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Read captured application User admission changes",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "format",
+          "tenant_id",
+          "application_id",
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "format": {
+            "const": "sso.application.user-access-history.v1"
+          },
+          "tenant_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "application_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "actor_membership_id",
+                "membership_id",
+                "action",
+                "occurred_at",
+                "mode",
+                "version"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "actor_membership_id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "membership_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "action": {
+                  "enum": [
+                    "application.user_access.mode_changed",
+                    "application.user_access.granted",
+                    "application.user_access.revoked"
+                  ]
+                },
+                "occurred_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "mode": {
+                  "enum": [
+                    "all_members",
+                    "selected_members"
+                  ]
+                },
+                "version": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,18}$",
+                  "description": "Positive signed-int64 decimal revision, transported losslessly as a string."
+                }
+              }
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
           }
         }
       }

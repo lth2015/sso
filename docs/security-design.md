@@ -124,3 +124,7 @@ PolicyHistory 逐次使用 User Bearer/当前 owner，不能以 audit.read、旧
 策略和显式成员操作仅当前 owner/空间内自有应用；写强制主库最近 MFA 及 tenant/app/revision ETag。User grant 版本与 namespace 逐次验证，旧行按 1 解释，默认兼容；任何真实策略/成员变更使目标应用原 User grant 失效，恢复不复活。机器/其他应用不借用此计数器，原角色/成员/会话/启停屏障继续执行。绑定 namespace/revision 错误拒绝，事务失败不留部分设置/审计/outbox。旧二进制不理解 selected_members，需完整兼容实现，存在该策略时不可直接回退旧二进制。
 
 BFF 新只读视图限定当前 client 的 grant、应用和相关成员 owner 标志，不给基础库、密码/MFA/Token 读取或配置 DML 权限。控制台 readiness 以真实 DB 角色探测资格 SQL，缺视图/权限返回 503。独立示例只申请 platform:read，不请求/信任 ID token；state/PKCE、固定回环 Host/后端目标、同源 Origin/CSRF、会话轮换及迟到隔离，令牌仅进程内存，逐次在线 /me 后才显示身份。same-origin Referrer Policy 支持导航 POST 的 Origin 校验并不向跨源 SSO 发 Referer。严格 JSON/有界/no-store，错误不回显；不提供生产 RP/refresh/中央退出承诺。新演示空间纳入清理保护，原密码/TOTP/未用恢复码不重建。见 [应用准入](application-user-access.md)、[演示手卡](runbooks/application-access-demo.md)、[ADR 0027](adr/0027-application-user-access.md) 和 [验收记录](validation.md)。
+
+## 应用准入历史（0.26.0）
+
+当前 owner/platform:read 专用，不把 audit.read 委托变为成员名单权限；固定投影、双 namespace 校验、异常整页失败。无邮箱/秘密/恢复写入，客户端先清旧页并隔离迟到响应；原批次/SDK 保持。 见 application-access-history.md / ADR 0028 / validation.md。

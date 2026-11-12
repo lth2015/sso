@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SSO Public Platform API
-  version: 0.25.0
+  version: 0.26.0
   description: External server/native-client contract. Local reference server only;
     production requires TLS and configured public origins. OAuth code+S256 PKCE, platform
     audience https://api.sso.local. No cookie authentication or wildcard CORS; browser
@@ -355,6 +355,66 @@ paths:
             schema:
               $ref: '#/components/schemas/Empty'
             example: *id001
+  /v1/tenants/{tenant}/applications/{application}/user-access/history:
+    get:
+      operationId: listApplicationAccessHistory
+      summary: Read captured application User admission changes
+      description: Current User/platform:read and current owner only, including aged
+        MFA; app must be owned by the token tenant, shared associations return application_unmanaged.
+        Current disabled application/member state does not rewrite captured history.
+        Fixed event/actor/optional target member IDs, action, time, historical mode
+        and lossless positive signed-int64 revision; no emails, secrets or raw audit
+        payload. Mode changes have null membership_id; grants/revokes have a member
+        ID. Uses existing atomic context/audit rows, not a reconstruction or permission
+        restore. Unknown or cross-linked metadata returns no partial page. Limit 1-100/default
+        50, ascending event IDs; after must belong to this tenant/app captured history,
+        explicit zero/unknown/foreign cursor is 404. No empty/duplicate/unknown queries
+        or GET body. No HTTP ETag, snapshot, signature/WORM or archive guarantee;
+        ordinary audit.read does not grant this access. Frozen audit exports and SDK
+        types remain unchanged.
+      tags:
+      - Tenant management
+      security:
+      - OAuth2:
+        - platform:read
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/applicationID'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: Read captured application User admission changes
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationAccessHistoryPage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: reserved_owner:roles.manage
   /v1/tenants/{tenant}/applications/{application}/clients/{client}/protocol-status:
     get:
       operationId: inspectManagedClientProtocol
@@ -5057,7 +5117,7 @@ components:
           enum:
           - all_members
           - selected_members
-        version:
+        version: &id012
           type: string
           pattern: ^[1-9][0-9]{0,18}$
           description: Positive signed-int64 decimal revision, transported losslessly
@@ -5116,6 +5176,51 @@ components:
           - user_inactive
           - membership_inactive
           - application_disabled
+    ApplicationAccessHistoryEntry:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - actor_membership_id
+      - membership_id
+      - action
+      - occurred_at
+      - mode
+      - version
+      properties:
+        id: *id003
+        actor_membership_id: *id003
+        membership_id: *id005
+        action:
+          enum:
+          - application.user_access.mode_changed
+          - application.user_access.granted
+          - application.user_access.revoked
+        occurred_at:
+          type: string
+          format: date-time
+        mode: *id011
+        version: *id012
+    ApplicationAccessHistoryPage:
+      type: object
+      additionalProperties: false
+      required:
+      - format
+      - tenant_id
+      - application_id
+      - items
+      - next_cursor
+      properties:
+        format:
+          const: sso.application.user-access-history.v1
+        tenant_id: *id003
+        application_id: *id003
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/ApplicationAccessHistoryEntry'
+        next_cursor: *id005
   parameters:
     PrincipalMatch:
       in: header

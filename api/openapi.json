@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "SSO Public Platform API",
-    "version": "0.25.0",
+    "version": "0.26.0",
     "description": "External server/native-client contract. Local reference server only; production requires TLS and configured public origins. OAuth code+S256 PKCE, platform audience https://api.sso.local. No cookie authentication or wildcard CORS; browser integrations use a BFF. All writes require MFA authenticated within 300 seconds; refresh does not update auth_time. Tenant-scoped roles grant separate member/organization/invitation/audit permissions; explicit deny wins. Only active owners manage roles and owner bindings; roles.manage cannot be delegated or denied via custom policies. Resource/subtree scopes are not implemented. Delegated member operators cannot suspend/restore owner bindings. Authorization is checked against the business primary inside each operation transaction. Tenant-version mutations invalidate prior tenant grants, requiring new authorization. JSON objects reject duplicate keys, unknown fields, invalid UTF-8 and extra documents. Only role policy requests admit typed nested rules, with depth/work and policy-count limits. Request body limit 4096 bytes. UUIDs are lowercase 32-hex strings. List limit 1–100, default 50; after is previous next_cursor. No pagination snapshot guarantee. Error format follows RFC 9457. All responses no-store. Invitation proofs never appear in lists/detail/audit; creation and explicit reissue each return only their new one-time proof. Owned application User admission is checked on the primary at consent, code/refresh and each User grant use; policy revisions are independent of machines and other applications and never replace platform or business permissions."
   },
   "servers": [
@@ -466,6 +466,88 @@
             }
           }
         }
+      }
+    },
+    "/v1/tenants/{tenant}/applications/{application}/user-access/history": {
+      "get": {
+        "operationId": "listApplicationAccessHistory",
+        "summary": "Read captured application User admission changes",
+        "description": "Current User/platform:read and current owner only, including aged MFA; app must be owned by the token tenant, shared associations return application_unmanaged. Current disabled application/member state does not rewrite captured history. Fixed event/actor/optional target member IDs, action, time, historical mode and lossless positive signed-int64 revision; no emails, secrets or raw audit payload. Mode changes have null membership_id; grants/revokes have a member ID. Uses existing atomic context/audit rows, not a reconstruction or permission restore. Unknown or cross-linked metadata returns no partial page. Limit 1-100/default 50, ascending event IDs; after must belong to this tenant/app captured history, explicit zero/unknown/foreign cursor is 404. No empty/duplicate/unknown queries or GET body. No HTTP ETag, snapshot, signature/WORM or archive guarantee; ordinary audit.read does not grant this access. Frozen audit exports and SDK types remain unchanged.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/applicationID"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/After"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read captured application User admission changes",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationAccessHistoryPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "reserved_owner:roles.manage"
       }
     },
     "/v1/tenants/{tenant}/applications/{application}/clients/{client}/protocol-status": {
@@ -7892,6 +7974,96 @@
               "membership_inactive",
               "application_disabled"
             ]
+          }
+        }
+      },
+      "ApplicationAccessHistoryEntry": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "actor_membership_id",
+          "membership_id",
+          "action",
+          "occurred_at",
+          "mode",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "actor_membership_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "membership_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "action": {
+            "enum": [
+              "application.user_access.mode_changed",
+              "application.user_access.granted",
+              "application.user_access.revoked"
+            ]
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "mode": {
+            "enum": [
+              "all_members",
+              "selected_members"
+            ]
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Positive signed-int64 decimal revision, transported losslessly as a string."
+          }
+        }
+      },
+      "ApplicationAccessHistoryPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "format",
+          "tenant_id",
+          "application_id",
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "format": {
+            "const": "sso.application.user-access-history.v1"
+          },
+          "tenant_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "application_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/ApplicationAccessHistoryEntry"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
           }
         }
       }

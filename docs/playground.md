@@ -1,6 +1,6 @@
 # API Playground
 
-Playground 是登录后的真实 API 客户端。它读取与公共服务相同的 OpenAPI 0.25.0，通过控制台 BFF 展示现有 65 项 User 管理操作，除一次性 SK 创建外，其余 64 项可真实执行。它使用真实 Hydra/主库授权，不创建演示身份或伪造 token。
+Playground 是登录后的真实 API 客户端。它读取与公共服务相同的 OpenAPI 0.26.0，通过控制台 BFF 展示现有 66 项 User 管理操作，除一次性 SK 创建外，其余 65 项可真实执行。它使用真实 Hydra/主库授权，不创建演示身份或伪造 token。
 
 ## 启动与使用
 
@@ -55,4 +55,6 @@ GCP、公网域名、TLS 和部署由 SRE 负责。本地验收不代表生产�
 
 0.22.0 新增 `listRolePolicyHistory`：填写 role ID 读取已捕获的 before/after，支持 limit/after，不读取写入 ETag。仅当前所有者可用，普通 audit.read 无此权限；角色已删除仍可用原 ID，未知角色/游标 404。零记录不证明过去未改动，详见 [策略历史](role-policy-history.md)。
 
-0.25 增加 getApplicationUserAccess、setApplicationUserAccess、checkApplicationUserAccess、grantApplicationUserAccess、revokeApplicationUserAccess；当前 65 项 User 操作，64 项可执行，SK 仍走专页。三个写操作的“读取最新 ETag”均读取该应用的准入配置，取得 ua ETag，再显式预览/确认 mode 或成员写入；member 必须该空间实际 membership ID。检查决定无 HTTP ETag，不作为访问票据。完整字段/边界见 application-user-access.md。
+0.25 增加 getApplicationUserAccess、setApplicationUserAccess、checkApplicationUserAccess、grantApplicationUserAccess、revokeApplicationUserAccess；该切片增至 65 项 User 操作，64 项可执行，SK 仍走专页。三个写操作的“读取最新 ETag”均读取该应用的准入配置，取得 ua ETag，再显式预览/确认 mode 或成员写入；member 必须该空间实际 membership ID。检查决定无 HTTP ETag，不作为访问票据。完整字段/边界见 application-user-access.md。
+
+0.26 新增 listApplicationAccessHistory：填写自有 application ID，GET 读取实际模式/授予/撤销和成员上下文；after 只使用同应用返回的 next_cursor，历史没有 HTTP ETag，不作为恢复或写入依据。当前 66 项 User 操作、65 项可执行。见 [历史说明](application-access-history.md)。

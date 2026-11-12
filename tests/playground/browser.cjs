@@ -54,7 +54,7 @@ async function read(page, operation, code = 200) {
     await p.getByLabel("选择 API", { exact: true }).waitFor();
     assert.equal(
       await p.getByLabel("选择 API", { exact: true }).locator("option").count(),
-      65,
+      66,
     );
     await choose(p, "createMachineCredential");
     await p
@@ -199,6 +199,27 @@ async function read(page, operation, code = 200) {
     );
     await admissionCheck(false);
     assert.equal(admissionWrites, 3);
+    await choose(p, "listApplicationAccessHistory");
+    await p.getByLabel("application", { exact: true }).fill(appReply.body.id);
+    await p.getByRole("button", { name: "发送读取请求", exact: true }).click();
+    await status(p, 200);
+    const capturedAccess = JSON.parse(
+      await p.getByTestId("playground-response").textContent(),
+    );
+    assert.equal(
+      capturedAccess.format,
+      "sso.application.user-access-history.v1",
+    );
+    assert.equal(capturedAccess.application_id, appReply.body.id);
+    assert.deepEqual(
+      capturedAccess.items.map((v) => v.action),
+      [
+        "application.user_access.mode_changed",
+        "application.user_access.granted",
+        "application.user_access.revoked",
+      ],
+    );
+    assert.equal(capturedAccess.items[1].membership_id, targetMember);
     phase = "real-audit-export-query-and-default";
     await read(p, "exportAuditBatch");
     const exported = JSON.parse(
@@ -398,7 +419,7 @@ async function read(page, operation, code = 200) {
   }
   if (success)
     console.log(
-      "Playground acceptance passed: 65 management contracts (64 executable; one-time SK uses dedicated UI), real reads/writes, explicit confirmation, one send per action, ETag/412, member denial, MFA, redaction, escaping, navigation reset and desktop/mobile",
+      "Playground acceptance passed: 66 management contracts (65 executable; one-time SK uses dedicated UI), real reads/writes, explicit confirmation, one send per action, ETag/412, member denial, MFA, redaction, escaping, navigation reset and desktop/mobile",
     );
 })().catch((e) => {
   console.error(

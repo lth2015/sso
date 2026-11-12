@@ -96,3 +96,7 @@ Go User SDK 增加 PolicyHistory、stdin CLI 增加 policy_history/role_id，复
 ## 2026-11-12：应用成员准入主线 0.25.0
 
 自有应用 all_members/selected_members、显式成员、独立 User grant 版本和真实签发/refresh/当前资源检查，新增五项公共操作/控制台及独立本地 OAuth 应用。User/BFF 65 项、Playground 64 可执行；新增演示空间复用原账号和 TOTP，保留原两空间。此阶段实现应用准入，不代表组织子树/业务资源 scoped RBAC；正式通知、受控遗失设备恢复、周期对账和归档仍需后续。真实验收见 application-user-access.md / ADR 0027 / validation.md。
+
+## 应用准入历史（0.26.0）
+
+新增应用准入历史 API/控制台，复用既有 012 事务记录，User/BFF 66 项、Playground 65 项可执行；无新迁移或准入权威改变。完整 scoped RBAC、恢复、正式通知和归档仍需后续。 见 application-access-history.md / ADR 0028 / validation.md。

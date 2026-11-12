@@ -122,3 +122,7 @@ User/BFF 新增只读 audit-exports 资源，管理与机器来源分别以独�
 ## 应用 User 准入（0.25.0）
 
 自有应用增加 all_members/selected_members 和显式成员授权，当前有效 owner 隐式可准入。012 仅新增四表，不改原表；独立版本与 User grant 同事务绑定，在租户选项、同意、签发/refresh、BFF/资源/API 主库权威处校验。普通平台权限、应用启停与机器版本保持独立。受限 BFF 只读与当前 client/grant/member 相关的元数据/owner 标志；控制台 readiness 同时检查真实资格查询所需视图。控制台/五项公共操作与 OAuth-only 独立应用形成闭环；不代表完整资源 scoped RBAC。见 application-user-access.md / ADR 0027。
+
+## 应用准入历史（0.26.0）
+
+复用 012 的准入上下文与同 event 审计，当前 owner 读取固定 ID/动作/当时模式/版本，namespace 双向绑定；不依赖当前成员资料或 outbox 生命周期，无新迁移及权威规则改变。 见 application-access-history.md / ADR 0028 / validation.md。

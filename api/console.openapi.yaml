@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Identity Console Same-Origin BFF
-  version: 0.25.0
+  version: 0.26.0
   description: Browser cookie+context+CSRF boundary. Proxy paths are restricted to
     the public platform contract and one fixed API destination; caller Authorization
     is rejected. OAuth tokens and verifier remain encrypted server-side. Every tab
@@ -345,6 +345,66 @@ paths:
             schema:
               $ref: '#/components/schemas/Empty'
             example: {}
+  /bff/v1/tenants/{tenant}/applications/{application}/user-access/history:
+    get:
+      operationId: consoleListApplicationAccessHistory
+      summary: Read captured application User admission changes
+      description: Current User/platform:read and current owner only, including aged
+        MFA; app must be owned by the token tenant, shared associations return application_unmanaged.
+        Current disabled application/member state does not rewrite captured history.
+        Fixed event/actor/optional target member IDs, action, time, historical mode
+        and lossless positive signed-int64 revision; no emails, secrets or raw audit
+        payload. Mode changes have null membership_id; grants/revokes have a member
+        ID. Uses existing atomic context/audit rows, not a reconstruction or permission
+        restore. Unknown or cross-linked metadata returns no partial page. Limit 1-100/default
+        50, ascending event IDs; after must belong to this tenant/app captured history,
+        explicit zero/unknown/foreign cursor is 404. No empty/duplicate/unknown queries
+        or GET body. No HTTP ETag, snapshot, signature/WORM or archive guarantee;
+        ordinary audit.read does not grant this access. Frozen audit exports and SDK
+        types remain unchanged.
+      tags:
+      - Tenant management
+      security:
+      - ConsoleCookie: []
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/applicationID'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/After'
+      - $ref: '#/components/parameters/Context'
+      responses:
+        '200':
+          description: Read captured application User admission changes
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationAccessHistoryPage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: reserved_owner:roles.manage
   /bff/v1/tenants/{tenant}/applications/{application}/clients/{client}/protocol-status:
     get:
       operationId: consoleInspectManagedClientProtocol
@@ -5597,6 +5657,74 @@ components:
           - user_inactive
           - membership_inactive
           - application_disabled
+    ApplicationAccessHistoryEntry:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - actor_membership_id
+      - membership_id
+      - action
+      - occurred_at
+      - mode
+      - version
+      properties:
+        id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        actor_membership_id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        membership_id:
+          type:
+          - string
+          - 'null'
+          pattern: ^[a-f0-9]{32}$
+        action:
+          enum:
+          - application.user_access.mode_changed
+          - application.user_access.granted
+          - application.user_access.revoked
+        occurred_at:
+          type: string
+          format: date-time
+        mode:
+          enum:
+          - all_members
+          - selected_members
+        version:
+          type: string
+          pattern: ^[1-9][0-9]{0,18}$
+          description: Positive signed-int64 decimal revision, transported losslessly
+            as a string.
+    ApplicationAccessHistoryPage:
+      type: object
+      additionalProperties: false
+      required:
+      - format
+      - tenant_id
+      - application_id
+      - items
+      - next_cursor
+      properties:
+        format:
+          const: sso.application.user-access-history.v1
+        tenant_id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        application_id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/ApplicationAccessHistoryEntry'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          pattern: ^[a-f0-9]{32}$
     BFFError:
       type: object
       additionalProperties: false
