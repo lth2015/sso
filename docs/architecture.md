@@ -114,3 +114,7 @@ User/BFF 新增只读 audit-exports 资源，管理与机器来源分别以独�
 ## 所有者历史的程序接入（0.23.0）
 
 标准库 User 客户端复用已有 owner-only 历史读取，每次固定 tenant/role 在线读一页；与管理/机器审计批次独立类型。CLI 仅 stdin 输入和固定本地入口。服务端权威、数据库、API 操作数量及 BFF/UI 不变；完整边界与验收见 user-audit-client.md / ADR 0025。
+
+## 组织上级选择（0.24.0）
+
+控制台为创建/移动独立读取 25 项组织目录，跨页绑定 org ETag，移动源行版本与首批目录一致。预览只读且绑定选定 parent/版本，实际提交仍走原服务端主库检查；无 API/迁移/SSO 核心变更。见 organization-hierarchy.md / ADR 0026。

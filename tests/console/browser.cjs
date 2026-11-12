@@ -224,7 +224,15 @@ async function reauthorize(f, page, tenant) {
 async function createOrg(page, name, parent) {
   await page.getByRole("button", { name: "创建组织", exact: true }).click();
   await page.getByLabel("组织名称").fill(name);
-  if (parent) await page.getByLabel("上级组织").selectOption(parent);
+  if (!parent) {
+    const tenant = (await bff(page, "/v1/me")).body.tenant_id;
+    parent = (await bff(page, "/v1/tenants/" + tenant)).body.root_id;
+  }
+  await page
+    .getByRole("status")
+    .filter({ hasText: "正在读取上级组织" })
+    .waitFor({ state: "hidden" });
+  await page.getByLabel("上级组织", { exact: true }).selectOption(parent);
   await submit(page);
   await page.getByRole("dialog").waitFor({ state: "hidden" });
   await page.getByRole("table").getByText(name, { exact: true }).waitFor();
@@ -540,6 +548,9 @@ async function createOrg(page, name, parent) {
       .getByRole("status")
       .filter({ hasText: "将移动 2 个组织" })
       .waitFor();
+    await p
+      .getByLabel("我确认按当前预览移动组织及其下级", { exact: true })
+      .check();
     await p.getByRole("button", { name: "确认移动", exact: true }).click();
     await reauthorize(owner, p, tenantA);
     stage = "new-space-and-audit-ui";

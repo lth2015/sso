@@ -35,4 +35,4 @@
 
 运行 `scripts/console organizations-test` 验证真实登录、BFF→API→MySQL、合同响应、MFA、根/非空保护、跨空间、成员分页及桌面/手机操作。`scripts/m1 test` 包含闭包完整性、停用成员清理、委托读取双权限和并发创建/删除测试；原演示账号和数据不作这些测试的 fixture。周五基线标签 demo-friday-2026-11-13 保持原提交，开发后另跑 scripts/demo check。
 
-0.21 起关联成员使用独立分页/确认弹窗，支持后页成员与组织，普通委托操作员沿用现有权限，写入未知回包不重发。详见 [组织关联分页](organization-assignment.md)；创建/移动上级选项的进一步改进仍待后续。
+0.21 起关联成员使用独立分页/确认弹窗，支持后页成员与组织，普通委托操作员沿用现有权限，写入未知回包不重发。详见 [组织关联分页](organization-assignment.md)；0.24 起创建/移动上级使用独立分页，并将移动确认绑定到所选上级的实际预览，详见 [创建与移动组织](organization-hierarchy.md)。

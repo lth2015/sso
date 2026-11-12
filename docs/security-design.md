@@ -114,3 +114,7 @@ User scope/audit.read、会话/grant/角色与 tenant 始终由 API 主库复查
 ## User 策略历史客户端边界（0.23.0）
 
 PolicyHistory 逐次使用 User Bearer/当前 owner，不能以 audit.read、旧成功记录或机器 Bearer 替代。与原批次共享可信 HTTPS/固定本地回环例外、无 Cookie/重定向/缓存/SDK 重试及受限正文；精确字段/规范 before/after、namespace/游标验证和消费前取消复查后才交付整页。CLI policy_history 必须 role_id，旧 kind 拒绝该字段，令牌仍只经 stdin。工具没有登录、历史恢复写入或存证签名，授权结果后续保留由接入方控制。详见 user-audit-client.md / ADR 0025 / validation.md。
+
+## 上级目录与移动预览绑定（0.24.0）
+
+源行与独立分页目录使用同一 org ETag，固定 DTO/根/ID/游标和预览四字段安全数值验证；选择/页/错误/context 变化清除旧预览和确认。主库在实际提交重新检查权限/MFA/版本/循环/深度；预览不是授权票据，原生 API 契约不变。取消/卸载守卫隔离迟到响应，未知写入不自动重试；固定演示夹具保护保持。见 organization-hierarchy.md / ADR 0026 / validation.md。

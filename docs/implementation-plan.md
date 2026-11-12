@@ -88,3 +88,7 @@ Go 服务端验证器、独立回环身份服务及私有 stdin 输入客户端�
 ## 2026-11-12：策略历史程序接入 0.23.0
 
 Go User SDK 增加 PolicyHistory、stdin CLI 增加 policy_history/role_id，复用 owner-only 历史 API。固定投影/规范规则/分页/取消与当前授权验证，管理/机器批次格式保持；没有新 API、迁移、UI 或部署变更。见 user-audit-client.md / ADR 0025 / validation.md。后续仍以 scoped RBAC、正式通知、受控遗失设备恢复和对账为待实施能力。
+
+## 2026-11-12：组织上级选择 0.24.0
+
+创建/移动组织复用现有 API，独立分页选择上级；移动确认绑定实际预览/目标/结构版本，处理取消、未知结果与实时授权变化。没有新迁移/权限/服务端或部署变更，60 项 User API 和 59 项 Playground 保持。见 organization-hierarchy.md / ADR 0026 / validation.md。scoped RBAC、正式通知、受控遗失设备恢复和对账仍为待实施能力。

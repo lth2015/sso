@@ -96,6 +96,7 @@ sources = [
     ('自有应用与公开客户端', 'managed-clients.md'),
     ('机器身份与一次性凭证', 'machine-credentials.md'),
     ('外部机器服务与 Go SDK', 'external-machine-integration.md'),
+    ('组织创建与移动上级', 'organization-hierarchy.md'),
     ('组织成员关联独立分页', 'organization-assignment.md'),
     ('组织生命周期', 'organization-management.md'),
     ('React 控制台', 'runbooks/console.md'),

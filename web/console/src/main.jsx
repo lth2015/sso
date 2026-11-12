@@ -8,6 +8,7 @@ import AccountSecurity from "./AccountSecurity.jsx";
 import ApplicationManagement from "./ApplicationManagement.jsx";
 import OrganizationActions from "./OrganizationActions.jsx";
 import OrganizationAssignment from "./OrganizationAssignment.jsx";
+import OrganizationHierarchy from "./OrganizationHierarchy.jsx";
 import RolePolicyHistory from "./RolePolicyHistory.jsx";
 import MachineEvents from "./MachineEvents.jsx";
 import AuditExport from "./AuditExport.jsx";
@@ -126,6 +127,7 @@ function App() {
     [roleMember, setRoleMember] = useState(null);
   const [orgAction, setOrgAction] = useState(null);
   const [assignmentOpen, setAssignmentOpen] = useState(false);
+  const [hierarchyAction, setHierarchyAction] = useState(null);
   const [policyHistoryRole, setPolicyHistoryRole] = useState(null);
   const [invitationAction, setInvitationAction] = useState(null);
   const can = (permission) =>
@@ -180,6 +182,7 @@ function App() {
     setRoleMember(null);
     setOrgAction(null);
     setAssignmentOpen(false);
+    setHierarchyAction(null);
     setPolicyHistoryRole(null);
     setInvitationAction(null);
     setData(null);
@@ -353,6 +356,7 @@ function App() {
   function navigate(target) {
     setOrgAction(null);
     setAssignmentOpen(false);
+    setHierarchyAction(null);
     setPolicyHistoryRole(null);
     setInvitationAction(null);
     setTab(target);
@@ -377,12 +381,6 @@ function App() {
         { slug: v.slug, name: v.name },
         { message: "空间已创建。选择该空间后即可进入。" },
       );
-    if (modal.kind === "new-org")
-      return mutate(
-        base + "/organizations",
-        { parent_id: v.parent, name: v.name },
-        { etag: visible.etag, message: "组织已创建。" },
-      );
     if (modal.kind === "invite")
       return mutate(
         base + "/invitations",
@@ -398,21 +396,6 @@ function App() {
         { token: v.token },
         { message: "已加入空间。重新选择空间后即可进入。" },
       );
-    if (modal.kind === "move") {
-      const dry = event.nativeEvent.submitter?.value === "preview";
-      return mutate(
-        base + "/organizations/" + modal.row.id + "/move",
-        { parent_id: v.parent, dry_run: dry },
-        {
-          etag: visible.etag,
-          invalidates: !dry,
-          message: dry ? "移动预览完成。" : "组织已移动，请重新确认空间授权。",
-          onSuccess: dry
-            ? (result) => setModal({ ...modal, plan: result, parent: v.parent })
-            : undefined,
-        },
-      );
-    }
     if (modal.kind === "member")
       return mutate(
         base +
@@ -745,7 +728,9 @@ function App() {
                         </button>
                       )}
                       {can("organizations.write") && (
-                        <button onClick={() => open({ kind: "new-org" })}>
+                        <button
+                          onClick={() => setHierarchyAction({ kind: "create" })}
+                        >
                           创建组织
                         </button>
                       )}
@@ -788,7 +773,13 @@ function App() {
                               <>
                                 <button
                                   className="text-button"
-                                  onClick={() => open({ kind: "move", row })}
+                                  onClick={() =>
+                                    setHierarchyAction({
+                                      kind: "move",
+                                      row,
+                                      etag: visible.etag,
+                                    })
+                                  }
                                 >
                                   移动组织
                                 </button>
@@ -843,6 +834,7 @@ function App() {
                   onChanged={({ invalidates, message }) => {
                     setOrgAction(null);
                     setAssignmentOpen(false);
+                    setHierarchyAction(null);
                     setPolicyHistoryRole(null);
                     setInvitationAction(null);
                     setNotice(message);
@@ -1137,6 +1129,39 @@ function App() {
           </div>
         </Dialog>
       )}
+      {hierarchyAction &&
+        me &&
+        tenant &&
+        tab === "organizations" &&
+        !authNeeded &&
+        can("organizations.write") && (
+          <OrganizationHierarchy
+            key={
+              context +
+              me.tenant_id +
+              hierarchyAction.kind +
+              (hierarchyAction.row?.id || "")
+            }
+            context={context}
+            csrf={csrf.current}
+            tenant={me.tenant_id}
+            root={tenant.root_id}
+            action={hierarchyAction}
+            onClose={() => setHierarchyAction(null)}
+            onFailure={fail}
+            onChanged={(moving) => {
+              setHierarchyAction(null);
+              if (moving) {
+                setData(null);
+                setAuthNeeded(true);
+                setNotice("组织已移动，请重新确认空间授权。");
+              } else {
+                setRevision((x) => x + 1);
+                setNotice("组织已创建。");
+              }
+            }}
+          />
+        )}
       {assignmentOpen &&
         me &&
         tenant &&
@@ -1154,6 +1179,7 @@ function App() {
             onFailure={fail}
             onChanged={() => {
               setAssignmentOpen(false);
+              setHierarchyAction(null);
               setPolicyHistoryRole(null);
               setData(null);
               setAuthNeeded(true);
@@ -1181,10 +1207,8 @@ function App() {
           title={
             {
               "new-tenant": "创建空间",
-              "new-org": "创建组织",
               invite: "邀请成员",
               accept: "接受成员邀请",
-              move: "移动组织",
               member:
                 modal.row?.status === "active"
                   ? "确认停用成员"
@@ -1217,15 +1241,6 @@ function App() {
                 <p className="muted">标识只包含小写字母、数字和连字符。</p>
               </>
             )}
-            {modal.kind === "new-org" && (
-              <>
-                <label>
-                  组织名称
-                  <input name="name" required maxLength="128" autoFocus />
-                </label>
-                <ParentSelect rows={rows} root={tenant.root_id} />
-              </>
-            )}
             {modal.kind === "invite" && (
               <>
                 <label>
@@ -1256,22 +1271,6 @@ function App() {
                   />
                 </label>
                 <p className="muted">受邀邮箱需与你账户中已验证的邮箱一致。</p>
-              </>
-            )}
-            {modal.kind === "move" && (
-              <>
-                <p>将「{modal.row.name}」及其下级组织移到新的上级。</p>
-                <ParentSelect
-                  rows={rows.filter((row) => row.id !== modal.row.id)}
-                  root={tenant.root_id}
-                  value={modal.parent}
-                />
-                {modal.plan && (
-                  <p className="notice" role="status">
-                    将移动 {modal.plan.subtree_nodes} 个组织，移动后最深层级为{" "}
-                    {modal.plan.resulting_depth}。
-                  </p>
-                )}
               </>
             )}
             {modal.kind === "member" && (
@@ -1310,17 +1309,6 @@ function App() {
               >
                 取消
               </button>
-              {modal.kind === "move" && (
-                <button
-                  type="submit"
-                  name="action"
-                  value="preview"
-                  className="secondary"
-                  disabled={busy}
-                >
-                  预览移动
-                </button>
-              )}
               <button
                 type="submit"
                 name="action"
@@ -1329,12 +1317,9 @@ function App() {
               >
                 {busy
                   ? "正在处理…"
-                  : modal.kind === "move"
-                    ? "确认移动"
-                    : modal.kind === "member" ||
-                        modal.kind.startsWith("revoke-")
-                      ? "确认操作"
-                      : "保存并继续"}
+                  : modal.kind === "member" || modal.kind.startsWith("revoke-")
+                    ? "确认操作"
+                    : "保存并继续"}
               </button>
             </div>
           </form>
@@ -1352,23 +1337,6 @@ function ErrorNotice({ error }) {
       )}
       {error.requestID && <small>请求编号：{error.requestID}</small>}
     </div>
-  );
-}
-function ParentSelect({ rows, root, value }) {
-  return (
-    <label>
-      上级组织
-      <select name="parent" required defaultValue={value || root}>
-        {!rows.some((row) => row.id === root) && (
-          <option value={root}>空间根组织</option>
-        )}
-        {rows.map((row) => (
-          <option key={row.id} value={row.id}>
-            {row.name}
-          </option>
-        ))}
-      </select>
-    </label>
   );
 }
 function Table({ headers, rows, render }) {
