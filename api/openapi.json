@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "SSO Public Platform API",
-    "version": "0.22.0",
+    "version": "0.23.0",
     "description": "External server/native-client contract. Local reference server only; production requires TLS and configured public origins. OAuth code+S256 PKCE, platform audience https://api.sso.local. No cookie authentication or wildcard CORS; browser integrations use a BFF. All writes require MFA authenticated within 300 seconds; refresh does not update auth_time. Tenant-scoped roles grant separate member/organization/invitation/audit permissions; explicit deny wins. Only active owners manage roles and owner bindings; roles.manage cannot be delegated or denied via custom policies. Resource/subtree scopes are not implemented. Delegated member operators cannot suspend/restore owner bindings. Authorization is checked against the business primary inside each operation transaction. Tenant-version mutations invalidate prior tenant grants, requiring new authorization. JSON objects reject duplicate keys, unknown fields, invalid UTF-8 and extra documents. Only role policy requests admit typed nested rules, with depth/work and policy-count limits. Request body limit 4096 bytes. UUIDs are lowercase 32-hex strings. List limit 1–100, default 50; after is previous next_cursor. No pagination snapshot guarantee. Error format follows RFC 9457. All responses no-store. Invitation proofs never appear in lists/detail/audit; creation and explicit reissue each return only their new one-time proof."
   },
   "servers": [

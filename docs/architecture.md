@@ -110,3 +110,7 @@ User/BFF 新增只读 audit-exports 资源，管理与机器来源分别以独�
 ## 角色策略历史 0.22.0
 
 自定义角色策略写入在原 tenant 锁/owner/MFA/ETag 事务中同步写规范化前后规则，绑定同一 audit/outbox event 与全局提交版本；失败全部回滚、no-op 不捕获。migration 011 仅新增表，保留原迁移/数据。读取使用独立 owner-only 固定投影，快照与审计的 tenant/role/target 同时约束，历史 ID 不依赖当前 roles 行，删除/code 重用不串接。旧审计导出/SDK 投影保持，见 role-policy-history.md / ADR 0024。
+
+## 所有者历史的程序接入（0.23.0）
+
+标准库 User 客户端复用已有 owner-only 历史读取，每次固定 tenant/role 在线读一页；与管理/机器审计批次独立类型。CLI 仅 stdin 输入和固定本地入口。服务端权威、数据库、API 操作数量及 BFF/UI 不变；完整边界与验收见 user-audit-client.md / ADR 0025。

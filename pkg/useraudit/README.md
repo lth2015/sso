@@ -1,6 +1,6 @@
 # User 审计 API 的 Go 客户端
 
-仅标准库。用已通过真实 OAuth code+PKCE 获取的 **User Bearer** 读取一个受控批次；库不获取登录凭证、不处理 Cookie/AK/SK、不替代机器身份验证器。需要 User platform:read 与当前 tenant audit.read，可委托只读审计员。
+仅标准库。用已通过真实 OAuth code+PKCE 获取的 **User Bearer** 读取一个受控批次；库不获取登录凭证、不处理 Cookie/AK/SK、不替代机器身份验证器。需要 User platform:read；Management/Machine 需要当前 tenant audit.read，可委托只读审计员；PolicyHistory 需要当前 owner。
 
 ```go
 client, err := useraudit.New(useraudit.Config{Origin: "https://your-trusted-api-origin"})
@@ -11,6 +11,16 @@ if err != nil { return err }
 ```
 
 `Machine` 方法读取机器签发审计，调用者仍是 User；不会接受机器 Bearer。固定 `sso.audit.batch.v1` 的两类事件类型分开，管理事件有 membership actor，机器事件只有 SP/credential。客户端验证完整/唯一/固定 JSON 字段、namespace/kind、时间/版本、单批数量、升序唯一 ID 与继续游标，拒绝未知秘密字段和部分响应。
+
+0.23.0 增加独立格式的角色策略历史，一次读取指定 tenant/role 的一页：
+
+```go
+history, err := client.PolicyHistory(ctx, userBearer, expectedTenantID, expectedRoleID, useraudit.Page{Limit: 20})
+if err != nil { return err }
+// history.Items 包含实际捕获的 before/after；显式使用 NextCursor 才会继续读取。
+```
+
+固定 `sso.role.policy-history.v1`，五字段 envelope、八字段事件、两字段 policy；验证真实 namespace、正 int64 版本、动作/时间、六种 permission/allow/deny、每组最多 12 条规范排序唯一规则与升序 ID/游标。创建前为空、删除后为空、更新前后必须不同。当前 owner 即使目录或 audit.read 被 deny 仍可读取；只读审计委托不能读取完整规则。删除后用原 role ID 读取，重用 code 的新角色历史独立。空页不证明从未变化，捕获边界见 [角色策略历史](../../docs/role-policy-history.md)。
 
 Origin 由可信部署代码配置为 HTTPS，不能来自请求参数；禁止 userinfo/path/query/fragment。仅当前本地显式 `AllowLocalHTTP: true` + `http://api.localhost:8083` 可使用 HTTP，默认传输固定拨号 127.0.0.1:8083 并保留 Host。默认总超时三秒，最多五秒；无重定向、Cookie jar、成功授权缓存、SDK 层自动重试或自动翻页。响应最多 256 KiB，必须 JSON/no-store、无非零 Age/压缩；请求取消保留 context 的固定类别，失败返回零批次。自定义 Transport 仅供可信 CA/测试实现，须保留上下文/TLS/隐私约束。
 

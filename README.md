@@ -92,7 +92,7 @@ scripts/console up
 scripts/console test
 ```
 
-见 [控制台手册](docs/runbooks/console.md)、[ADR 0007](docs/adr/0007-console-bff-contexts.md)、[浏览器 BFF OpenAPI](api/console.openapi.yaml) 和 [界面截图](docs/ui/console-overview.png)。React/Vite 用精确 npm lockfile 构建并嵌入 Go 服务，实际运行不需要 Vite 开发服务器。公共 API 0.22.0 共 60 个业务操作，包含租户角色与成员绑定；成员邮箱读取需要 members.read。
+见 [控制台手册](docs/runbooks/console.md)、[ADR 0007](docs/adr/0007-console-bff-contexts.md)、[浏览器 BFF OpenAPI](api/console.openapi.yaml) 和 [界面截图](docs/ui/console-overview.png)。React/Vite 用精确 npm lockfile 构建并嵌入 Go 服务，实际运行不需要 Vite 开发服务器。公共 API 0.23.0 共 60 个业务操作，包含租户角色与成员绑定；成员邮箱读取需要 members.read。
 
 
 租户角色与权限已接入真实 API 和控制台：可分别委托成员、组织、邀请和审计能力，显式拒绝优先；owner 保留角色管理恢复能力。支持角色创建/编辑/删除、成员绑定/解绑和 owner 移交，最后 owner 受并发保护。角色变更使旧授权失效，需重新确认空间。见 [ADR 0008](docs/adr/0008-tenant-roles-and-deny.md)、[角色界面](docs/ui/rbac-roles.png)，验收运行 `scripts/console rbac-test`。当前范围为整个租户，组织子树、应用/资源范围授权仍待实现。
@@ -128,3 +128,5 @@ scripts/console test
 组织关联页支持独立加载成员与组织、显式目标确认及写入未知结果核对，不受主列表已加载页限制。见 [组织关联分页](docs/organization-assignment.md)。
 
 所有者可查看自定义角色策略的真实前后快照、删除后历史与原事务审计关系，普通 audit.read 委托不获得完整规则。见 [角色策略历史](docs/role-policy-history.md)。
+
+Go User 客户端现可用 PolicyHistory 读取 owner 专用角色策略历史，CLI kind=policy_history 必须 role_id；旧管理/机器审计格式保持。验收 `scripts/console audit-policy-client-test`，完整输入和边界见 [SDK/CLI 文档](docs/user-audit-client.md)。

@@ -110,3 +110,7 @@ User scope/audit.read、会话/grant/角色与 tenant 始终由 API 主库复查
 ## 策略历史与隐私 0.22.0
 
 完整角色规则沿用当前 owner/roles.manage 边界，不因 audit.read 委托而开放；每次主库核验当前身份/会话/grant/空间/owner，旧 MFA 可读。角色写入在存储层强制近期 MFA，快照/规则/版本/audit/outbox 同事务，失败不留下部分变化。输出只有静态策略/历史 code/membership actor/time/version，拒绝未知私密字段，不查邮箱；现有冻结审计批次不扩字段。新增表只关联原事件并按历史 ID 保留，双 namespace/target 查询防串空间，读取失败无部分页。没有签名/WORM或DB管理员防篡改承诺，见 role-policy-history.md。
+
+## User 策略历史客户端边界（0.23.0）
+
+PolicyHistory 逐次使用 User Bearer/当前 owner，不能以 audit.read、旧成功记录或机器 Bearer 替代。与原批次共享可信 HTTPS/固定本地回环例外、无 Cookie/重定向/缓存/SDK 重试及受限正文；精确字段/规范 before/after、namespace/游标验证和消费前取消复查后才交付整页。CLI policy_history 必须 role_id，旧 kind 拒绝该字段，令牌仍只经 stdin。工具没有登录、历史恢复写入或存证签名，授权结果后续保留由接入方控制。详见 user-audit-client.md / ADR 0025 / validation.md。

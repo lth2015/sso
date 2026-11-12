@@ -376,3 +376,16 @@ UI 不缓存授权、自动写重试或提供全文搜索/跨页快照。写入�
 首次 UI 等待“尚无加载提示”可能早于 effect 启动，导致过早操作；初始 loading 改为 true、数据到达前禁重读，并等待实际数据后重跑通过。完整预检中的 Playground 旧 59 总数同步为 60 后 34 项模型重跑通过。RBAC 初轮覆盖循环把新第 9 个角色操作列入但未实际调用，补充 owner 200 与审计员 403 两项，重跑 98 响应/全部 9 项后通过，没有排除旧覆盖或放宽业务权限。
 
 读取没有写 ETag、自动恢复或历史推测回填；这是应用记录，没有签名/WORM/DB 管理员防篡改或长期全档承诺。只读审计委托不获得完整策略，旧 User 审计 SDK/批次和机器 realm 保持。已保护 age-session 合成夹具拒绝保留演示账户。marketstars 未实际联调；CI/GCP/部署仍由 SRE 负责。Git SHA 与最终包摘要以功能节点/同名 sha256 文件为准。
+
+## 2026-11-12：所有者策略历史 Go SDK/CLI（0.23.0）
+
+复用 0.22 的 owner-only GET，新增 PolicyHistory 类型化方法与 policy_history/role_id stdin 输入，不增加 API/权限/迁移。User/BFF 仍 60 项、Playground 可执行 59 项。四类合同与 a35845e 除 info.version 外相同；服务端、UI、001–011、机器 SDK、CI/GCP/部署未改变。
+
+| 验收 | 实际结果 | 证据与边界 |
+| --- | --- | --- |
+| Go/客户端模型 | go test ./...、go vet ./... 及 User SDK/CLI 两包 go test -race 通过；SDK 11 项顶层测试（新增 5）、CLI 2 项（新增 1） | TLS/传输/JSON 模型与真实协议分开。固定五/八/两字段、namespace/role、规范唯一规则/动作/时间/int64、页大小/升序游标、未知/重复私密字段/额外文档拒绝，旧两类投影保持；三种读取共同覆盖正文读完时取消，返回零数据 |
+| 新真实独立客户端 | scripts/console audit-policy-client-test：25 项独立 Go CLI 检查与 25 个真实 setup/API 响应通过 | 真实 User PKCE/Bearer、创建/替换/删除后历史、code 重用隔离、分页/同角色游标、未知空间/角色、输入/scope、只读 audit.read 委托不能读规则而旧管理批次仍可读、真实 Hydra 机器 JWT 拒绝、旧 MFA 可读、owner 移交/撤销后旧 grant 401 与重新授权后 403、新 owner 可读；token 只经 stdin |
+| 原客户端兼容 | scripts/console audit-client-test：16 项独立 CLI 检查与 20 个真实 setup/API 响应再次通过 | 两类冻结批次、实际机器签发记录、分页/只读委托/live deny/realm/scope/tenant/MFA 无回归；共同 HTTP 读取抽取后仍逐次当前主库授权，没有成功缓存或 SDK 重试 |
+| 交付复核 | 60 操作在线文档桌面/手机、scripts/demo check、保留演示/11 项迁移摘要及最终 154 文件实际 ZIP 串行检查均通过 | 最终 ZIP 清单/四宽度/无外部请求，独立解压目录/空模块缓存/关闭下载下编译两个 SDK 与两个示例；本轮实际 token/proof/SK、已配置/演示材料及运行日志分别排除 |
+
+没有改动服务端/浏览器业务，因此沿用 a35845e 已通过的全部 27 套功能/真实 MySQL/完整演示彩排证据，不将它们记作本轮全部重跑。新测试只创建精确集合的合成账号/应用并按保护夹具清理，保留演示凭证与未用恢复码。SDK 不负责登录、跨页快照、恢复写入、存证签名、长期归档或全部 API 绑定；marketstars 未实际联调，CI/GCP/部署由 SRE 负责。最终提交/ZIP 摘要以 Git/同名 sha256 文件为准。

@@ -4,4 +4,8 @@ cd "$(dirname "$0")/.."
 export PATH="$PWD/.tools/go/bin:$PATH" GOPATH="$PWD/.local/go" GOCACHE="$PWD/.local/go-cache" GOMODCACHE="$PWD/.local/go-mod"
 CGO_ENABLED=0 go build -trimpath -o .local/audit-batch-example ./examples/audit-batch
 chmod 700 .local/audit-batch-example
-node tests/audit/client.cjs
+case "${1:-audit}" in
+ audit) node tests/audit/client.cjs ;;
+ policy) node tests/audit/policy-client.cjs ;;
+ *) echo 'Usage: scripts/test-user-audit [audit|policy]' >&2; exit 2 ;;
+esac

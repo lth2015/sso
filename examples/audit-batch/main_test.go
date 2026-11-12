@@ -16,3 +16,14 @@ func TestPrivateInputIsBoundedExactAndSingleDocument(t *testing.T) {
 		}
 	}
 }
+func TestPolicyHistoryKindRequiresRoleAndDoesNotChangeLegacyKinds(t *testing.T) {
+	input := `{"access_token":"private-test-input","tenant_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","kind":"policy_history","role_id":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}`
+	if v, e := readInput(strings.NewReader(input)); e != nil || v.RoleID != "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" {
+		t.Fatal("valid private policy input refused")
+	}
+	for _, body := range []string{strings.Replace(input, `,"role_id":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"`, "", 1), strings.Replace(input, `"role_id":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"`, `"role_id":null`, 1), strings.Replace(input, `"kind":"policy_history"`, `"kind":"management"`, 1), strings.Replace(input, `"kind":"policy_history"`, `"kind":"machine"`, 1)} {
+		if _, e := readInput(strings.NewReader(body)); e == nil {
+			t.Fatal("role namespace silently ignored or missing")
+		}
+	}
+}

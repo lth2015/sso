@@ -1,6 +1,6 @@
-# 策略历史 Go SDK：实施约束
+# 策略历史 Go SDK：原始约束与交付状态
 
-基于 0.22.0 / a35845e，复用已有 owner-only 历史读取，新增标准库 Go 方法与本地 stdin CLI kind。当前尚未实现，不增加 API 或授权，服务端/迁移/UI/CI/GCP 保持；完整通过后发布下一客户端节点。
+基于 0.22.0 / a35845e，复用已有 owner-only 历史读取，新增标准库 Go 方法与本地 stdin CLI kind。0.23.0 已实现，不增加 API 或授权，服务端/迁移/UI/CI/GCP 保持；实际验收及最终资料门槛见 ../validation.md。
 
 - useraudit.Client.PolicyHistory 使用真实 User Bearer 与预期 tenant/role、limit/after，一次在线读一页。调用方必须当前 owner，audit.read 委托不能替代。调用方不提供任意路径/授权头；HTTPS 可信原点及固定显式本地例外复用原约束。
 - 严格固定五字段 envelope、八字段事件、两字段 policy；namespace/格式/动作/时间/int64 版本、规范化六种 permission/allow/deny/最多12条/无重复/顺序、创建前空/删除后空/更新实际不同、ID/游标有界递进全部校验。未知字段/私密值/重复键/额外 JSON/空数组类型异常拒绝，不返回部分页。

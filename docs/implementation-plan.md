@@ -84,3 +84,7 @@ Go 服务端验证器、独立回环身份服务及私有 stdin 输入客户端�
 ## 2026-11-11：自定义角色策略历史 0.22.0
 
 新增 owner-only 规则前后快照和读取/UI，User 合同 60 项、Playground 可执行 59 项。migration 011 不改原迁移/数据，不推测回填；变更/audit/outbox/快照共事务，旧导出/SDK 兼容。记录仅自启用采集后捕获，未交付签名/WORM/长期全档、正式消费者或 scoped RBAC。见 role-policy-history.md / ADR 0024 / validation.md。
+
+## 2026-11-12：策略历史程序接入 0.23.0
+
+Go User SDK 增加 PolicyHistory、stdin CLI 增加 policy_history/role_id，复用 owner-only 历史 API。固定投影/规范规则/分页/取消与当前授权验证，管理/机器批次格式保持；没有新 API、迁移、UI 或部署变更。见 user-audit-client.md / ADR 0025 / validation.md。后续仍以 scoped RBAC、正式通知、受控遗失设备恢复和对账为待实施能力。

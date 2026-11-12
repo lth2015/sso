@@ -19,6 +19,7 @@ var errInput = errors.New("invalid_input")
 type input struct {
 	AccessToken string
 	Tenant      string
+	RoleID      string
 	Kind        string
 	Limit       int
 	After       string
@@ -34,7 +35,7 @@ func readInput(reader io.Reader) (v input, err error) {
 	if e != nil || start != json.Delim('{') {
 		return v, errInput
 	}
-	fields := map[string]any{"access_token": &v.AccessToken, "tenant_id": &v.Tenant, "kind": &v.Kind, "limit": &v.Limit, "after": &v.After}
+	fields := map[string]any{"access_token": &v.AccessToken, "tenant_id": &v.Tenant, "kind": &v.Kind, "role_id": &v.RoleID, "limit": &v.Limit, "after": &v.After}
 	seen := map[string]bool{}
 	for d.More() {
 		key, e := d.Token()
@@ -49,7 +50,10 @@ func readInput(reader io.Reader) (v input, err error) {
 		}
 	}
 	end, e := d.Token()
-	if e != nil || end != json.Delim('}') || !seen["access_token"] || !seen["tenant_id"] || !seen["kind"] || v.AccessToken == "" || v.Tenant == "" || (v.Kind != "management" && v.Kind != "machine") {
+	if e != nil || end != json.Delim('}') || !seen["access_token"] || !seen["tenant_id"] || !seen["kind"] || v.AccessToken == "" || v.Tenant == "" || (v.Kind != "management" && v.Kind != "machine" && v.Kind != "policy_history") {
+		return input{}, errInput
+	}
+	if (v.Kind == "policy_history" && (!seen["role_id"] || v.RoleID == "")) || (v.Kind != "policy_history" && seen["role_id"]) {
 		return input{}, errInput
 	}
 	var extra any
@@ -89,11 +93,16 @@ func run(ctx context.Context, reader io.Reader, writer io.Writer) error {
 	var result any
 	if v.Kind == "management" {
 		result, err = client.Management(ctx, v.AccessToken, v.Tenant, page)
+	} else if v.Kind == "policy_history" {
+		result, err = client.PolicyHistory(ctx, v.AccessToken, v.Tenant, v.RoleID, page)
 	} else {
 		result, err = client.Machine(ctx, v.AccessToken, v.Tenant, page)
 	}
 	if err != nil {
 		return err
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
 	return json.NewEncoder(writer).Encode(result)
 }

@@ -110,9 +110,32 @@ func fetchBatch[T any](ctx context.Context, c *Client, token, tenant, kind strin
 	if page.After != "" {
 		query.Set("after", page.After)
 	}
-	req, err := http.NewRequestWithContext(ctx, "GET", c.origin+"/v1/tenants/"+tenant+"/audit-exports?"+query.Encode(), nil)
+	body, err := c.readJSON(ctx, token, "/v1/tenants/"+tenant+"/audit-exports?"+query.Encode())
 	if err != nil {
-		return empty, ErrInvalidRequest
+		return empty, err
+	}
+	result, err := decodeBatch(body, tenant, kind, page, decode, id)
+	if err != nil {
+		return empty, ErrInvalidResponse
+	}
+	if ctx.Err() != nil {
+		return empty, ctx.Err()
+	}
+	return result, nil
+}
+
+// readJSON has no caller-controlled destination, redirect or credential cache.
+// Only the fixed public methods construct its path. A failed read returns no body.
+func (c *Client) readJSON(ctx context.Context, token, path string) ([]byte, error) {
+	if c == nil || c.client == nil || ctx == nil || len(token) > 16384 || !bearerPattern.MatchString(token) {
+		return nil, ErrInvalidRequest
+	}
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	req, err := http.NewRequestWithContext(ctx, "GET", c.origin+path, nil)
+	if err != nil {
+		return nil, ErrInvalidRequest
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
@@ -122,45 +145,48 @@ func fetchBatch[T any](ctx context.Context, c *Client, token, tenant, kind strin
 	response, err := c.client.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
-			return empty, ctx.Err()
+			return nil, ctx.Err()
 		}
-		return empty, ErrUnavailable
+		return nil, ErrUnavailable
 	}
 	defer response.Body.Close()
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	switch response.StatusCode {
 	case 401:
-		return empty, ErrUnauthenticated
+		return nil, ErrUnauthenticated
 	case 403:
-		return empty, ErrForbidden
+		return nil, ErrForbidden
 	case 404:
-		return empty, ErrNotFound
+		return nil, ErrNotFound
 	case 429, 500, 502, 503, 504:
-		return empty, ErrUnavailable
+		return nil, ErrUnavailable
 	case 200:
 	default:
-		return empty, ErrInvalidResponse
+		return nil, ErrInvalidResponse
 	}
 	media, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
 	if err != nil || media != "application/json" || response.Uncompressed || !hasNoStore(response.Header) || len(response.Header.Values("Age")) > 1 || (response.Header.Get("Age") != "" && response.Header.Get("Age") != "0") || (response.Header.Get("Content-Encoding") != "" && response.Header.Get("Content-Encoding") != "identity") {
-		return empty, ErrInvalidResponse
+		return nil, ErrInvalidResponse
 	}
 	const maximum = 256 << 10
 	body, err := io.ReadAll(io.LimitReader(response.Body, maximum+1))
 	if err != nil {
 		if ctx.Err() != nil {
-			return empty, ctx.Err()
+			return nil, ctx.Err()
 		}
-		return empty, ErrUnavailable
+		return nil, ErrUnavailable
 	}
 	if len(body) > maximum || !utf8.Valid(body) {
-		return empty, ErrInvalidResponse
+		return nil, ErrInvalidResponse
 	}
-	result, err := decodeBatch(body, tenant, kind, page, decode, id)
-	if err != nil {
-		return empty, ErrInvalidResponse
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
 	}
-	return result, nil
+	return body, nil
 }
+
 func hasNoStore(header http.Header) bool {
 	for _, line := range header.Values("Cache-Control") {
 		for _, directive := range strings.Split(line, ",") {

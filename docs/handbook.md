@@ -1,6 +1,6 @@
 # SSO 完整设计与开发手册
 
-文档版本：0.22.0。本手册整合已维护的架构、UI、安全、API、Playground 和本地验收文档。由 `scripts/docs build` 生成；编辑各源文件后重新生成。
+文档版本：0.23.0。本手册整合已维护的架构、UI、安全、API、Playground 和本地验收文档。由 `scripts/docs build` 生成；编辑各源文件后重新生成。
 
 ## 当前交付边界
 
@@ -141,6 +141,10 @@ User/BFF 新增只读 audit-exports 资源，管理与机器来源分别以独�
 
 自定义角色策略写入在原 tenant 锁/owner/MFA/ETag 事务中同步写规范化前后规则，绑定同一 audit/outbox event 与全局提交版本；失败全部回滚、no-op 不捕获。migration 011 仅新增表，保留原迁移/数据。读取使用独立 owner-only 固定投影，快照与审计的 tenant/role/target 同时约束，历史 ID 不依赖当前 roles 行，删除/code 重用不串接。旧审计导出/SDK 投影保持，见 role-policy-history.md / ADR 0024。
 
+#### 所有者历史的程序接入（0.23.0）
+
+标准库 User 客户端复用已有 owner-only 历史读取，每次固定 tenant/role 在线读一页；与管理/机器审计批次独立类型。CLI 仅 stdin 输入和固定本地入口。服务端权威、数据库、API 操作数量及 BFF/UI 不变；完整边界与验收见 user-audit-client.md / ADR 0025。
+
 
 ## 02. 安全设计
 
@@ -258,6 +262,10 @@ User scope/audit.read、会话/grant/角色与 tenant 始终由 API 主库复查
 #### 策略历史与隐私 0.22.0
 
 完整角色规则沿用当前 owner/roles.manage 边界，不因 audit.read 委托而开放；每次主库核验当前身份/会话/grant/空间/owner，旧 MFA 可读。角色写入在存储层强制近期 MFA，快照/规则/版本/audit/outbox 同事务，失败不留下部分变化。输出只有静态策略/历史 code/membership actor/time/version，拒绝未知私密字段，不查邮箱；现有冻结审计批次不扩字段。新增表只关联原事件并按历史 ID 保留，双 namespace/target 查询防串空间，读取失败无部分页。没有签名/WORM或DB管理员防篡改承诺，见 role-policy-history.md。
+
+#### User 策略历史客户端边界（0.23.0）
+
+PolicyHistory 逐次使用 User Bearer/当前 owner，不能以 audit.read、旧成功记录或机器 Bearer 替代。与原批次共享可信 HTTPS/固定本地回环例外、无 Cookie/重定向/缓存/SDK 重试及受限正文；精确字段/规范 before/after、namespace/游标验证和消费前取消复查后才交付整页。CLI policy_history 必须 role_id，旧 kind 拒绝该字段，令牌仍只经 stdin。工具没有登录、历史恢复写入或存证签名，授权结果后续保留由接入方控制。详见 user-audit-client.md / ADR 0025 / validation.md。
 
 
 ## 03. UI 与交互设计
@@ -399,6 +407,8 @@ API Playground 已接入真实控制台授权：接口选择、参数、JSON、I
 
 角色页及角色策略审计事件提供 owner 的只读弹窗，删除后仍能从原事件查看历史。每批 20 项，规范规则以变更前/后对照显示，actor 只显示成员 ID；没有自动恢复写入。初始加载即禁重读，开始读取清除旧数据，取消/卸载/上下文代数隔离迟到响应，未知字段/错误不保留旧结果，401 重新授权。实际首帧加载竞争已修正并重跑，元数据截图及操作见 role-policy-history.md。
 
+0.23.0 仅新增程序化策略历史 SDK/CLI 接入，沿用已交付的所有者历史界面、60 项公共 API 和 59 项 Playground 可执行操作。CLI 的 kind/role_id、stdin/输出和权限边界见 user-audit-client.md；没有新增浏览器输入令牌的流程。
+
 
 ## 04. 自定义角色策略历史
 
@@ -452,6 +462,8 @@ migration 011 只新增 role_policy_changes，不修改 001–010，不推测回
 命令：`scripts/console policy-history-api-test`、`scripts/console policy-history-test`、`scripts/m1 test` 和 `node --test tests/policy-history/model.test.mjs`。模型/传输单元与真实 MySQL、真实 User PKCE/Bearer、BFF/UI 分别记录；真实 UI 通过原 API 一次创建和 20 次实际策略替换生成 21 条初始分页记录，随后删除产生第 22 条记录，没有虚构历史行。角色写入失败注入使用连接真实 MySQL 的测试 driver，在快照 INSERT 处拒绝，验证此前实际规则/版本/audit/outbox 全部回滚。详细结果见 validation.md / ADR 0024。
 
 截图仅有规则/身份元数据：[桌面](ui/role-policy-history-desktop.png) / [手机](ui/role-policy-history-mobile.png) / [删除后历史](ui/role-policy-history-deleted.png)。CI/GCP/部署继续由 SRE 负责。
+
+0.23.0 的程序接入可使用 Go User SDK 的 PolicyHistory 或 stdin CLI 的 policy_history/role_id。当前 owner 要求不变，audit.read 委托不能读完整规则；旧管理批次不增加 before/after。见 [接入说明](user-audit-client.md)。
 
 
 ## 05. 角色绑定选择器分页
@@ -615,7 +627,7 @@ curl http://127.0.0.1:8083/v1/me \
 
 ### 完整 API 参考
 
-OpenAPI 0.22.0；公共 Bearer API 共 60 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
+OpenAPI 0.23.0；公共 Bearer API 共 60 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
 
 真实交互入口见 [Playground 手册](playground.md)；外部接入见 [公共 API 手册](runbooks/public-api.md)。JSON/YAML 合同见 [OpenAPI](../api/openapi.yaml)。
 
@@ -8778,13 +8790,17 @@ differences 只有固定字段名；没有实际差异值、Admin 原文、AK/SK
 
 ### 外部 User 审计客户端与 CLI
 
-0.19.0 已实现；实际验收见 [验证记录](validation.md)。公共 User API 仍为 59 个操作，批次格式仍为 sso.audit.batch.v1；新增 Go 类型化客户端与本地 stdin CLI，复用真实 User OAuth code+PKCE/Bearer。该库不负责登录、PKCE 回调或签发身份，不能以 M2M SK/机器 Bearer 替代 User 管理权限。
+0.19.0 实现管理/机器批次，0.23.0 增加所有者角色策略历史；实际验收见 [验证记录](validation.md)。公共 User API 现为 60 个操作，Playground 可执行 59 项，本轮没有新增接口。原批次格式仍为 sso.audit.batch.v1，策略历史使用独立 sso.role.policy-history.v1；Go 类型化客户端与本地 stdin CLI 复用真实 User OAuth code+PKCE/Bearer。该库不负责登录、PKCE 回调或签发身份，不能以 M2M SK/机器 Bearer 替代 User 管理权限。
 
 [Go SDK](../pkg/useraudit/README.md) 仅标准库，Management/Machine 两方法每次读取一个 audit-exports 批次。可信原点只接受 HTTPS（显式固定本地回环例外），限定 tenant/类型/数量/游标；无 Cookie、重定向、授权缓存、SDK 层自动重试或自动续页。响应固定字段/完整 JSON/namespace/kind、升序唯一 ID/最后游标、时间/版本、role snapshot 组及机器 action 验证后才返回，不接受额外 secret 字段、缓存或压缩/超大响应。错误体/传输异常不透出私密值，失效/拒绝/取消返回零批次。
 
 [CLI](../examples/audit-batch/README.md) 从受限单份 stdin JSON 读取 raw access_token、tenant_id、kind 及可选 limit/after。固定当前本地入口，token 不经 argv/env/文件；stdout 只输出验证后的一个授权批次。输出含受控身份标识，接入方决定保存位置和保留策略；工具不暗中持久化输入或结果。
 
-当前 API 始终在主库检查 User/session/grant/角色与 audit.read，scope 仍分读写；库不把先前成功作为后续资格。机器事件的 Machine 方法只选择审计来源，仍由 User 调用；业务机器 Bearer 验证使用独立 [machineidentity SDK](external-machine-integration.md)，用途不同。跨空间需要相应 token，连续批次不承诺冻结快照或归档签名。
+`PolicyHistory(ctx, userBearer, expectedTenantID, expectedRoleID, Page)` 一次读取当前 owner 专用历史。CLI 对应 kind=policy_history 且必须 role_id；management/machine 不接受 role_id。五字段 envelope / 八字段事件 / 两字段规则严格验证，拒绝未知或重复字段、异常 namespace/动作/时间/int64 版本、非规范或超量规则、非推进游标及部分结果；共享传输边界，并在读取、解析及 CLI 输出前复查上下文。失败或取消不返回正常数据；调用方仍应在消费时遵守自己的取消语义。
+
+历史只捕获启用后的真实规则变更，不回填；支持删除后原 ID 读取，重用 code 不合并历史。读需要 platform:read 和当前 owner，audit.read 委托不能获得完整规则；旧 MFA 可读，所有者被撤销后不因 SDK 先前成功保留资格。原两类批次的字段/格式保持，Management/Machine 的 audit.read 要求不变。没有跨页冻结快照、自动重试、恢复/重放写入、存证签名或全部 API 绑定。详见 [策略历史](role-policy-history.md) / [ADR 0025](adr/0025-policy-history-sdk.md)。
+
+管理/机器批次 API 始终在主库检查 User/session/grant/角色与 audit.read，策略历史检查当前 owner，scope 仍分读写；库不把先前成功作为后续资格。机器事件的 Machine 方法只选择审计来源，仍由 User 调用；业务机器 Bearer 验证使用独立 [machineidentity SDK](external-machine-integration.md)，用途不同。跨空间需要相应 token，连续批次不承诺冻结快照或归档签名。
 
 本地 TLS/畸形/取消模型，以及真实 Hydra/User/审计委托/deny/机器 realm 的验收分别记录在 validation.md。完整文档包包括两类 SDK/示例公开源码，可在解压后的独立目录与空模块缓存、关闭模块下载下编译；没有私有 stdin 样本。
 
@@ -9606,6 +9622,10 @@ Go 服务端验证器、独立回环身份服务及私有 stdin 输入客户端�
 
 新增 owner-only 规则前后快照和读取/UI，User 合同 60 项、Playground 可执行 59 项。migration 011 不改原迁移/数据，不推测回填；变更/audit/outbox/快照共事务，旧导出/SDK 兼容。记录仅自启用采集后捕获，未交付签名/WORM/长期全档、正式消费者或 scoped RBAC。见 role-policy-history.md / ADR 0024 / validation.md。
 
+#### 2026-11-12：策略历史程序接入 0.23.0
+
+Go User SDK 增加 PolicyHistory、stdin CLI 增加 policy_history/role_id，复用 owner-only 历史 API。固定投影/规范规则/分页/取消与当前授权验证，管理/机器批次格式保持；没有新 API、迁移、UI 或部署变更。见 user-audit-client.md / ADR 0025 / validation.md。后续仍以 scoped RBAC、正式通知、受控遗失设备恢复和对账为待实施能力。
+
 
 ## 30. 架构决策 0001
 
@@ -10189,13 +10209,13 @@ UI 从角色及策略审计事件进入，可显示已删除角色的规范化�
 
 ### ADR 0025：User 客户端增加所有者策略历史读取
 
-状态：计划 0.23.0，尚未实现/验收；当前可用功能以 0.22.0 为准。
+状态：已接受，0.23.0。
 
 为外部程序复用 owner-only 历史接口，扩展既有标准库 useraudit 客户端和私有 stdin CLI，不改服务端、迁移或权限。管理/机器审计继续使用原冻结 v1；策略历史使用独立 sso.role.policy-history.v1 类型与 tenant/role 绑定，不能让 audit.read 自动读取完整规则。
 
 共享同一受限可信 HTTP 读取，协议边界/固定错误/无缓存或自动重试保留；严格 JSON/namespace/规则/动作/游标与取消检查后才交付一页。CLI policy_history 必须 role_id，旧两个 kind 拒绝这个新字段以免默默忽略错用。结果仍由授权调用方保存，工具不暗中持久化输入/输出。
 
-真实独立进程与 HTTP/TLS 模型分开验收，旧 SDK/CLI 兼容及完整文档实际 ZIP 离线编译通过后再接受。原始约束见 ../progress/policy-history-sdk-next.md；不提供登录、权限缓存、归档或全部 API 绑定，CI/GCP/部署由 SRE 负责。
+真实独立进程与 HTTP/TLS 模型分开验收；旧 SDK/CLI 兼容及完整文档实际 ZIP 离线编译作为串行交付门槛。实际结果见 ../validation.md。原始约束见 ../progress/policy-history-sdk-next.md；不提供登录、权限缓存、归档或全部 API 绑定，CI/GCP/部署由 SRE 负责。
 
 
 ## 54. 验收证据
@@ -10580,3 +10600,16 @@ UI 不缓存授权、自动写重试或提供全文搜索/跨页快照。写入�
 首次 UI 等待“尚无加载提示”可能早于 effect 启动，导致过早操作；初始 loading 改为 true、数据到达前禁重读，并等待实际数据后重跑通过。完整预检中的 Playground 旧 59 总数同步为 60 后 34 项模型重跑通过。RBAC 初轮覆盖循环把新第 9 个角色操作列入但未实际调用，补充 owner 200 与审计员 403 两项，重跑 98 响应/全部 9 项后通过，没有排除旧覆盖或放宽业务权限。
 
 读取没有写 ETag、自动恢复或历史推测回填；这是应用记录，没有签名/WORM/DB 管理员防篡改或长期全档承诺。只读审计委托不获得完整策略，旧 User 审计 SDK/批次和机器 realm 保持。已保护 age-session 合成夹具拒绝保留演示账户。marketstars 未实际联调；CI/GCP/部署仍由 SRE 负责。Git SHA 与最终包摘要以功能节点/同名 sha256 文件为准。
+
+#### 2026-11-12：所有者策略历史 Go SDK/CLI（0.23.0）
+
+复用 0.22 的 owner-only GET，新增 PolicyHistory 类型化方法与 policy_history/role_id stdin 输入，不增加 API/权限/迁移。User/BFF 仍 60 项、Playground 可执行 59 项。四类合同与 a35845e 除 info.version 外相同；服务端、UI、001–011、机器 SDK、CI/GCP/部署未改变。
+
+| 验收 | 实际结果 | 证据与边界 |
+| --- | --- | --- |
+| Go/客户端模型 | go test ./...、go vet ./... 及 User SDK/CLI 两包 go test -race 通过；SDK 11 项顶层测试（新增 5）、CLI 2 项（新增 1） | TLS/传输/JSON 模型与真实协议分开。固定五/八/两字段、namespace/role、规范唯一规则/动作/时间/int64、页大小/升序游标、未知/重复私密字段/额外文档拒绝，旧两类投影保持；三种读取共同覆盖正文读完时取消，返回零数据 |
+| 新真实独立客户端 | scripts/console audit-policy-client-test：25 项独立 Go CLI 检查与 25 个真实 setup/API 响应通过 | 真实 User PKCE/Bearer、创建/替换/删除后历史、code 重用隔离、分页/同角色游标、未知空间/角色、输入/scope、只读 audit.read 委托不能读规则而旧管理批次仍可读、真实 Hydra 机器 JWT 拒绝、旧 MFA 可读、owner 移交/撤销后旧 grant 401 与重新授权后 403、新 owner 可读；token 只经 stdin |
+| 原客户端兼容 | scripts/console audit-client-test：16 项独立 CLI 检查与 20 个真实 setup/API 响应再次通过 | 两类冻结批次、实际机器签发记录、分页/只读委托/live deny/realm/scope/tenant/MFA 无回归；共同 HTTP 读取抽取后仍逐次当前主库授权，没有成功缓存或 SDK 重试 |
+| 交付复核 | 60 操作在线文档桌面/手机、scripts/demo check、保留演示/11 项迁移摘要及最终 154 文件实际 ZIP 串行检查均通过 | 最终 ZIP 清单/四宽度/无外部请求，独立解压目录/空模块缓存/关闭下载下编译两个 SDK 与两个示例；本轮实际 token/proof/SK、已配置/演示材料及运行日志分别排除 |
+
+没有改动服务端/浏览器业务，因此沿用 a35845e 已通过的全部 27 套功能/真实 MySQL/完整演示彩排证据，不将它们记作本轮全部重跑。新测试只创建精确集合的合成账号/应用并按保护夹具清理，保留演示凭证与未用恢复码。SDK 不负责登录、跨页快照、恢复写入、存证签名、长期归档或全部 API 绑定；marketstars 未实际联调，CI/GCP/部署由 SRE 负责。最终提交/ZIP 摘要以 Git/同名 sha256 文件为准。

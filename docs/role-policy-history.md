@@ -46,3 +46,5 @@ migration 011 只新增 role_policy_changes，不修改 001–010，不推测回
 命令：`scripts/console policy-history-api-test`、`scripts/console policy-history-test`、`scripts/m1 test` 和 `node --test tests/policy-history/model.test.mjs`。模型/传输单元与真实 MySQL、真实 User PKCE/Bearer、BFF/UI 分别记录；真实 UI 通过原 API 一次创建和 20 次实际策略替换生成 21 条初始分页记录，随后删除产生第 22 条记录，没有虚构历史行。角色写入失败注入使用连接真实 MySQL 的测试 driver，在快照 INSERT 处拒绝，验证此前实际规则/版本/audit/outbox 全部回滚。详细结果见 validation.md / ADR 0024。
 
 截图仅有规则/身份元数据：[桌面](ui/role-policy-history-desktop.png) / [手机](ui/role-policy-history-mobile.png) / [删除后历史](ui/role-policy-history-deleted.png)。CI/GCP/部署继续由 SRE 负责。
+
+0.23.0 的程序接入可使用 Go User SDK 的 PolicyHistory 或 stdin CLI 的 policy_history/role_id。当前 owner 要求不变，audit.read 委托不能读完整规则；旧管理批次不增加 before/after。见 [接入说明](user-audit-client.md)。

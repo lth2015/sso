@@ -13,6 +13,7 @@ names = subprocess.check_output(['git', 'ls-files', '--cached', '--others', '--e
 source_files = {
     'go.mod', 'go.sum', 'api/contract.go',
     'pkg/useraudit/client.go', 'pkg/useraudit/batch.go', 'pkg/useraudit/client_test.go', 'pkg/useraudit/README.md',
+    'pkg/useraudit/policy_history.go', 'pkg/useraudit/policy_history_test.go',
     'examples/audit-batch/main.go', 'examples/audit-batch/main_test.go', 'examples/audit-batch/README.md',
     'pkg/machineidentity/verifier.go', 'pkg/machineidentity/verifier_test.go',
     'pkg/machineidentity/README.md',
