@@ -65,12 +65,12 @@ node tests/sso/browser.cjs
 
 见 [SSO 运行手册](docs/runbooks/local-sso.md)、[ADR 0005](docs/adr/0005-trusted-login-mfa-bff.md)、[SSO OpenAPI](api/sso.openapi.yaml) 和 [本地验收记录](docs/validation.md)。浏览器测试自动创建和清理自己的合成账户，通过真实 Hydra code+PKCE、双应用/双租户、MFA/恢复/续期/撤销，并验证 BFF 数据库与网络权限。
 
-当前是本地 HTTP 参考实现。两个 client 共用一个示范 Application；服务端客户端/凭证管理、完整 scoped RBAC、遗失认证器的受控恢复、正式邮件和生产 TLS/KMS 等仍待开发。GCP 部署及云端运维继续由 SRE 负责。
+当前是本地 HTTP 参考实现。原双应用演示共用一个示范 Application；自有应用、公开 PKCE 客户端与机器凭证管理已另行接入。完整 scoped RBAC、遗失认证器的受控恢复、正式邮件和生产 TLS/KMS 等仍待开发。GCP 部署及云端运维继续由 SRE 负责。
 
 
 ## 公共业务 API 与 OpenAPI
 
-现有 60 个面向外部服务端/原生客户端的业务操作（包含角色与绑定管理）：身份/空间、成员停用恢复、组织创建移动/归属、一次性邀请、审计分页、受控批次导出和用户会话撤销。采用独立平台 audience、OAuth code+PKCE、Bearer scope、租户角色权限和最近 MFA；在业务事务内复查权威资格。公网部署仍由 SRE 负责。
+现有 65 个面向外部服务端/原生客户端的业务操作（包含角色与绑定管理、应用成员准入）：身份/空间、成员停用恢复、组织创建移动/归属、一次性邀请、审计分页、受控批次导出和用户会话撤销。采用独立平台 audience、OAuth code+PKCE、Bearer scope、租户角色权限和最近 MFA；在业务事务内复查权威资格。公网部署仍由 SRE 负责。
 
 ```sh
 scripts/api prepare
@@ -92,13 +92,13 @@ scripts/console up
 scripts/console test
 ```
 
-见 [控制台手册](docs/runbooks/console.md)、[ADR 0007](docs/adr/0007-console-bff-contexts.md)、[浏览器 BFF OpenAPI](api/console.openapi.yaml) 和 [界面截图](docs/ui/console-overview.png)。React/Vite 用精确 npm lockfile 构建并嵌入 Go 服务，实际运行不需要 Vite 开发服务器。公共 API 0.24.0 共 60 个业务操作，包含租户角色与成员绑定；成员邮箱读取需要 members.read。
+见 [控制台手册](docs/runbooks/console.md)、[ADR 0007](docs/adr/0007-console-bff-contexts.md)、[浏览器 BFF OpenAPI](api/console.openapi.yaml) 和 [界面截图](docs/ui/console-overview.png)。React/Vite 用精确 npm lockfile 构建并嵌入 Go 服务，实际运行不需要 Vite 开发服务器。公共 API 0.25.0 共 65 个业务操作，包含租户角色与成员绑定；成员邮箱读取需要 members.read。
 
 
 租户角色与权限已接入真实 API 和控制台：可分别委托成员、组织、邀请和审计能力，显式拒绝优先；owner 保留角色管理恢复能力。支持角色创建/编辑/删除、成员绑定/解绑和 owner 移交，最后 owner 受并发保护。角色变更使旧授权失效，需重新确认空间。见 [ADR 0008](docs/adr/0008-tenant-roles-and-deny.md)、[角色界面](docs/ui/rbac-roles.png)，验收运行 `scripts/console rbac-test`。当前范围为整个租户，组织子树、应用/资源范围授权仍待实现。
 
 
-完整文档入口：[设计与开发手册](docs/handbook.md)、[逐接口 API 参考](docs/api-reference.md)、[API Playground](docs/playground.md)。控制台登录后选择 API Playground，展示 60 项 User 管理合同，其中 59 项可真实执行；一次性 SK 创建使用专用机器凭证页面，支持写入前确认、ETag、MFA/权限错误和响应凭证脱敏。公开 `/docs` 现提供逐接口参数、示例、schema 与响应。`scripts/docs export` 构建离线 HTML 和完整 ZIP，详见 [文档目录](docs/README.md)。
+完整文档入口：[设计与开发手册](docs/handbook.md)、[逐接口 API 参考](docs/api-reference.md)、[API Playground](docs/playground.md)。控制台登录后选择 API Playground，展示 65 项 User 管理合同，其中 64 项可真实执行；一次性 SK 创建使用专用机器凭证页面，支持写入前确认、ETag、MFA/权限错误和响应凭证脱敏。公开 `/docs` 现提供逐接口参数、示例、schema 与响应。`scripts/docs export` 构建离线 HTML 和完整 ZIP，详见 [文档目录](docs/README.md)。
 
 
 新增个人账户安全：MFA/恢复码/会话概览、撤销其他会话，以及统一认证域的密码+新 TOTP 恢复码重生成。旧码和全部旧会话在重生成后失效，新码只显示一次，认证器密钥保持不变。见 [账户安全手册](docs/account-security.md)；本地验收 `scripts/console security-test`。可信管理合同单列为 `api/security.openapi.yaml`。
@@ -132,3 +132,5 @@ scripts/console test
 Go User 客户端现可用 PolicyHistory 读取 owner 专用角色策略历史，CLI kind=policy_history 必须 role_id；旧管理/机器审计格式保持。验收 `scripts/console audit-policy-client-test`，完整输入和边界见 [SDK/CLI 文档](docs/user-audit-client.md)。
 
 创建/移动组织现使用 [独立上级分页与绑定预览](docs/organization-hierarchy.md)，支持后页上级，改选后必须重新预览确认；异常或未知写入不自动重发。验收 `scripts/console organization-hierarchy-test`。
+
+自有应用新增 [成员准入](docs/application-user-access.md)：全体有效成员或指定成员/所有者，独立版本控制、真实签发/刷新/资源逐次主库检查，撤销与重新授予不复活旧令牌。控制台、五个新公开操作和 [本地独立应用](examples/user-application/README.md) 已接入；完整主线演示见 [应用准入手卡](docs/runbooks/application-access-demo.md)。原演示就绪时运行 `scripts/demo user-access-prepare`，再 `scripts/demo user-access`；新增独立空间，保留原两空间/账号/凭证。验收 `scripts/console user-access-api-test` / `scripts/console user-access-test`。

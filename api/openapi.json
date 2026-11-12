@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "SSO Public Platform API",
-    "version": "0.24.0",
-    "description": "External server/native-client contract. Local reference server only; production requires TLS and configured public origins. OAuth code+S256 PKCE, platform audience https://api.sso.local. No cookie authentication or wildcard CORS; browser integrations use a BFF. All writes require MFA authenticated within 300 seconds; refresh does not update auth_time. Tenant-scoped roles grant separate member/organization/invitation/audit permissions; explicit deny wins. Only active owners manage roles and owner bindings; roles.manage cannot be delegated or denied via custom policies. Resource/subtree scopes are not implemented. Delegated member operators cannot suspend/restore owner bindings. Authorization is checked against the business primary inside each operation transaction. Tenant-version mutations invalidate prior tenant grants, requiring new authorization. JSON objects reject duplicate keys, unknown fields, invalid UTF-8 and extra documents. Only role policy requests admit typed nested rules, with depth/work and policy-count limits. Request body limit 4096 bytes. UUIDs are lowercase 32-hex strings. List limit 1–100, default 50; after is previous next_cursor. No pagination snapshot guarantee. Error format follows RFC 9457. All responses no-store. Invitation proofs never appear in lists/detail/audit; creation and explicit reissue each return only their new one-time proof."
+    "version": "0.25.0",
+    "description": "External server/native-client contract. Local reference server only; production requires TLS and configured public origins. OAuth code+S256 PKCE, platform audience https://api.sso.local. No cookie authentication or wildcard CORS; browser integrations use a BFF. All writes require MFA authenticated within 300 seconds; refresh does not update auth_time. Tenant-scoped roles grant separate member/organization/invitation/audit permissions; explicit deny wins. Only active owners manage roles and owner bindings; roles.manage cannot be delegated or denied via custom policies. Resource/subtree scopes are not implemented. Delegated member operators cannot suspend/restore owner bindings. Authorization is checked against the business primary inside each operation transaction. Tenant-version mutations invalidate prior tenant grants, requiring new authorization. JSON objects reject duplicate keys, unknown fields, invalid UTF-8 and extra documents. Only role policy requests admit typed nested rules, with depth/work and policy-count limits. Request body limit 4096 bytes. UUIDs are lowercase 32-hex strings. List limit 1–100, default 50; after is previous next_cursor. No pagination snapshot guarantee. Error format follows RFC 9457. All responses no-store. Invitation proofs never appear in lists/detail/audit; creation and explicit reissue each return only their new one-time proof. Owned application User admission is checked on the primary at consent, code/refresh and each User grant use; policy revisions are independent of machines and other applications and never replace platform or business permissions."
   },
   "servers": [
     {
@@ -20,6 +20,454 @@
     }
   ],
   "paths": {
+    "/v1/tenants/{tenant}/applications/{application}/user-access": {
+      "get": {
+        "operationId": "getApplicationUserAccess",
+        "summary": "Read owned application User access policy and bounded explicit members",
+        "description": "Current owner only; tenant-owned application only (shared/protected associations are unmanaged). All writes require recent MFA and exact User admission ETag. Default all_members/1 preserves old behavior. selected_members admits active owners or explicit active User/membership grants. Actual changes bump only this app User admission revision and invalidate prior User grants for this app; re-grant/mode restore never resurrects old grants. Machine credentials/tokens, other apps and tenant authz versions remain independent. No-op with current revision does not increment or audit. Policy/member/audit/outbox/context changes commit atomically. No automatic retry or idempotency guarantee. Reads do not require recent MFA. IDs only, no member emails; limit 1-100/default 50 and ascending membership ID cursor. No GET body or unknown/duplicate query.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/applicationID"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/After"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read owned application User access policy and bounded explicit members",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationUserAccessPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "reserved_owner:roles.manage"
+      },
+      "put": {
+        "operationId": "setApplicationUserAccess",
+        "summary": "Set owned application User admission mode",
+        "description": "Current owner only; tenant-owned application only (shared/protected associations are unmanaged). All writes require recent MFA and exact User admission ETag. Default all_members/1 preserves old behavior. selected_members admits active owners or explicit active User/membership grants. Actual changes bump only this app User admission revision and invalidate prior User grants for this app; re-grant/mode restore never resurrects old grants. Machine credentials/tokens, other apps and tenant authz versions remain independent. No-op with current revision does not increment or audit. Policy/member/audit/outbox/context changes commit atomically. No automatic retry or idempotency guarantee. Stored explicit grants are retained when changing modes. Enabled/global application and User/membership/session constraints always apply; policy does not enable an application.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/applicationID"
+          },
+          {
+            "$ref": "#/components/parameters/UserAccessMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Set owned application User admission mode",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationUserAccessPolicy"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "reserved_owner:roles.manage",
+        "x-recent-mfa-seconds": 300,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplicationUserAccessInput"
+              },
+              "example": {
+                "mode": "selected_members"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tenants/{tenant}/applications/{application}/user-access/members/{member}": {
+      "get": {
+        "operationId": "checkApplicationUserAccess",
+        "summary": "Observe a member current application admission decision",
+        "description": "Current owner only; tenant-owned application only (shared/protected associations are unmanaged). All writes require recent MFA and exact User admission ETag. Default all_members/1 preserves old behavior. selected_members admits active owners or explicit active User/membership grants. Actual changes bump only this app User admission revision and invalidate prior User grants for this app; re-grant/mode restore never resurrects old grants. Machine credentials/tokens, other apps and tenant authz versions remain independent. No-op with current revision does not increment or audit. Policy/member/audit/outbox/context changes commit atomically. No automatic retry or idempotency guarantee. Read permits aged MFA. Current target membership must belong to the token tenant. Observation only, no access ticket/cache or HTTP ETag; policy version alone does not cover live User/member/application availability. No query or GET body. This decision does not prove credentials, OAuth client registration or business resource permissions.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/memberID"
+          },
+          {
+            "$ref": "#/components/parameters/applicationID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Observe a member current application admission decision",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationUserAccessDecision"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "reserved_owner:roles.manage"
+      },
+      "put": {
+        "operationId": "grantApplicationUserAccess",
+        "summary": "Grant an active member explicit application admission",
+        "description": "Current owner only; tenant-owned application only (shared/protected associations are unmanaged). All writes require recent MFA and exact User admission ETag. Default all_members/1 preserves old behavior. selected_members admits active owners or explicit active User/membership grants. Actual changes bump only this app User admission revision and invalidate prior User grants for this app; re-grant/mode restore never resurrects old grants. Machine credentials/tokens, other apps and tenant authz versions remain independent. No-op with current revision does not increment or audit. Policy/member/audit/outbox/context changes commit atomically. No automatic retry or idempotency guarantee. Grant requires current active User and active membership. Revoke may clean up inactive member entries. Owner implicit admission is not removed by deleting an explicit grant. Unknown target is 404; active/inactive target status is never used to disclose email.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/memberID"
+          },
+          {
+            "$ref": "#/components/parameters/applicationID"
+          },
+          {
+            "$ref": "#/components/parameters/UserAccessMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Grant an active member explicit application admission",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationUserAccessPolicy"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "reserved_owner:roles.manage",
+        "x-recent-mfa-seconds": 300,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Empty"
+              },
+              "example": {}
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "revokeApplicationUserAccess",
+        "summary": "Revoke a member explicit application admission",
+        "description": "Current owner only; tenant-owned application only (shared/protected associations are unmanaged). All writes require recent MFA and exact User admission ETag. Default all_members/1 preserves old behavior. selected_members admits active owners or explicit active User/membership grants. Actual changes bump only this app User admission revision and invalidate prior User grants for this app; re-grant/mode restore never resurrects old grants. Machine credentials/tokens, other apps and tenant authz versions remain independent. No-op with current revision does not increment or audit. Policy/member/audit/outbox/context changes commit atomically. No automatic retry or idempotency guarantee. Grant requires current active User and active membership. Revoke may clean up inactive member entries. Owner implicit admission is not removed by deleting an explicit grant. Unknown target is 404; active/inactive target status is never used to disclose email.",
+        "tags": [
+          "Tenant management"
+        ],
+        "security": [
+          {
+            "OAuth2": [
+              "platform:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantID"
+          },
+          {
+            "$ref": "#/components/parameters/memberID"
+          },
+          {
+            "$ref": "#/components/parameters/applicationID"
+          },
+          {
+            "$ref": "#/components/parameters/UserAccessMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revoke a member explicit application admission",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestID"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationUserAccessPolicy"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "428": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-authorization": "reserved_owner:roles.manage",
+        "x-recent-mfa-seconds": 300,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Empty"
+              },
+              "example": {}
+            }
+          }
+        }
+      }
+    },
     "/v1/tenants/{tenant}/applications/{application}/clients/{client}/protocol-status": {
       "get": {
         "operationId": "inspectManagedClientProtocol",
@@ -7325,6 +7773,127 @@
             }
           }
         ]
+      },
+      "ApplicationUserAccessPolicy": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tenant_id",
+          "application_id",
+          "mode",
+          "version"
+        ],
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "application_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "mode": {
+            "enum": [
+              "all_members",
+              "selected_members"
+            ]
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Positive signed-int64 decimal revision, transported losslessly as a string."
+          }
+        }
+      },
+      "ApplicationUserAccessPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "policy",
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "policy": {
+            "$ref": "#/components/schemas/ApplicationUserAccessPolicy"
+          },
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "membership_id"
+              ],
+              "properties": {
+                "membership_id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                }
+              }
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      },
+      "ApplicationUserAccessInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mode"
+        ],
+        "properties": {
+          "mode": {
+            "enum": [
+              "all_members",
+              "selected_members"
+            ]
+          }
+        }
+      },
+      "ApplicationUserAccessDecision": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "policy",
+          "membership_id",
+          "allowed",
+          "explicit_grant",
+          "reason"
+        ],
+        "properties": {
+          "policy": {
+            "$ref": "#/components/schemas/ApplicationUserAccessPolicy"
+          },
+          "membership_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "allowed": {
+            "type": "boolean"
+          },
+          "explicit_grant": {
+            "type": "boolean"
+          },
+          "reason": {
+            "enum": [
+              "owner",
+              "all_members",
+              "explicit_grant",
+              "not_granted",
+              "user_inactive",
+              "membership_inactive",
+              "application_disabled"
+            ]
+          }
+        }
       }
     },
     "parameters": {
@@ -7518,6 +8087,16 @@
         "schema": {
           "type": "string",
           "pattern": "^[a-f0-9]{32}$"
+        }
+      },
+      "UserAccessMatch": {
+        "in": "header",
+        "name": "If-Match",
+        "required": true,
+        "description": "Exact User admission policy ETag bound to tenant/application/revision; not application enablement or tenant authz version. Missing 428, wrong namespace/stale 412.",
+        "schema": {
+          "type": "string",
+          "pattern": "^\"ua-[a-f0-9]{32}-[a-f0-9]{32}-[1-9][0-9]*\"$"
         }
       }
     },

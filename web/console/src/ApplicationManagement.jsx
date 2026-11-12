@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { request, errorText } from "./api.js";
 import ManagedRegistration from "./ManagedRegistration.jsx";
 import MachineIdentityManagement from "./MachineIdentityManagement.jsx";
+import ApplicationUserAccess from "./ApplicationUserAccess.jsx";
 function Dialog({ title, busy, close, children }) {
   const ref = useRef(null);
   useEffect(() => {
@@ -37,6 +38,7 @@ export default function ApplicationManagement({
   csrf,
   onFailure,
   revision,
+  canReadMembers,
 }) {
   const [items, setItems] = useState(null),
     [next, setNext] = useState(null),
@@ -49,6 +51,7 @@ export default function ApplicationManagement({
     [confirmed, setConfirmed] = useState(false);
   const [registration, setRegistration] = useState(null);
   const [machineApp, setMachineApp] = useState(null);
+  const [userAccessApp, setUserAccessApp] = useState(null);
   const alive = useRef(true),
     generation = useRef(0),
     dialogAbort = useRef(null);
@@ -230,6 +233,14 @@ export default function ApplicationManagement({
                       {app.managed && (
                         <button
                           className="secondary"
+                          onClick={() => setUserAccessApp(app)}
+                        >
+                          成员访问
+                        </button>
+                      )}
+                      {app.managed && (
+                        <button
+                          className="secondary"
                           onClick={() => setMachineApp(app)}
                         >
                           机器身份
@@ -280,6 +291,17 @@ export default function ApplicationManagement({
         >
           下一页应用
         </button>
+      )}
+      {userAccessApp && (
+        <ApplicationUserAccess
+          key={identity + userAccessApp.id}
+          context={context}
+          csrf={csrf}
+          app={userAccessApp}
+          canReadMembers={canReadMembers}
+          onClose={() => setUserAccessApp(null)}
+          onFailure={fail}
+        />
       )}
       {dialog && (
         <Dialog

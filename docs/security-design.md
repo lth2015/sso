@@ -118,3 +118,9 @@ PolicyHistory 逐次使用 User Bearer/当前 owner，不能以 audit.read、旧
 ## 上级目录与移动预览绑定（0.24.0）
 
 源行与独立分页目录使用同一 org ETag，固定 DTO/根/ID/游标和预览四字段安全数值验证；选择/页/错误/context 变化清除旧预览和确认。主库在实际提交重新检查权限/MFA/版本/循环/深度；预览不是授权票据，原生 API 契约不变。取消/卸载守卫隔离迟到响应，未知写入不自动重试；固定演示夹具保护保持。见 organization-hierarchy.md / ADR 0026 / validation.md。
+
+## User 应用准入边界（0.25.0）
+
+策略和显式成员操作仅当前 owner/空间内自有应用；写强制主库最近 MFA 及 tenant/app/revision ETag。User grant 版本与 namespace 逐次验证，旧行按 1 解释，默认兼容；任何真实策略/成员变更使目标应用原 User grant 失效，恢复不复活。机器/其他应用不借用此计数器，原角色/成员/会话/启停屏障继续执行。绑定 namespace/revision 错误拒绝，事务失败不留部分设置/审计/outbox。旧二进制不理解 selected_members，需完整兼容实现，存在该策略时不可直接回退旧二进制。
+
+BFF 新只读视图限定当前 client 的 grant、应用和相关成员 owner 标志，不给基础库、密码/MFA/Token 读取或配置 DML 权限。控制台 readiness 以真实 DB 角色探测资格 SQL，缺视图/权限返回 503。独立示例只申请 platform:read，不请求/信任 ID token；state/PKCE、固定回环 Host/后端目标、同源 Origin/CSRF、会话轮换及迟到隔离，令牌仅进程内存，逐次在线 /me 后才显示身份。same-origin Referrer Policy 支持导航 POST 的 Origin 校验并不向跨源 SSO 发 Referer。严格 JSON/有界/no-store，错误不回显；不提供生产 RP/refresh/中央退出承诺。新演示空间纳入清理保护，原密码/TOTP/未用恢复码不重建。见 [应用准入](application-user-access.md)、[演示手卡](runbooks/application-access-demo.md)、[ADR 0027](adr/0027-application-user-access.md) 和 [验收记录](validation.md)。

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+export PATH="$PWD/.tools/go/bin:$PATH" GOPATH="$PWD/.local/go" GOCACHE="$PWD/.local/go-cache" GOMODCACHE="$PWD/.local/go-mod"
+CGO_ENABLED=0 go build -trimpath -o .local/user-application-example ./examples/user-application
+chmod 700 .local/user-application-example
+node tests/user-access/browser.cjs

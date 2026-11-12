@@ -13,6 +13,8 @@ case "${1:-}" in
  events-test) node tests/events/browser.cjs ;;
  audit-client-test) scripts/test-user-audit ;;
  audit-policy-client-test) scripts/test-user-audit policy ;;
+ user-access-api-test) node tests/user-access/native.cjs ;;
+ user-access-test) scripts/test-user-access ;;
  policy-history-test) node tests/policy-history/browser.cjs ;;
  policy-history-api-test) node tests/policy-history/native.cjs ;;
  protocol-test) node tests/protocol/browser.cjs ;;
@@ -35,5 +37,5 @@ case "${1:-}" in
   ;;
  enable) shift; scripts/api enable "$@" ;;
  down) scripts/sso down ;;
- *) echo 'Usage: scripts/console {prepare|up|test|rbac-test|role-choices-test|playground-test|security-test|authenticator-test|events-test|applications-test|organizations-test|organization-hierarchy-test|clients-test|organization-assignment-test|machine-test|machine-api-test|machine-sdk-test|exports-test|exports-api-test|invitations-test|invitations-api-test|protocol-test|protocol-api-test|audit-client-test|audit-policy-client-test|policy-history-test|policy-history-api-test|enable --email ADDRESS|down}' >&2; exit 2 ;;
+ *) echo 'Usage: scripts/console {prepare|up|test|rbac-test|role-choices-test|playground-test|security-test|authenticator-test|events-test|applications-test|organizations-test|organization-hierarchy-test|clients-test|organization-assignment-test|machine-test|machine-api-test|machine-sdk-test|exports-test|exports-api-test|invitations-test|invitations-api-test|protocol-test|protocol-api-test|audit-client-test|audit-policy-client-test|user-access-api-test|user-access-test|policy-history-test|policy-history-api-test|enable --email ADDRESS|down}' >&2; exit 2 ;;
 esac

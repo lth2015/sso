@@ -44,6 +44,9 @@ const actionNames = {
   "role.created": "创建角色",
   "application.enabled": "恢复空间应用",
   "application.created": "创建应用",
+  "application.user_access.mode_changed": "修改应用访问模式",
+  "application.user_access.granted": "授予应用成员访问",
+  "application.user_access.revoked": "撤销应用成员访问",
   "service_principal.created": "创建机器身份",
   "service_principal.disabled": "停用机器身份",
   "service_principal.enabled": "恢复机器身份",
@@ -918,6 +921,7 @@ function App() {
                   csrf={csrf.current}
                   onFailure={fail}
                   revision={revision}
+                  canReadMembers={can("members.read")}
                 />
               )}
               {tab === "audit" && (

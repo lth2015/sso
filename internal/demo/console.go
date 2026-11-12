@@ -2,6 +2,7 @@ package demo
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -102,6 +103,12 @@ func (a *App) mountConsole(mux *http.ServeMux, load func(http.ResponseWriter, *h
 	})
 	mux.HandleFunc("GET /health/ready", func(w http.ResponseWriter, r *http.Request) {
 		if !consoleui.Ready() {
+			fail(w, 503)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		if a.Store.UserGrantStorageReady(ctx, a.Client) != nil {
 			fail(w, 503)
 			return
 		}

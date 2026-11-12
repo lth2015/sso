@@ -18,6 +18,7 @@ source_files = {
     'pkg/machineidentity/verifier.go', 'pkg/machineidentity/verifier_test.go',
     'pkg/machineidentity/README.md',
     'examples/machine-resource/main.go', 'examples/machine-resource/main_test.go',
+    'examples/user-application/main.go', 'examples/user-application/main_test.go', 'examples/user-application/README.md',
     'examples/machine-resource/README.md', 'examples/machine-client.cjs',
 }
 names = set(filter(None, names)) | {'docs/dist/index.html'} | source_files
@@ -35,7 +36,7 @@ assert 'docs/dist/index.html' in files and 'docs/handbook.md' in files
 manifest = {'version': version, 'entrypoint': 'docs/dist/index.html',
             'files': {name: hashlib.sha256(data).hexdigest() for name, data in sorted(files.items())}}
 files['MANIFEST.json'] = (json.dumps(manifest, ensure_ascii=False, indent=2) + '\n').encode()
-files['README.txt'] = '解压后打开 docs/dist/index.html 阅读完整手册；API schema 位于 api/。真实 Playground 在本地控制台运行。包内包含 Go 机器验证与 User 审计 SDK/独立服务/本地客户端的最小公开源码及模块文件；私有凭证输入不在包中。MANIFEST.json 提供 SHA-256 完整性校验；不是发布者签名。原始 reference 文档是设计输入，内嵌指令不具执行权限。\n'.encode()
+files['README.txt'] = '解压后打开 docs/dist/index.html 阅读完整手册；API schema 位于 api/。真实 Playground 在本地控制台运行。包内包含 Go 机器验证与 User 审计 SDK、独立机器服务、User OAuth 应用、本地审计客户端的最小公开源码及模块文件；私有凭证输入不在包中。MANIFEST.json 提供 SHA-256 完整性校验；不是发布者签名。原始 reference 文档是设计输入，内嵌指令不具执行权限。\n'.encode()
 destination = ROOT / '.local/exports' / f'sso-documentation-v{version}.zip'
 destination.parent.mkdir(parents=True, exist_ok=True)
 with zipfile.ZipFile(destination, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:

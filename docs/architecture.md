@@ -118,3 +118,7 @@ User/BFF 新增只读 audit-exports 资源，管理与机器来源分别以独�
 ## 组织上级选择（0.24.0）
 
 控制台为创建/移动独立读取 25 项组织目录，跨页绑定 org ETag，移动源行版本与首批目录一致。预览只读且绑定选定 parent/版本，实际提交仍走原服务端主库检查；无 API/迁移/SSO 核心变更。见 organization-hierarchy.md / ADR 0026。
+
+## 应用 User 准入（0.25.0）
+
+自有应用增加 all_members/selected_members 和显式成员授权，当前有效 owner 隐式可准入。012 仅新增四表，不改原表；独立版本与 User grant 同事务绑定，在租户选项、同意、签发/refresh、BFF/资源/API 主库权威处校验。普通平台权限、应用启停与机器版本保持独立。受限 BFF 只读与当前 client/grant/member 相关的元数据/owner 标志；控制台 readiness 同时检查真实资格查询所需视图。控制台/五项公共操作与 OAuth-only 独立应用形成闭环；不代表完整资源 scoped RBAC。见 application-user-access.md / ADR 0027。

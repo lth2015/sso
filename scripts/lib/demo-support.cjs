@@ -230,6 +230,9 @@ async function presenter(m) {
       "\n\n恢复码（每个仅限一次）：\n\n```text\n" +
       a.codes.join("\n") +
       "\n```\n";
+  if (m.applicationUserAccess?.state === "ready")
+    text +=
+      "\n## 新增应用准入演示\n\n空间：应用准入演示空间。独立应用：http://127.0.0.1:9876，启动 scripts/demo user-access。使用上面的同一组管理员/审计员账号，不消耗恢复码。此新空间内审计员是普通成员；原主空间、隔离空间及角色保持。详细步骤见 docs/runbooks/application-access-demo.md 和 application-access-demo.md。\n";
   await writePrivate("presenter.md", text);
   await writePrivate(
     "dataset.md",

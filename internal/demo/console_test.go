@@ -39,6 +39,11 @@ func TestConsoleGatewayAllowsOnlyPublicContract(t *testing.T) {
 	}
 	app := &App{Client: "local-console", Origin: "http://console.localhost:3003"}
 	_ = app.Handler() // Registering the gateway and SPA must not produce overlapping routes.
+	readiness := httptest.NewRecorder()
+	app.Handler().ServeHTTP(readiness, httptest.NewRequest("GET", "http://console.localhost:3003/health/ready", nil))
+	if readiness.Code != 503 {
+		t.Fatal("console without User grant storage reported ready")
+	}
 	r := httptest.NewRequest("GET", "http://console.localhost:3003/session", nil)
 	if _, ok := app.sessionCookieName(r); ok {
 		t.Fatal("missing context accepted")

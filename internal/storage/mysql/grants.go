@@ -5,9 +5,23 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"errors"
 	"strings"
 	"time"
 )
+
+// UserGrantStorageReady checks the actual qualification query under the caller's
+// DB role, including scoped BFF views. It reads no real principal or token.
+func (s Store) UserGrantStorageReady(ctx context.Context, client string) error {
+	if s.db == nil {
+		return errors.New("User grant storage unavailable")
+	}
+	e := s.GrantCurrent(ctx, ID{}, ID{}, ID{}, client)
+	if errors.Is(e, ErrDenied) {
+		return nil
+	}
+	return e
+}
 
 type TokenCheck struct {
 	GrantID                                                      ID
@@ -37,9 +51,9 @@ func (s Store) CheckBusinessToken(ctx context.Context, input TokenCheck) (GrantC
 	var valid bool
 	now := time.Now().Unix()
 	err = tx.QueryRowContext(ctx, `SELECT g.id,g.tenant_id,g.membership_id,g.user_id,g.session_id,g.user_version,g.membership_version,g.tenant_version,s.amr,g.hydra_sid,g.protocol_binding,g.scopes,g.audience,LOWER(HEX(g.user_id)),g.hydra_sid,
- (i.state='complete' AND g.active AND s.active AND u.status='active' AND m.status='active' AND t.status='active' AND f.active AND c.active AND a.active AND ta.active AND g.user_version=u.security_version AND s.user_version=u.security_version AND s.mfa_version=f.security_version AND g.membership_version=m.security_version AND g.tenant_version=t.authz_version AND g.client_version=c.security_version AND g.application_version=a.security_version AND g.enabled_version=ta.security_version AND m.user_id=g.user_id AND s.user_id=g.user_id AND s.auth_time>0 AND s.auth_time<=? AND s.idle_expires_at>? AND s.absolute_expires_at>? AND g.absolute_expires_at>?)
- FROM business_grants g JOIN login_interactions i ON i.id=g.interaction_id JOIN sso_sessions s ON s.id=g.session_id JOIN users u ON u.id=g.user_id JOIN mfa_factors f ON f.user_id=u.id JOIN memberships m ON m.tenant_id=g.tenant_id AND m.id=g.membership_id JOIN tenants t ON t.id=g.tenant_id JOIN oauth_clients c ON c.client_id=g.client_id JOIN applications a ON a.id=c.application_id JOIN tenant_applications ta ON ta.tenant_id=t.id AND ta.application_id=a.id
- WHERE g.id=? AND g.client_id=? FOR UPDATE OF g FOR SHARE OF i,s,u,f,m,t,c,a,ta`, now, now, now, now, input.GrantID, input.Client).Scan(&claims.Grant, &claims.Tenant, &claims.Member, &claims.User, &claims.Session, &claims.UserVersion, &claims.MemberVersion, &claims.TenantVersion, &claims.AMR, &claims.HydraSID, &binding, &scopes, &audience, &subject, &sid, &valid)
+ (i.state='complete' AND g.active AND s.active AND u.status='active' AND m.status='active' AND t.status='active' AND f.active AND c.active AND a.active AND ta.active AND g.user_version=u.security_version AND s.user_version=u.security_version AND s.mfa_version=f.security_version AND g.membership_version=m.security_version AND g.tenant_version=t.authz_version AND g.client_version=c.security_version AND g.application_version=a.security_version AND g.enabled_version=ta.security_version AND `+userAccessGrantAllowedSQL+` AND m.user_id=g.user_id AND s.user_id=g.user_id AND s.auth_time>0 AND s.auth_time<=? AND s.idle_expires_at>? AND s.absolute_expires_at>? AND g.absolute_expires_at>?)
+ FROM business_grants g JOIN login_interactions i ON i.id=g.interaction_id JOIN sso_sessions s ON s.id=g.session_id JOIN users u ON u.id=g.user_id JOIN mfa_factors f ON f.user_id=u.id JOIN memberships m ON m.tenant_id=g.tenant_id AND m.id=g.membership_id JOIN tenants t ON t.id=g.tenant_id JOIN oauth_clients c ON c.client_id=g.client_id JOIN applications a ON a.id=c.application_id JOIN tenant_applications ta ON ta.tenant_id=t.id AND ta.application_id=a.id `+userAccessGrantJoinSQL+`
+ WHERE g.id=? AND g.client_id=? FOR UPDATE OF g FOR SHARE OF i,s,u,f,m,t,c,a,ta,uap,uag`, now, now, now, now, input.GrantID, input.Client).Scan(&claims.Grant, &claims.Tenant, &claims.Member, &claims.User, &claims.Session, &claims.UserVersion, &claims.MemberVersion, &claims.TenantVersion, &claims.AMR, &claims.HydraSID, &binding, &scopes, &audience, &subject, &sid, &valid)
 	if err == sql.ErrNoRows {
 		return claims, ErrDenied
 	}
@@ -92,7 +106,7 @@ func (s Store) CheckBusinessToken(ctx context.Context, input TokenCheck) (GrantC
 func (s Store) GrantCurrent(ctx context.Context, id, user, tenant ID, client string) error {
 	now := time.Now().Unix()
 	var valid int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM business_grants g JOIN login_interactions i ON i.id=g.interaction_id JOIN sso_sessions s ON s.id=g.session_id JOIN users u ON u.id=g.user_id JOIN mfa_factors f ON f.user_id=u.id JOIN memberships m ON m.tenant_id=g.tenant_id AND m.id=g.membership_id JOIN tenants t ON t.id=g.tenant_id JOIN oauth_clients c ON c.client_id=g.client_id JOIN applications a ON a.id=c.application_id JOIN tenant_applications ta ON ta.tenant_id=t.id AND ta.application_id=a.id WHERE g.id=? AND g.user_id=? AND g.tenant_id=? AND g.client_id=? AND g.protocol_binding IS NOT NULL AND i.state='complete' AND g.active AND s.active AND u.status='active' AND m.status='active' AND t.status='active' AND f.active AND c.active AND a.active AND ta.active AND g.user_version=u.security_version AND s.user_version=u.security_version AND s.mfa_version=f.security_version AND g.membership_version=m.security_version AND g.tenant_version=t.authz_version AND g.client_version=c.security_version AND g.application_version=a.security_version AND g.enabled_version=ta.security_version AND m.user_id=g.user_id AND s.user_id=g.user_id AND s.idle_expires_at>? AND s.absolute_expires_at>? AND g.absolute_expires_at>?`, id, user, tenant, client, now, now, now).Scan(&valid)
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM business_grants g JOIN login_interactions i ON i.id=g.interaction_id JOIN sso_sessions s ON s.id=g.session_id JOIN users u ON u.id=g.user_id JOIN mfa_factors f ON f.user_id=u.id JOIN memberships m ON m.tenant_id=g.tenant_id AND m.id=g.membership_id JOIN tenants t ON t.id=g.tenant_id JOIN oauth_clients c ON c.client_id=g.client_id JOIN applications a ON a.id=c.application_id JOIN tenant_applications ta ON ta.tenant_id=t.id AND ta.application_id=a.id `+userAccessGrantJoinSQL+` WHERE g.id=? AND g.user_id=? AND g.tenant_id=? AND g.client_id=? AND g.protocol_binding IS NOT NULL AND i.state='complete' AND g.active AND s.active AND u.status='active' AND m.status='active' AND t.status='active' AND f.active AND c.active AND a.active AND ta.active AND g.user_version=u.security_version AND s.user_version=u.security_version AND s.mfa_version=f.security_version AND g.membership_version=m.security_version AND g.tenant_version=t.authz_version AND g.client_version=c.security_version AND g.application_version=a.security_version AND g.enabled_version=ta.security_version AND `+userAccessGrantAllowedSQL+` AND m.user_id=g.user_id AND s.user_id=g.user_id AND s.idle_expires_at>? AND s.absolute_expires_at>? AND g.absolute_expires_at>?`, id, user, tenant, client, now, now, now).Scan(&valid)
 	if err != nil {
 		return err
 	}

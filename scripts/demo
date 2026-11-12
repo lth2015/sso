@@ -8,5 +8,19 @@ case "${1:-}" in
   node scripts/demo-data.cjs seed
   ;;
  seed|check|rehearse|reset) node scripts/demo-data.cjs "$1" ;;
- *) echo 'Usage: scripts/demo {prepare|seed|check|rehearse|reset}' >&2; exit 2 ;;
+ user-access-prepare) node scripts/demo-user-access.cjs ;;
+ user-access)
+  shift
+  if [[ "$#" -gt 0 ]]; then exec scripts/user-app-demo "$@"; fi
+  python3 - <<'PY'
+import json,os,re
+from pathlib import Path
+m=json.loads(Path('.local/demo/manifest.json').read_text())
+f=m.get('applicationUserAccess',{})
+if m.get('fingerprint')!=Path('.local/sso-key.id').read_text().strip() or f.get('state')!='ready' or not re.fullmatch('[a-f0-9]{32}',f.get('client_id','')):
+ raise SystemExit('Prepare this local demo first: scripts/demo user-access-prepare')
+os.execv('scripts/user-app-demo',['scripts/user-app-demo','--client',f['client_id']])
+PY
+  ;;
+ *) echo 'Usage: scripts/demo {prepare|seed|check|rehearse|user-access-prepare|user-access [--client PUBLIC_CLIENT_ID]|reset}' >&2; exit 2 ;;
 esac

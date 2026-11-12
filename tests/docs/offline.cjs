@@ -76,6 +76,8 @@ with zipfile.ZipFile(archive) as z:
       "角色绑定选择器分页",
       "组织成员关联独立分页",
       "创建与移动组织：上级选择和移动预览",
+      "自有应用的成员准入",
+      "应用准入：本地演示手卡",
       "自定义角色策略历史",
     ])
       assert(body.includes(marker));

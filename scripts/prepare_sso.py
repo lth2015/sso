@@ -65,8 +65,15 @@ for db,user,client,password_name in bff_roles:
   'tenants':f"SELECT t.id,t.status,t.authz_version FROM sso_business.tenants t WHERE EXISTS(SELECT 1 FROM sso_business.business_grants g WHERE g.client_id='{client}' AND g.tenant_id=t.id)",
   'applications':f"SELECT a.id,a.active,a.security_version FROM sso_business.applications a JOIN sso_business.oauth_clients c ON c.application_id=a.id WHERE c.client_id='{client}'",
   'tenant_applications':f"SELECT ta.tenant_id,ta.application_id,ta.active,ta.security_version FROM sso_business.tenant_applications ta JOIN sso_business.oauth_clients c ON c.application_id=ta.application_id WHERE c.client_id='{client}' AND EXISTS(SELECT 1 FROM sso_business.business_grants g WHERE g.client_id='{client}' AND g.tenant_id=ta.tenant_id)",
+  'application_user_access_policies':f"SELECT p.tenant_id,p.application_id,p.mode,p.version FROM sso_business.application_user_access_policies p JOIN sso_business.oauth_clients c ON c.application_id=p.application_id WHERE c.client_id='{client}' AND EXISTS(SELECT 1 FROM sso_business.business_grants g WHERE g.client_id='{client}' AND g.tenant_id=p.tenant_id)",
+  'application_user_grant_versions':f"SELECT v.grant_id,v.tenant_id,v.application_id,v.version FROM sso_business.application_user_grant_versions v JOIN sso_business.business_grants g ON g.id=v.grant_id WHERE g.client_id='{client}'",
+  'application_user_access_members':f"SELECT am.tenant_id,am.application_id,am.membership_id FROM sso_business.application_user_access_members am JOIN sso_business.oauth_clients c ON c.application_id=am.application_id WHERE c.client_id='{client}' AND EXISTS(SELECT 1 FROM sso_business.business_grants g WHERE g.client_id='{client}' AND g.tenant_id=am.tenant_id AND g.membership_id=am.membership_id)",
+  'role_bindings':f"SELECT b.tenant_id,b.membership_id,b.role_id FROM sso_business.role_bindings b JOIN sso_business.roles r ON r.tenant_id=b.tenant_id AND r.id=b.role_id WHERE r.code='owner' AND EXISTS(SELECT 1 FROM sso_business.business_grants g WHERE g.client_id='{client}' AND g.tenant_id=b.tenant_id AND g.membership_id=b.membership_id)",
+  'roles':f"SELECT r.tenant_id,r.id,r.code FROM sso_business.roles r WHERE r.code='owner' AND EXISTS(SELECT 1 FROM sso_business.role_bindings b JOIN sso_business.business_grants g ON g.tenant_id=b.tenant_id AND g.membership_id=b.membership_id WHERE b.tenant_id=r.tenant_id AND b.role_id=r.id AND g.client_id='{client}')",
+
  }
- for name,query in scoped.items():statements.append(f"CREATE OR REPLACE SQL SECURITY DEFINER VIEW {db}.{name} AS {query};")
+ for name,query in scoped.items():
+  statements += [f"CREATE OR REPLACE SQL SECURITY DEFINER VIEW {db}.{name} AS {query};",f"GRANT SELECT ON {db}.{name} TO '{user}'@'%';"]
  statements += [f"DROP PROCEDURE IF EXISTS {db}.append_bff_event;",'DELIMITER //',f"""CREATE PROCEDURE {db}.append_bff_event(IN event BINARY(16),IN target BINARY(16),IN action_name VARCHAR(64)) SQL SECURITY DEFINER
  BEGIN
   IF action_name NOT IN ('authorization.logout','authorization.refresh_failed') THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Invalid BFF action'; END IF;

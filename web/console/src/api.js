@@ -73,6 +73,8 @@ export const errorText = (error) =>
     root_cannot_move: "空间根组织不能移动。",
     organization_cycle: "不能把组织移动到它自身或下级组织中。",
     observation_changed: "观察期间登记已变化，请刷新当前记录后重新核对。",
+    invalid_user_access_data:
+      "应用准入设置或检查结果已变化，请关闭后重新读取。",
     invalid_hierarchy_data:
       "上级目录或移动预览已变化或数据无效，请关闭并刷新后重新确认。",
     invalid_assignment_choices: "关联目录已变化或数据无效，请关闭后重新读取。",

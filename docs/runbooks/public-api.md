@@ -21,7 +21,7 @@ node tests/api/docs.cjs
 - [可信账户安全](../../api/security.openapi.yaml)：恢复码生成/分阶段认证器更换，需同源 cookie/浏览器/CSRF，不接受 Bearer。
 - [M0 Hook](../../api/m0-internal.openapi.yaml)：内部合成身份实验，禁止对公网路由。
 
-原生客户端使用 OIDC discovery，issuer 为 `http://auth.localhost:4464/`。本地预置 client `local-platform-cli`，token endpoint authentication 为 none，必须 S256 PKCE，redirect URI 严格为 `http://127.0.0.1:9876/callback`。scope 按需申请 `openid offline_access platform:read platform:write`，业务 audience 为 `https://api.sso.local`。客户端自行实现随机 state、nonce、verifier 和 loopback callback，核对 state 后交换 code；必须验证 OIDC ID token，不可用它代替 access token。测试 harness 实际启动 loopback callback，并经过真实 Hydra 换取访问令牌。
+原生客户端使用 OIDC discovery，issuer 为 `http://auth.localhost:4464/`。本地预置 client `local-platform-cli`，token endpoint authentication 为 none，必须 S256 PKCE，redirect URI 严格为 `http://127.0.0.1:9876/callback`。scope 按需申请 `openid offline_access platform:read platform:write`，业务 audience 为 `https://api.sso.local`。客户端自行实现随机 state、verifier 和 loopback callback，核对 state 后交换 code。请求 openid 时还需 nonce，并必须验证 OIDC ID token 的签名、issuer、audience 和 nonce；不可用 ID token 代替 access token。仅使用 User API 的 OAuth 客户端可不请求 openid，不获取或信任 ID token，见 [独立应用参考](../../examples/user-application/README.md)。测试 harness 实际启动 loopback callback，并经过真实 Hydra 换取访问令牌。
 
 现有验证账户需由可信本地操作者显式启用平台应用：
 
@@ -60,7 +60,7 @@ curl http://127.0.0.1:8083/v1/me \
 
 `api test` 注册两个独立合成账户，通过真实原生 OAuth code+PKCE、密码/MFA 后访问 API；实际成功请求和响应由 OpenAPI JSON Schema 校验，原有 18 个业务操作均须覆盖；另运行 `scripts/console rbac-test` 覆盖新增 8 个操作及真实角色 UI。反例包含 ID token/非法 token/cookie 旁路、scope、错租户、非 owner、非法 JSON/媒体类型/body、最近 MFA、并发 If-Match、邀请重放/错误邮箱/撤销、成员恢复旧授权拒绝、会话归属和审计。专用 Go 检查在验签后递增 fixture User 版本，证明写事务阻止旧证明；也检查事务内 token 到期。
 
-浏览器测试仅把 token/proof 保存在测试进程内，失败只打印阶段/类别；不会录制秘密页面。共享 fixture 清理要求租户全部成员都属于本轮合成账户，按叶到根删除组织，并清理自己的私有通知；拒绝清理包含其他账户的租户。`docs.cjs` 检查实际参考页的 60 项操作、桌面/手机布局、无凭证存储并生成截图。
+浏览器测试仅把 token/proof 保存在测试进程内，失败只打印阶段/类别；不会录制秘密页面。共享 fixture 清理要求租户全部成员都属于本轮合成账户，按叶到根删除组织，并清理自己的私有通知；拒绝清理包含其他账户的租户。`docs.cjs` 检查实际参考页的 65 项操作、桌面/手机布局、无凭证存储并生成截图。
 
 既有回归依次运行 `scripts/m0 test`、`scripts/m1 test`、`scripts/m2 test`、`scripts/sso test`、`scripts/sso network-test`、两个账户/SSO 浏览器脚本。普通 Go 测试明确跳过真实 fixture 案例，不能替代 API 浏览器集成测试。命令会短暂停止自己的通知 worker，不能与浏览器通知流程并发执行。
 
@@ -88,3 +88,5 @@ curl http://127.0.0.1:8083/v1/me \
 邀请资源新增详情 GET 与 `/reissue` POST，后者使用空 JSON、当前 `invite-tenant-invitation-revision` 强 ETag、invitations.manage 与最近 MFA。返回一次性新 proof，不发送邮件；旧 proof 在更新提交后无效，closed 不可复活。原生验收：`scripts/console invitations-api-test`，完整合同/未知结果处理见 [邀请生命周期](../invitation-lifecycle.md)。
 
 自有 managed client/机器 credential 详情追加 `/protocol-status` 的 GET，当前 owner/platform:read，无额外近期 MFA 门槛。匹配状态仅描述受控非秘密字段，资源变更 409 observation_changed、依赖故障 503；不回传上游字段值，不写状态/审计。外部接入及真实协议验收见 [协议核对](../protocol-inspection.md) / `scripts/console protocol-api-test`。
+
+0.25 起自有应用可配置 [User 成员准入](../application-user-access.md)，新增五项公共操作，当前共 65 项业务操作。mode/revision 与 app 启停、租户 authz 和机器凭证分别控制；当前版本十进制字符串通过专用 ua ETag 更新。公开客户端签发/refresh/每次 User API 同时复查准入，恢复资格不恢复旧 grant。OAuth-only [独立本地示例](../../examples/user-application/README.md) 只申请 platform:read，通过在线 /me 获取身份，不请求/信任 ID token；请求 openid 的正式 RP 仍必须验证 OIDC ID token。

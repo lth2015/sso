@@ -27,5 +27,13 @@ class DemoProtection(unittest.TestCase):
  def test_missing_manifest_only_allows_ordinary_cleanup(self):
   self.path.unlink();protect_demo(self.root,[])
   with self.assertRaises(SystemExit):protect_demo(self.root,[self.email],reset_run=self.run)
+ def test_application_showcase_space_is_also_protected(self):
+  self.data['applicationUserAccess']={'state':'ready','tenant':{'id':'f'*32}}
+  self.path.write_text(json.dumps(self.data))
+  with self.assertRaises(SystemExit):protect_demo(self.root,['browser-'+'d'*32+'@example.invalid'],['f'*32])
+ def test_malformed_ready_showcase_refuses_cleanup(self):
+  self.data['applicationUserAccess']={'state':'ready'}
+  self.path.write_text(json.dumps(self.data))
+  with self.assertRaises(SystemExit):protect_demo(self.root,[])
 
 if __name__=='__main__':unittest.main()

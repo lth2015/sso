@@ -116,6 +116,17 @@ func verifyApplicationPrimaryChecks(t *testing.T, db *sql.DB, repo store.Store, 
 			continue
 		}
 		ownedID, _ := store.ParseID(owned.ID)
+		verifyUserApplicationGrantVersionFence(t, db, repo, a, ownedID)
+		if _, e := repo.ForAuthorization(a).APIApplicationUserAccess(ctx, ownedID, 25, store.ID{}); e != nil {
+			t.Fatal("User admission read incorrectly required fresh MFA")
+		}
+		if _, e := repo.ForAuthorization(a).SetApplicationUserAccessMode(ctx, ownedID, store.UserAccessSelected, 1); !errors.Is(e, store.ErrStepUp) {
+			t.Fatal("User admission mode trusted caller Recent flag")
+		}
+		if _, e := repo.ForAuthorization(a).SetApplicationUserAccessMember(ctx, ownedID, a.Member, true, 1); !errors.Is(e, store.ErrStepUp) {
+			t.Fatal("User admission member write trusted caller Recent flag")
+		}
+
 		machineRepo := repo.ForAuthorization(a)
 		if _, err = machineRepo.APICreatePrincipal(ctx, ownedID, "Aged principal"); !errors.Is(err, store.ErrStepUp) {
 			t.Fatal("principal create trusted caller Recent flag")
@@ -153,5 +164,57 @@ func verifyApplicationPrimaryChecks(t *testing.T, db *sql.DB, repo store.Store, 
 	}
 	if _, err = repo.ForAuthorization(a).SetApplicationEnabled(ctx, app, items[0].Enabled, items[0].Version); !errors.Is(err, store.ErrStepUp) {
 		t.Fatal("application write trusted caller Recent flag")
+	}
+}
+
+// The real OAuth fixture checks both raw-grant and transaction authority paths;
+// no caller claims can substitute a mismatched admission binding namespace.
+func verifyUserApplicationGrantVersionFence(t *testing.T, db *sql.DB, repo store.Store, a store.Authorization, otherApp store.ID) {
+	t.Helper()
+	var tenant, app store.ID
+	var revision int64
+	if e := db.QueryRow(`SELECT tenant_id,application_id,version FROM application_user_grant_versions WHERE grant_id=?`, a.Grant).Scan(&tenant, &app, &revision); e != nil {
+		t.Fatal("User admission OAuth binding fixture unavailable")
+	}
+	if app == otherApp {
+		return
+	}
+	restore := func() {
+		if _, e := db.Exec(`INSERT INTO application_user_grant_versions(grant_id,tenant_id,application_id,version) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE tenant_id=VALUES(tenant_id),application_id=VALUES(application_id),version=VALUES(version)`, a.Grant, tenant, app, revision); e != nil {
+			t.Error("User admission binding fixture restoration failed")
+		}
+	}
+	defer restore()
+	if _, e := db.Exec(`UPDATE application_user_grant_versions SET application_id=? WHERE grant_id=?`, otherApp, a.Grant); e != nil {
+		t.Fatal("User admission namespace fixture failed")
+	}
+	if e := repo.GrantCurrent(context.Background(), a.Grant, a.User, a.Tenant, a.Client); !errors.Is(e, store.ErrDenied) {
+		t.Fatal("raw User grant trusted a foreign application binding")
+	}
+	if _, e := repo.ForAuthorization(a).APIApplications(context.Background(), 1, store.ID{}); !errors.Is(e, store.ErrDenied) {
+		t.Fatal("transaction User authority trusted a foreign application binding")
+	}
+	restore()
+	bad := int64(1)
+	if revision == 1 {
+		bad = 2
+	}
+	if _, e := db.Exec(`UPDATE application_user_grant_versions SET version=? WHERE grant_id=?`, bad, a.Grant); e != nil {
+		t.Fatal("User admission revision fixture failed")
+	}
+	if e := repo.GrantCurrent(context.Background(), a.Grant, a.User, a.Tenant, a.Client); !errors.Is(e, store.ErrDenied) {
+		t.Fatal("raw User grant ignored admission version")
+	}
+	if _, e := repo.ForAuthorization(a).APIApplications(context.Background(), 1, store.ID{}); !errors.Is(e, store.ErrDenied) {
+		t.Fatal("transaction User authority ignored admission version")
+	}
+	restore()
+	if revision == 1 {
+		if _, e := db.Exec(`DELETE FROM application_user_grant_versions WHERE grant_id=?`, a.Grant); e != nil {
+			t.Fatal("legacy User grant fixture failed")
+		}
+		if e := repo.GrantCurrent(context.Background(), a.Grant, a.User, a.Tenant, a.Client); e != nil {
+			t.Fatal("legacy version-one User grant refused")
+		}
 	}
 }

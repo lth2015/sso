@@ -246,8 +246,10 @@ export default function Playground({
                   }
                   const applicationVersion =
                     match.schema.pattern.includes("app-");
+                  const userAccessVersion =
+                    match.schema.pattern.includes("ua-");
                   if (
-                    applicationVersion &&
+                    (applicationVersion || userAccessVersion) &&
                     !/^[a-f0-9]{32}$/.test(values.application || "")
                   ) {
                     setError(
@@ -274,13 +276,17 @@ export default function Playground({
                               values.application +
                               "/clients/" +
                               values.client
-                            : applicationVersion
-                              ? "/applications/" + values.application
-                              : invitationVersion
-                                ? "/invitations/" + values.invitation
-                                : match.schema.pattern.includes("org-")
-                                  ? "/organizations?limit=1"
-                                  : ""),
+                            : userAccessVersion
+                              ? "/applications/" +
+                                values.application +
+                                "/user-access"
+                              : applicationVersion
+                                ? "/applications/" + values.application
+                                : invitationVersion
+                                  ? "/invitations/" + values.invitation
+                                  : match.schema.pattern.includes("org-")
+                                    ? "/organizations?limit=1"
+                                    : ""),
                     },
                     true,
                   );

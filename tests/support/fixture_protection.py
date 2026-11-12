@@ -15,6 +15,13 @@ def protect_demo(root,emails,tenants=(),reset_run=None,complete=False):
   protected={a['email'] for a in accounts}
   if any(not re.fullmatch(r'browser-[a-f0-9]{32}@example\.invalid',e) for e in protected):raise ValueError()
   spaces={manifest[k]['id'] for k in ['primary','secondary'] if k in manifest}
+  feature=manifest.get('applicationUserAccess')
+  if feature is not None:
+   if not isinstance(feature,dict) or feature.get('state') not in {'preparing','ready'}:raise ValueError()
+   if 'tenant' in feature:
+    if not isinstance(feature['tenant'],dict):raise ValueError()
+    spaces.add(feature['tenant']['id'])
+   elif feature['state']=='ready':raise ValueError()
   if any(not re.fullmatch('[a-f0-9]{32}',v) for v in spaces):raise ValueError()
  except (OSError,ValueError,KeyError,TypeError):raise SystemExit('Refusing cleanup with an unreadable demo protection manifest')
  if reset_run is not None:

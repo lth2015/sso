@@ -405,7 +405,7 @@ type TenantOption struct {
 
 func (s Store) TenantOptions(ctx context.Context, user, session ID, client string) ([]TenantOption, error) {
 	now := time.Now().Unix()
-	rows, err := s.db.QueryContext(ctx, `SELECT t.id,root.name FROM memberships m JOIN tenants t ON t.id=m.tenant_id JOIN tenant_roots tr ON tr.tenant_id=t.id JOIN org_nodes root ON root.tenant_id=tr.tenant_id AND root.id=tr.org_id JOIN oauth_clients c ON c.client_id=? AND c.active=TRUE JOIN applications a ON a.id=c.application_id AND a.active=TRUE JOIN tenant_applications ta ON ta.tenant_id=t.id AND ta.application_id=a.id AND ta.active=TRUE JOIN sso_sessions s ON s.id=? AND s.user_id=m.user_id JOIN users u ON u.id=m.user_id JOIN mfa_factors f ON f.user_id=u.id WHERE m.user_id=? AND m.status='active' AND t.status='active' AND u.status='active' AND s.active=TRUE AND s.user_version=u.security_version AND f.active=TRUE AND f.security_version=s.mfa_version AND s.idle_expires_at>? AND s.absolute_expires_at>? ORDER BY t.id`, client, session, user, now, now)
+	rows, err := s.db.QueryContext(ctx, `SELECT t.id,root.name FROM memberships m JOIN tenants t ON t.id=m.tenant_id JOIN tenant_roots tr ON tr.tenant_id=t.id JOIN org_nodes root ON root.tenant_id=tr.tenant_id AND root.id=tr.org_id JOIN oauth_clients c ON c.client_id=? AND c.active=TRUE JOIN applications a ON a.id=c.application_id AND a.active=TRUE JOIN tenant_applications ta ON ta.tenant_id=t.id AND ta.application_id=a.id AND ta.active=TRUE `+userAccessJoinSQL+` JOIN sso_sessions s ON s.id=? AND s.user_id=m.user_id JOIN users u ON u.id=m.user_id JOIN mfa_factors f ON f.user_id=u.id WHERE m.user_id=? AND m.status='active' AND t.status='active' AND u.status='active' AND s.active=TRUE AND s.user_version=u.security_version AND f.active=TRUE AND f.security_version=s.mfa_version AND s.idle_expires_at>? AND s.absolute_expires_at>? AND `+userAccessAllowedSQL+` ORDER BY t.id`, client, session, user, now, now)
 	if err != nil {
 		return nil, err
 	}
@@ -445,9 +445,9 @@ func (s Store) PrepareConsent(ctx context.Context, id ID, browser, sessionDigest
 		return ID{}, ErrDenied
 	}
 	var member ID
-	var memberVersion, tenantVersion, clientVersion, appVersion, enabledVersion uint64
+	var memberVersion, tenantVersion, clientVersion, appVersion, enabledVersion, accessVersion uint64
 	var scopes, audience string
-	err = tx.QueryRowContext(ctx, `SELECT m.id,m.security_version,t.authz_version,c.security_version,a.security_version,ta.security_version,c.scopes,c.audience FROM memberships m JOIN tenants t ON t.id=m.tenant_id JOIN oauth_clients c ON c.client_id=? AND c.active=TRUE JOIN applications a ON a.id=c.application_id AND a.active=TRUE JOIN tenant_applications ta ON ta.tenant_id=t.id AND ta.application_id=a.id AND ta.active=TRUE WHERE m.tenant_id=? AND m.user_id=? AND m.status='active' AND t.status='active' FOR SHARE`, f.Client, tenant, session.User).Scan(&member, &memberVersion, &tenantVersion, &clientVersion, &appVersion, &enabledVersion, &scopes, &audience)
+	err = tx.QueryRowContext(ctx, `SELECT m.id,m.security_version,t.authz_version,c.security_version,a.security_version,ta.security_version,COALESCE(uap.version,1),c.scopes,c.audience FROM memberships m JOIN tenants t ON t.id=m.tenant_id JOIN oauth_clients c ON c.client_id=? AND c.active=TRUE JOIN applications a ON a.id=c.application_id AND a.active=TRUE JOIN tenant_applications ta ON ta.tenant_id=t.id AND ta.application_id=a.id AND ta.active=TRUE `+userAccessJoinSQL+` WHERE m.tenant_id=? AND m.user_id=? AND m.status='active' AND t.status='active' AND `+userAccessAllowedSQL+` FOR SHARE`, f.Client, tenant, session.User).Scan(&member, &memberVersion, &tenantVersion, &clientVersion, &appVersion, &enabledVersion, &accessVersion, &scopes, &audience)
 	if err == sql.ErrNoRows {
 		return ID{}, ErrDenied
 	}
@@ -464,6 +464,13 @@ func (s Store) PrepareConsent(ctx context.Context, id ID, browser, sessionDigest
 	_, err = tx.ExecContext(ctx, `INSERT INTO business_grants(id,interaction_id,tenant_id,membership_id,user_id,session_id,client_id,scopes,audience,hydra_sid,user_version,membership_version,tenant_version,client_version,application_version,enabled_version,absolute_expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, grant, id, tenant, member, session.User, session.ID, f.Client, f.Scopes, f.Audience, f.HydraSID, session.UserVersion, memberVersion, tenantVersion, clientVersion, appVersion, enabledVersion, session.Absolute)
 	if err != nil {
 		return ID{}, err
+	}
+	result, err := tx.ExecContext(ctx, `INSERT INTO application_user_grant_versions(grant_id,tenant_id,application_id,version) SELECT ?,?,application_id,? FROM oauth_clients WHERE client_id=?`, grant, tenant, accessVersion, f.Client)
+	if err != nil {
+		return ID{}, err
+	}
+	if n, e := result.RowsAffected(); e != nil || n != 1 {
+		return ID{}, ErrDenied
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE login_interactions SET state='submitting' WHERE id=?`, id); err != nil {
 		return ID{}, err
@@ -536,11 +543,11 @@ func (s Store) LogoutAll(ctx context.Context, digest, csrf []byte) (ID, error) {
 }
 func (s Store) SSOReady(ctx context.Context) error {
 	var count int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations WHERE version IN ('004_sso','006_account_security','007_authenticator_changes','008_managed_clients','009_machine_credentials')`).Scan(&count)
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations WHERE version IN ('004_sso','006_account_security','007_authenticator_changes','008_managed_clients','009_machine_credentials','012_application_user_access')`).Scan(&count)
 	if err != nil {
 		return err
 	}
-	if count != 5 {
+	if count != 6 {
 		return errors.New("SSO schema unavailable")
 	}
 	return nil

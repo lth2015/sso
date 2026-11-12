@@ -1067,3 +1067,17 @@ dialog .secret {
   overflow-wrap: anywhere;
   word-break: break-all;
 }
+
+.application-user-access-modal {
+  max-width: 720px;
+}
+.application-user-access-modal .actions + .section-note {
+  margin-top: 12px;
+}
+.user-access-members {
+  padding-left: 1.2rem;
+}
+.user-access-members code {
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}

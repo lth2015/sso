@@ -54,7 +54,7 @@ async function read(page, operation, code = 200) {
     await p.getByLabel("选择 API", { exact: true }).waitFor();
     assert.equal(
       await p.getByLabel("选择 API", { exact: true }).locator("option").count(),
-      60,
+      65,
     );
     await choose(p, "createMachineCredential");
     await p
@@ -87,6 +87,118 @@ async function read(page, operation, code = 200) {
     assert.equal(historyPage.tenant_id, me.tenant_id);
     assert.equal(historyPage.role_id, historyOwnerRole);
     assert.deepEqual(historyPage.items, []);
+    phase = "real-owned-application-admission-through-playground";
+    const appReply = await s.bff(p, base + "/applications", {
+      method: "POST",
+      body: { name: "Playground admission fixture" },
+    });
+    assert.equal(appReply.status, 201);
+    await choose(p, "getApplicationUserAccess");
+    await p.getByLabel("application", { exact: true }).fill(appReply.body.id);
+    await p.getByRole("button", { name: "发送读取请求", exact: true }).click();
+    await status(p, 200);
+    const admission = JSON.parse(
+      await p.getByTestId("playground-response").textContent(),
+    );
+    assert.equal(admission.policy.application_id, appReply.body.id);
+    assert.equal(admission.policy.mode, "all_members");
+    assert.deepEqual(admission.items, []);
+    const targetMember = (await s.bff(p, base + "/members")).body.items.find(
+      (member) => member.email === guest.email,
+    ).id;
+    const admissionURL =
+      base + "/applications/" + appReply.body.id + "/user-access";
+    let admissionWrites = 0;
+    p.on("request", (r) => {
+      if (
+        new URL(r.url()).pathname.startsWith("/bff" + admissionURL) &&
+        ["PUT", "DELETE"].includes(r.method())
+      )
+        admissionWrites++;
+    });
+    async function admissionChange(operation, method, version, body, member) {
+      await choose(p, operation);
+      await p.getByLabel("application", { exact: true }).fill(appReply.body.id);
+      if (member) await p.getByLabel("member", { exact: true }).fill(member);
+      await p
+        .getByLabel("请求 JSON", { exact: true })
+        .fill(JSON.stringify(body));
+      const lookup = p.waitForResponse(
+        (r) =>
+          new URL(r.url()).pathname === "/bff" + admissionURL &&
+          r.request().method() === "GET",
+      );
+      await p
+        .getByRole("button", { name: "读取最新 ETag", exact: true })
+        .click();
+      assert.equal((await lookup).status(), 200);
+      await status(p, 200);
+      assert.equal(
+        await p.getByLabel("If-Match", { exact: true }).inputValue(),
+        '"ua-' +
+          me.tenant_id +
+          "-" +
+          appReply.body.id +
+          "-" +
+          (version - 1) +
+          '"',
+      );
+      const before = admissionWrites;
+      await p
+        .getByRole("button", { name: "检查写入请求", exact: true })
+        .click();
+      assert.equal(admissionWrites, before);
+      await p.getByLabel("我确认向当前空间发送这项写入请求").check();
+      const reply = p.waitForResponse(
+        (r) =>
+          new URL(r.url()).pathname ===
+            "/bff" + admissionURL + (member ? "/members/" + member : "") &&
+          r.request().method() === method,
+      );
+      await p
+        .getByRole("button", { name: "确认发送一次", exact: true })
+        .click();
+      const response = await reply;
+      assert.equal(response.status(), 200);
+      assert.equal((await response.json()).version, String(version));
+      await status(p, 200);
+      assert.equal(admissionWrites, before + 1);
+    }
+    await admissionChange("setApplicationUserAccess", "PUT", 2, {
+      mode: "selected_members",
+    });
+    await admissionChange(
+      "grantApplicationUserAccess",
+      "PUT",
+      3,
+      {},
+      targetMember,
+    );
+    async function admissionCheck(allowed) {
+      await choose(p, "checkApplicationUserAccess");
+      await p.getByLabel("application", { exact: true }).fill(appReply.body.id);
+      await p.getByLabel("member", { exact: true }).fill(targetMember);
+      await p
+        .getByRole("button", { name: "发送读取请求", exact: true })
+        .click();
+      await status(p, 200);
+      const decision = JSON.parse(
+        await p.getByTestId("playground-response").textContent(),
+      );
+      assert.equal(decision.membership_id, targetMember);
+      assert.equal(decision.allowed, allowed);
+      assert.equal(decision.explicit_grant, allowed);
+    }
+    await admissionCheck(true);
+    await admissionChange(
+      "revokeApplicationUserAccess",
+      "DELETE",
+      4,
+      {},
+      targetMember,
+    );
+    await admissionCheck(false);
+    assert.equal(admissionWrites, 3);
     phase = "real-audit-export-query-and-default";
     await read(p, "exportAuditBatch");
     const exported = JSON.parse(
@@ -286,7 +398,7 @@ async function read(page, operation, code = 200) {
   }
   if (success)
     console.log(
-      "Playground acceptance passed: 60 management contracts (59 executable; one-time SK uses dedicated UI), real reads/writes, explicit confirmation, one send per action, ETag/412, member denial, MFA, redaction, escaping, navigation reset and desktop/mobile",
+      "Playground acceptance passed: 65 management contracts (64 executable; one-time SK uses dedicated UI), real reads/writes, explicit confirmation, one send per action, ETag/412, member denial, MFA, redaction, escaping, navigation reset and desktop/mobile",
     );
 })().catch((e) => {
   console.error(

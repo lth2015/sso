@@ -17,8 +17,8 @@ const assert = require("node:assert/strict");
     await page
       .getByRole("heading", { name: "接口参考", exact: true })
       .waitFor();
-    assert.equal(await page.locator("tbody tr").count(), 60);
-    assert.equal(await page.locator("details").count(), 60);
+    assert.equal(await page.locator("tbody tr").count(), 65);
+    assert.equal(await page.locator("details").count(), 65);
     const role = page.locator("#createRole");
     await role.locator("summary").click();
     assert((await role.textContent()).includes("policies"));
@@ -43,7 +43,7 @@ const assert = require("node:assert/strict");
     assert.equal((await page.context().cookies()).length, 0);
     assert.deepEqual(errors, []);
     console.log(
-      "Public API reference passed: 60 live contract operations, desktop/mobile, no credentials",
+      "Public API reference passed: 65 live contract operations, desktop/mobile, no credentials",
     );
   } finally {
     await browser.close();

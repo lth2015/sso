@@ -209,7 +209,7 @@ func TestDemoDatabaseRolesCannotReadCredentialsOrOtherClientState(t *testing.T) 
 		if err = db.Ping(); err != nil {
 			t.Fatal("BFF database role unavailable")
 		}
-		for _, query := range []string{`SELECT normalized_email FROM sso_business.login_aliases LIMIT 1`, `SELECT password_hash FROM sso_business.password_credentials LIMIT 1`, `SELECT encrypted_secret FROM sso_business.mfa_factors LIMIT 1`, `SELECT token_digest FROM sso_business.sso_sessions LIMIT 1`, `SELECT encrypted_tokens FROM sso_business.bff_sessions LIMIT 1`} {
+		for _, query := range []string{`SELECT mode FROM sso_business.application_user_access_policies LIMIT 1`, `SELECT membership_id FROM sso_business.application_user_access_members LIMIT 1`, `SELECT version FROM sso_business.application_user_grant_versions LIMIT 1`, `SELECT normalized_email FROM sso_business.login_aliases LIMIT 1`, `SELECT password_hash FROM sso_business.password_credentials LIMIT 1`, `SELECT encrypted_secret FROM sso_business.mfa_factors LIMIT 1`, `SELECT token_digest FROM sso_business.sso_sessions LIMIT 1`, `SELECT encrypted_tokens FROM sso_business.bff_sessions LIMIT 1`} {
 			rows, err := db.Query(query)
 			if err == nil {
 				rows.Close()
@@ -218,6 +218,16 @@ func TestDemoDatabaseRolesCannotReadCredentialsOrOtherClientState(t *testing.T) 
 			var denied *driver.MySQLError
 			if !errors.As(err, &denied) || (denied.Number != 1142 && denied.Number != 1143) {
 				t.Fatal("protected read did not fail through database permissions")
+			}
+		}
+		for _, query := range []string{
+			`SELECT COUNT(*) FROM application_user_grant_versions v LEFT JOIN business_grants g ON g.id=v.grant_id WHERE g.id IS NULL`,
+			`SELECT COUNT(*) FROM roles WHERE code<>'owner'`,
+			`SELECT COUNT(*) FROM role_bindings b LEFT JOIN memberships m ON m.tenant_id=b.tenant_id AND m.id=b.membership_id WHERE m.id IS NULL`,
+		} {
+			var n int
+			if e := db.QueryRow(query).Scan(&n); e != nil || n != 0 {
+				t.Fatal("BFF admission metadata escaped the client/member scope")
 			}
 		}
 		var others int

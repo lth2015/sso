@@ -1,6 +1,6 @@
 # 完整 API 参考
 
-OpenAPI 0.24.0；公共 Bearer API 共 60 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
+OpenAPI 0.25.0；公共 Bearer API 共 65 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
 
 真实交互入口见 [Playground 手册](playground.md)；外部接入见 [公共 API 手册](runbooks/public-api.md)。JSON/YAML 合同见 [OpenAPI](../api/openapi.yaml)。
 
@@ -42,6 +42,11 @@ OpenAPI 0.24.0；公共 Bearer API 共 60 个业务操作。此文件由 OpenAPI
 | POST | `/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/credentials/{credential}/revoke` | `revokeMachineCredential` |
 | POST | `/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/disable` | `disableServicePrincipal` |
 | POST | `/v1/tenants/{tenant}/applications/{application}/service-principals/{principal}/enable` | `enableServicePrincipal` |
+| GET | `/v1/tenants/{tenant}/applications/{application}/user-access` | `getApplicationUserAccess` |
+| PUT | `/v1/tenants/{tenant}/applications/{application}/user-access` | `setApplicationUserAccess` |
+| GET | `/v1/tenants/{tenant}/applications/{application}/user-access/members/{member}` | `checkApplicationUserAccess` |
+| PUT | `/v1/tenants/{tenant}/applications/{application}/user-access/members/{member}` | `grantApplicationUserAccess` |
+| DELETE | `/v1/tenants/{tenant}/applications/{application}/user-access/members/{member}` | `revokeApplicationUserAccess` |
 | GET | `/v1/tenants/{tenant}/audit-events` | `listAuditEvents` |
 | GET | `/v1/tenants/{tenant}/audit-exports` | `exportAuditBatch` |
 | GET | `/v1/tenants/{tenant}/invitations` | `listInvitations` |
@@ -4354,6 +4359,692 @@ HTTP 200
           "credential_count": {
             "type": "integer",
             "minimum": 0
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## GET /v1/tenants/{tenant}/applications/{application}/user-access
+
+Read owned application User access policy and bounded explicit members
+
+Current owner only; tenant-owned application only (shared/protected associations are unmanaged). All writes require recent MFA and exact User admission ETag. Default all_members/1 preserves old behavior. selected_members admits active owners or explicit active User/membership grants. Actual changes bump only this app User admission revision and invalidate prior User grants for this app; re-grant/mode restore never resurrects old grants. Machine credentials/tokens, other apps and tenant authz versions remain independent. No-op with current revision does not increment or audit. Policy/member/audit/outbox/context changes commit atomically. No automatic retry or idempotency guarantee. Reads do not require recent MFA. IDs only, no member emails; limit 1-100/default 50 and ascending membership ID cursor. No GET body or unknown/duplicate query.
+
+OAuth scope：`platform:read`。权限：`reserved_owner:roles.manage`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "query",
+    "name": "limit",
+    "description": "Bounded keyset page size.",
+    "schema": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 50
+    }
+  },
+  {
+    "in": "query",
+    "name": "after",
+    "description": "Previous next_cursor; ascending UUID keyset, not a snapshot or timestamp ordering guarantee.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Read owned application User access policy and bounded explicit members",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted resource or collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "policy",
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "policy": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "tenant_id",
+              "application_id",
+              "mode",
+              "version"
+            ],
+            "properties": {
+              "tenant_id": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              "application_id": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              "mode": {
+                "enum": [
+                  "all_members",
+                  "selected_members"
+                ]
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive signed-int64 decimal revision, transported losslessly as a string."
+              }
+            }
+          },
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "membership_id"
+              ],
+              "properties": {
+                "membership_id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                }
+              }
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## PUT /v1/tenants/{tenant}/applications/{application}/user-access
+
+Set owned application User admission mode
+
+Current owner only; tenant-owned application only (shared/protected associations are unmanaged). All writes require recent MFA and exact User admission ETag. Default all_members/1 preserves old behavior. selected_members admits active owners or explicit active User/membership grants. Actual changes bump only this app User admission revision and invalidate prior User grants for this app; re-grant/mode restore never resurrects old grants. Machine credentials/tokens, other apps and tenant authz versions remain independent. No-op with current revision does not increment or audit. Policy/member/audit/outbox/context changes commit atomically. No automatic retry or idempotency guarantee. Stored explicit grants are retained when changing modes. Enabled/global application and User/membership/session constraints always apply; policy does not enable an application.
+
+OAuth scope：`platform:write`。权限：`reserved_owner:roles.manage`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Exact User admission policy ETag bound to tenant/application/revision; not application enablement or tenant authz version. Missing 428, wrong namespace/stale 412.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"ua-[a-f0-9]{32}-[a-f0-9]{32}-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+### 请求示例
+
+```json
+{
+  "mode": "selected_members"
+}
+```
+
+### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "mode"
+  ],
+  "properties": {
+    "mode": {
+      "enum": [
+        "all_members",
+        "selected_members"
+      ]
+    }
+  }
+}
+```
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Set owned application User admission mode",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted resource or collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tenant_id",
+          "application_id",
+          "mode",
+          "version"
+        ],
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "application_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "mode": {
+            "enum": [
+              "all_members",
+              "selected_members"
+            ]
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Positive signed-int64 decimal revision, transported losslessly as a string."
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## GET /v1/tenants/{tenant}/applications/{application}/user-access/members/{member}
+
+Observe a member current application admission decision
+
+Current owner only; tenant-owned application only (shared/protected associations are unmanaged). All writes require recent MFA and exact User admission ETag. Default all_members/1 preserves old behavior. selected_members admits active owners or explicit active User/membership grants. Actual changes bump only this app User admission revision and invalidate prior User grants for this app; re-grant/mode restore never resurrects old grants. Machine credentials/tokens, other apps and tenant authz versions remain independent. No-op with current revision does not increment or audit. Policy/member/audit/outbox/context changes commit atomically. No automatic retry or idempotency guarantee. Read permits aged MFA. Current target membership must belong to the token tenant. Observation only, no access ticket/cache or HTTP ETag; policy version alone does not cover live User/member/application availability. No query or GET body. This decision does not prove credentials, OAuth client registration or business resource permissions.
+
+OAuth scope：`platform:read`。权限：`reserved_owner:roles.manage`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "member",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Observe a member current application admission decision",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "policy",
+          "membership_id",
+          "allowed",
+          "explicit_grant",
+          "reason"
+        ],
+        "properties": {
+          "policy": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "tenant_id",
+              "application_id",
+              "mode",
+              "version"
+            ],
+            "properties": {
+              "tenant_id": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              "application_id": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              "mode": {
+                "enum": [
+                  "all_members",
+                  "selected_members"
+                ]
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "Positive signed-int64 decimal revision, transported losslessly as a string."
+              }
+            }
+          },
+          "membership_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "allowed": {
+            "type": "boolean"
+          },
+          "explicit_grant": {
+            "type": "boolean"
+          },
+          "reason": {
+            "enum": [
+              "owner",
+              "all_members",
+              "explicit_grant",
+              "not_granted",
+              "user_inactive",
+              "membership_inactive",
+              "application_disabled"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## PUT /v1/tenants/{tenant}/applications/{application}/user-access/members/{member}
+
+Grant an active member explicit application admission
+
+Current owner only; tenant-owned application only (shared/protected associations are unmanaged). All writes require recent MFA and exact User admission ETag. Default all_members/1 preserves old behavior. selected_members admits active owners or explicit active User/membership grants. Actual changes bump only this app User admission revision and invalidate prior User grants for this app; re-grant/mode restore never resurrects old grants. Machine credentials/tokens, other apps and tenant authz versions remain independent. No-op with current revision does not increment or audit. Policy/member/audit/outbox/context changes commit atomically. No automatic retry or idempotency guarantee. Grant requires current active User and active membership. Revoke may clean up inactive member entries. Owner implicit admission is not removed by deleting an explicit grant. Unknown target is 404; active/inactive target status is never used to disclose email.
+
+OAuth scope：`platform:write`。权限：`reserved_owner:roles.manage`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "member",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Exact User admission policy ETag bound to tenant/application/revision; not application enablement or tenant authz version. Missing 428, wrong namespace/stale 412.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"ua-[a-f0-9]{32}-[a-f0-9]{32}-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+### 请求示例
+
+```json
+{}
+```
+
+### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
+```
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Grant an active member explicit application admission",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted resource or collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tenant_id",
+          "application_id",
+          "mode",
+          "version"
+        ],
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "application_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "mode": {
+            "enum": [
+              "all_members",
+              "selected_members"
+            ]
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Positive signed-int64 decimal revision, transported losslessly as a string."
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## DELETE /v1/tenants/{tenant}/applications/{application}/user-access/members/{member}
+
+Revoke a member explicit application admission
+
+Current owner only; tenant-owned application only (shared/protected associations are unmanaged). All writes require recent MFA and exact User admission ETag. Default all_members/1 preserves old behavior. selected_members admits active owners or explicit active User/membership grants. Actual changes bump only this app User admission revision and invalidate prior User grants for this app; re-grant/mode restore never resurrects old grants. Machine credentials/tokens, other apps and tenant authz versions remain independent. No-op with current revision does not increment or audit. Policy/member/audit/outbox/context changes commit atomically. No automatic retry or idempotency guarantee. Grant requires current active User and active membership. Revoke may clean up inactive member entries. Owner implicit admission is not removed by deleting an explicit grant. Unknown target is 404; active/inactive target status is never used to disclose email.
+
+OAuth scope：`platform:write`。权限：`reserved_owner:roles.manage`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "member",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "application",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "header",
+    "name": "If-Match",
+    "required": true,
+    "description": "Exact User admission policy ETag bound to tenant/application/revision; not application enablement or tenant authz version. Missing 428, wrong namespace/stale 412.",
+    "schema": {
+      "type": "string",
+      "pattern": "^\"ua-[a-f0-9]{32}-[a-f0-9]{32}-[1-9][0-9]*\"$"
+    }
+  }
+]
+```
+
+### 请求示例
+
+```json
+{}
+```
+
+### 请求 schema
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {}
+}
+```
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Revoke a member explicit application admission",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    },
+    "ETag": {
+      "description": "Quoted resource or collection version for If-Match.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tenant_id",
+          "application_id",
+          "mode",
+          "version"
+        ],
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "application_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "mode": {
+            "enum": [
+              "all_members",
+              "selected_members"
+            ]
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "description": "Positive signed-int64 decimal revision, transported losslessly as a string."
           }
         }
       }
