@@ -8,6 +8,7 @@ import AccountSecurity from "./AccountSecurity.jsx";
 import ApplicationManagement from "./ApplicationManagement.jsx";
 import OrganizationActions from "./OrganizationActions.jsx";
 import OrganizationAssignment from "./OrganizationAssignment.jsx";
+import RolePolicyHistory from "./RolePolicyHistory.jsx";
 import MachineEvents from "./MachineEvents.jsx";
 import AuditExport from "./AuditExport.jsx";
 import InvitationReissue from "./InvitationReissue.jsx";
@@ -125,6 +126,7 @@ function App() {
     [roleMember, setRoleMember] = useState(null);
   const [orgAction, setOrgAction] = useState(null);
   const [assignmentOpen, setAssignmentOpen] = useState(false);
+  const [policyHistoryRole, setPolicyHistoryRole] = useState(null);
   const [invitationAction, setInvitationAction] = useState(null);
   const can = (permission) =>
     permissions?.permissions?.includes(permission) || false;
@@ -178,6 +180,7 @@ function App() {
     setRoleMember(null);
     setOrgAction(null);
     setAssignmentOpen(false);
+    setPolicyHistoryRole(null);
     setInvitationAction(null);
     setData(null);
     setError(null);
@@ -350,6 +353,7 @@ function App() {
   function navigate(target) {
     setOrgAction(null);
     setAssignmentOpen(false);
+    setPolicyHistoryRole(null);
     setInvitationAction(null);
     setTab(target);
     setError(null);
@@ -839,6 +843,7 @@ function App() {
                   onChanged={({ invalidates, message }) => {
                     setOrgAction(null);
                     setAssignmentOpen(false);
+                    setPolicyHistoryRole(null);
                     setInvitationAction(null);
                     setNotice(message);
                     if (invalidates) {
@@ -962,6 +967,7 @@ function App() {
                   clearError={(e) => setError(e || null)}
                   initialMember={roleMember}
                   onFailure={fail}
+                  onHistory={(role) => setPolicyHistoryRole(role)}
                   onConsumed={() => setRoleMember(null)}
                 />
               )}
@@ -987,6 +993,21 @@ function App() {
                           ) : (
                             <ID value={row.target_id} />
                           )}
+                          {can("roles.manage") &&
+                            [
+                              "role.created",
+                              "role.updated",
+                              "role.deleted",
+                            ].includes(row.action) && (
+                              <button
+                                className="text-button"
+                                onClick={() =>
+                                  setPolicyHistoryRole(row.target_id)
+                                }
+                              >
+                                查看角色策略历史
+                              </button>
+                            )}
                         </td>
                         <td>{date(row.occurred_at)}</td>
                       </>
@@ -1133,10 +1154,26 @@ function App() {
             onFailure={fail}
             onChanged={() => {
               setAssignmentOpen(false);
+              setPolicyHistoryRole(null);
               setData(null);
               setAuthNeeded(true);
               setNotice("组织归属已更新，请重新确认空间授权。");
             }}
+          />
+        )}
+      {policyHistoryRole &&
+        me &&
+        tenant &&
+        !authNeeded &&
+        can("roles.manage") && (
+          <RolePolicyHistory
+            key={context + me.tenant_id + policyHistoryRole + revision}
+            context={context}
+            csrf={csrf.current}
+            tenant={me.tenant_id}
+            role={policyHistoryRole}
+            onClose={() => setPolicyHistoryRole(null)}
+            onFailure={fail}
           />
         )}
       {modal && !secret && (

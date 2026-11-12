@@ -58,6 +58,7 @@ export default function RoleManagement({
   error,
   clearError,
   onFailure,
+  onHistory,
   initialMember,
   onConsumed,
 }) {
@@ -399,6 +400,13 @@ export default function RoleManagement({
                 <td>
                   {!role.built_in && (
                     <div className="actions">
+                      <button
+                        className="text-button"
+                        disabled={busy || loading}
+                        onClick={() => onHistory(role.id)}
+                      >
+                        查看策略历史
+                      </button>
                       <button
                         className="text-button"
                         onClick={() => {

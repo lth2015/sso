@@ -106,3 +106,7 @@ User/BFF 新增只读 audit-exports 资源，管理与机器来源分别以独�
 ## 组织关联目录 0.21.0
 
 独立关联弹窗复用 members/organizations 的 25 项分页；两类投影分别校验 authz/org ETag，写入使用当前成员读取的 authz 版本，主库授权流程不变。既有角色成员投影补强字符串 ID，复用于关联目录。取消/卸载/上下文保护与确认/同步单发约束位于组件内，核心/API/迁移不变，见 organization-assignment.md / ADR 0023。
+
+## 角色策略历史 0.22.0
+
+自定义角色策略写入在原 tenant 锁/owner/MFA/ETag 事务中同步写规范化前后规则，绑定同一 audit/outbox event 与全局提交版本；失败全部回滚、no-op 不捕获。migration 011 仅新增表，保留原迁移/数据。读取使用独立 owner-only 固定投影，快照与审计的 tenant/role/target 同时约束，历史 ID 不依赖当前 roles 行，删除/code 重用不串接。旧审计导出/SDK 投影保持，见 role-policy-history.md / ADR 0024。

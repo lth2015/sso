@@ -67,6 +67,28 @@ func verifyApplicationPrimaryChecks(t *testing.T, db *sql.DB, repo store.Store, 
 			t.Error("application MFA fixture restoration failed")
 		}
 	}()
+	// Role writes do not trust a caller-controlled Recent flag either. Read-only
+	// policy history remains available to a current owner with older MFA.
+	roles, roleVersion, roleErr := repo.ForAuthorization(a).APIRoles(ctx, 1, store.ID{})
+	if roleErr != nil || len(roles) != 1 {
+		t.Fatal("role MFA fixture unavailable")
+	}
+	roleID, roleErr := store.ParseID(roles[0].ID)
+	if roleErr != nil {
+		t.Fatal("role MFA fixture ID invalid")
+	}
+	if _, e := repo.ForAuthorization(a).APIRolePolicyHistory(ctx, roleID, 1, nil); e != nil {
+		t.Fatal("history read incorrectly required fresh MFA")
+	}
+	if _, e := repo.ForAuthorization(a).APICreateRole(ctx, "aged_policy", nil, roleVersion); !errors.Is(e, store.ErrStepUp) {
+		t.Fatal("role creation trusted caller Recent flag")
+	}
+	if e := repo.ForAuthorization(a).APIReplaceRole(ctx, roleID, nil, roleVersion); !errors.Is(e, store.ErrStepUp) {
+		t.Fatal("role replacement trusted caller Recent flag")
+	}
+	if e := repo.ForAuthorization(a).APIDeleteRole(ctx, roleID, roleVersion); !errors.Is(e, store.ErrStepUp) {
+		t.Fatal("role deletion trusted caller Recent flag")
+	}
 	// The new organization writers must enforce MFA in their own transaction,
 	// even when a trusted internal caller did not request Recent checks.
 	var root store.ID

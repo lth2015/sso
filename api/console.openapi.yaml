@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Identity Console Same-Origin BFF
-  version: 0.21.0
+  version: 0.22.0
   description: Browser cookie+context+CSRF boundary. Proxy paths are restricted to
     the public platform contract and one fixed API destination; caller Authorization
     is rejected. OAuth tokens and verifier remain encrypted server-side. Every tab
@@ -2996,6 +2996,66 @@ paths:
           $ref: '#/components/responses/Problem'
         '503':
           $ref: '#/components/responses/Problem'
+  /bff/v1/tenants/{tenant}/roles/{role}/policy-history:
+    get:
+      operationId: consoleListRolePolicyHistory
+      summary: Read captured custom-role policy changes
+      description: Current reserved owner/roles.manage and platform:read required;
+        audit.read delegation is insufficient. No additional recent MFA for reads.
+        Captured create/update/delete before/after rules, code, membership actor and
+        committed authorization version share the original audit/outbox transaction;
+        no-op/refused/rolled-back writes do not create history. Deleted roles remain
+        addressable by their original ID; reusing code creates separate history. Current
+        roles without captured records return an empty page, unknown role/history
+        404. after must be a real event from the same tenant and role, including after
+        deletion; unknown/foreign cursor 404. Strict limit/after only; GET body is
+        rejected. No email, authentication material or arbitrary payload. No write
+        ETag. Capture starts with this implementation, no inferred backfill, complete
+        archive, cross-page snapshot or tamper-proof/signature claim. Frozen audit
+        batch v1 is unchanged.
+      tags:
+      - Tenant management
+      security:
+      - ConsoleCookie: []
+      parameters:
+      - $ref: '#/components/parameters/TenantID'
+      - $ref: '#/components/parameters/roleID'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/After'
+      - $ref: '#/components/parameters/Context'
+      responses:
+        '200':
+          description: Read captured custom-role policy changes
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RolePolicyHistoryPage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+      x-authorization: reserved_owner:roles.manage
   /bff/v1/tenants/{tenant}/roles:
     get:
       operationId: consoleListRoles
@@ -4227,6 +4287,81 @@ components:
         authz_version:
           type: integer
           minimum: 1
+    RolePolicyHistoryEntry:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - actor_membership_id
+      - role_code
+      - action
+      - occurred_at
+      - authz_version
+      - before
+      - after
+      properties:
+        id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        actor_membership_id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        role_code:
+          type: string
+          pattern: ^[a-z][a-z0-9_-]{0,62}$
+          not:
+            const: owner
+        action:
+          enum:
+          - role.created
+          - role.updated
+          - role.deleted
+        occurred_at:
+          type: string
+          format: date-time
+        authz_version:
+          type: integer
+          minimum: 1
+        before:
+          type: array
+          maxItems: 12
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/RolePolicy'
+        after:
+          type: array
+          maxItems: 12
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/RolePolicy'
+    RolePolicyHistoryPage:
+      type: object
+      additionalProperties: false
+      required:
+      - format
+      - tenant_id
+      - role_id
+      - items
+      - next_cursor
+      properties:
+        format:
+          const: sso.role.policy-history.v1
+        tenant_id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        role_id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/RolePolicyHistoryEntry'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          pattern: ^[a-f0-9]{32}$
     MemberRoles:
       type: object
       additionalProperties: false

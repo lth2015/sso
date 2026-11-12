@@ -233,7 +233,8 @@ func (s TenantStore) APIRoles(ctx context.Context, limit int, after ID) (items [
 	})
 	return
 }
-func (s TenantStore) roleWrite(ctx context.Context, expected int64, run func(*sql.Tx) (ID, string, bool, error)) error {
+func (s TenantStore) roleWrite(ctx context.Context, expected int64, run func(*sql.Tx) (ID, string, bool, error), history *rolePolicyChange) error {
+	s = s.withRecentMFA()
 	return s.publicRead(ctx, RoleManagement, func(tx *sql.Tx, av, ov int64) error {
 		if av != expected {
 			return ErrConflict
@@ -248,6 +249,13 @@ func (s TenantStore) roleWrite(ctx context.Context, expected int64, run func(*sq
 		if _, err = tx.ExecContext(ctx, `UPDATE tenants SET authz_version=authz_version+1 WHERE id=?`, s.tenant); err != nil {
 			return err
 		}
+		policyAction := action == "role.created" || action == "role.updated" || action == "role.deleted"
+		if policyAction != (history != nil) {
+			return ErrPolicyHistoryUnavailable
+		}
+		if history != nil {
+			return s.recordRolePolicyChange(ctx, tx, id, action, av+1, *history)
+		}
 		return record(ctx, tx, s.tenant, s.actor, action, id, av+1)
 	})
 }
@@ -255,13 +263,15 @@ func (s TenantStore) APICreateRole(ctx context.Context, code string, policies []
 	if !roleCodePattern.MatchString(code) || code == "owner" {
 		return id, ErrInvalid
 	}
-	if err = validatePolicies(policies); err != nil {
+	policies, err = canonicalRolePolicies(policies)
+	if err != nil {
 		return id, err
 	}
 	id, err = NewID()
 	if err != nil {
 		return id, err
 	}
+	history := rolePolicyChange{Code: code, Before: []RolePolicy{}, After: policies}
 	err = s.roleWrite(ctx, expected, func(tx *sql.Tx) (ID, string, bool, error) {
 		var count int
 		if e := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM roles WHERE tenant_id=?`, s.tenant).Scan(&count); e != nil {
@@ -277,7 +287,7 @@ func (s TenantStore) APICreateRole(ctx context.Context, code string, policies []
 			return id, "", false, e
 		}
 		return id, "role.created", true, nil
-	})
+	}, &history)
 	return
 }
 func (s TenantStore) writePolicies(ctx context.Context, tx *sql.Tx, id ID, policies []RolePolicy) error {
@@ -292,6 +302,7 @@ func (s TenantStore) APIReplaceRole(ctx context.Context, id ID, policies []RoleP
 	if err := validatePolicies(policies); err != nil {
 		return err
 	}
+	var history rolePolicyChange
 	return s.roleWrite(ctx, expected, func(tx *sql.Tx) (ID, string, bool, error) {
 		current, err := s.role(ctx, tx, id)
 		if err != nil {
@@ -318,16 +329,18 @@ func (s TenantStore) APIReplaceRole(ctx context.Context, id ID, policies []RoleP
 		if equal {
 			return id, "", false, nil
 		}
+		history = rolePolicyChange{Code: current.Code, Before: current.Policies, After: wanted}
 		if _, err = tx.ExecContext(ctx, `DELETE FROM role_policies WHERE tenant_id=? AND role_id=?`, s.tenant, id); err != nil {
 			return id, "", false, err
 		}
-		if err = s.writePolicies(ctx, tx, id, policies); err != nil {
+		if err = s.writePolicies(ctx, tx, id, wanted); err != nil {
 			return id, "", false, err
 		}
 		return id, "role.updated", true, nil
-	})
+	}, &history)
 }
 func (s TenantStore) APIDeleteRole(ctx context.Context, id ID, expected int64) error {
+	var history rolePolicyChange
 	return s.roleWrite(ctx, expected, func(tx *sql.Tx) (ID, string, bool, error) {
 		role, err := s.role(ctx, tx, id)
 		if err != nil {
@@ -339,6 +352,7 @@ func (s TenantStore) APIDeleteRole(ctx context.Context, id ID, expected int64) e
 		if role.BindingCount > 0 {
 			return id, "", false, ErrRoleInUse
 		}
+		history = rolePolicyChange{Code: role.Code, Before: role.Policies, After: []RolePolicy{}}
 		if _, err = tx.ExecContext(ctx, `DELETE FROM role_policies WHERE tenant_id=? AND role_id=?`, s.tenant, id); err != nil {
 			return id, "", false, err
 		}
@@ -346,7 +360,7 @@ func (s TenantStore) APIDeleteRole(ctx context.Context, id ID, expected int64) e
 			return id, "", false, err
 		}
 		return id, "role.deleted", true, nil
-	})
+	}, &history)
 }
 func (s TenantStore) APIMemberRoles(ctx context.Context, member ID) (items []RoleSummary, version int64, err error) {
 	items = []RoleSummary{}
@@ -444,5 +458,5 @@ func (s TenantStore) APIBindRole(ctx context.Context, member, roleID ID, expecte
 		}
 		_, err = tx.ExecContext(ctx, `INSERT INTO role_binding_changes(id,tenant_id,membership_id,role_id,role_code,operation) VALUES(?,?,?,?,?,?)`, event, s.tenant, member, roleID, role.Code, operation)
 		return event, action, true, err
-	})
+	}, nil)
 }

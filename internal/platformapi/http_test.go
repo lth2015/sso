@@ -89,6 +89,9 @@ func TestAPIRevocationBetweenAuthenticationAndWrite(t *testing.T) {
 	if _, _, err = repo.ForAuthorization(a).APIOrganizationMembers(context.Background(), root, 2, store.ID{}); !errors.Is(err, store.ErrDenied) {
 		t.Fatal("direct members accepted revoked authority")
 	}
+	if _, err = repo.ForAuthorization(a).APIRolePolicyHistory(context.Background(), root, 1, nil); !errors.Is(err, store.ErrDenied) {
+		t.Fatal("history read accepted revoked authority")
+	}
 	// Global writes must also recheck authority, not just owner-scoped methods.
 	if _, err = repo.APIBootstrap(context.Background(), a, "not-created", "must-not-exist"); !errors.Is(err, store.ErrDenied) {
 		t.Fatal("global mutation accepted revoked authority")

@@ -54,7 +54,7 @@ async function read(page, operation, code = 200) {
     await p.getByLabel("选择 API", { exact: true }).waitFor();
     assert.equal(
       await p.getByLabel("选择 API", { exact: true }).locator("option").count(),
-      59,
+      60,
     );
     await choose(p, "createMachineCredential");
     await p
@@ -72,6 +72,21 @@ async function read(page, operation, code = 200) {
         me.tenant_id,
       ),
     );
+    phase = "real-owner-policy-history-through-playground";
+    const historyOwnerRole = (
+      await s.bff(p, "/v1/tenants/" + me.tenant_id + "/roles")
+    ).body.items.find((r) => r.built_in).id;
+    await choose(p, "listRolePolicyHistory");
+    await p.getByLabel("role", { exact: true }).fill(historyOwnerRole);
+    await p.getByRole("button", { name: "发送读取请求", exact: true }).click();
+    await status(p, 200);
+    const historyPage = JSON.parse(
+      await p.getByTestId("playground-response").textContent(),
+    );
+    assert.equal(historyPage.format, "sso.role.policy-history.v1");
+    assert.equal(historyPage.tenant_id, me.tenant_id);
+    assert.equal(historyPage.role_id, historyOwnerRole);
+    assert.deepEqual(historyPage.items, []);
     phase = "real-audit-export-query-and-default";
     await read(p, "exportAuditBatch");
     const exported = JSON.parse(
@@ -271,7 +286,7 @@ async function read(page, operation, code = 200) {
   }
   if (success)
     console.log(
-      "Playground acceptance passed: 59 management contracts (58 executable; one-time SK uses dedicated UI), real reads/writes, explicit confirmation, one send per action, ETag/412, member denial, MFA, redaction, escaping, navigation reset and desktop/mobile",
+      "Playground acceptance passed: 60 management contracts (59 executable; one-time SK uses dedicated UI), real reads/writes, explicit confirmation, one send per action, ETag/412, member denial, MFA, redaction, escaping, navigation reset and desktop/mobile",
     );
 })().catch((e) => {
   console.error(

@@ -1,6 +1,6 @@
 # 完整 API 参考
 
-OpenAPI 0.21.0；公共 Bearer API 共 59 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
+OpenAPI 0.22.0；公共 Bearer API 共 60 个业务操作。此文件由 OpenAPI 生成，修改合同后运行 `scripts/docs build`。
 
 真实交互入口见 [Playground 手册](playground.md)；外部接入见 [公共 API 手册](runbooks/public-api.md)。JSON/YAML 合同见 [OpenAPI](../api/openapi.yaml)。
 
@@ -69,6 +69,7 @@ OpenAPI 0.21.0；公共 Bearer API 共 59 个业务操作。此文件由 OpenAPI
 | POST | `/v1/tenants/{tenant}/roles` | `createRole` |
 | PUT | `/v1/tenants/{tenant}/roles/{role}` | `replaceRole` |
 | DELETE | `/v1/tenants/{tenant}/roles/{role}` | `deleteRole` |
+| GET | `/v1/tenants/{tenant}/roles/{role}/policy-history` | `listRolePolicyHistory` |
 
 ## POST /v1/invitations/accept
 
@@ -7607,6 +7608,230 @@ HTTP 204
       "description": "Server-generated request correlation ID.",
       "schema": {
         "type": "string"
+      }
+    }
+  }
+}
+```
+
+错误状态：400、401、403、404、409、412、413、415、428、429、503。错误 body 使用下文公共 Problem schema。
+
+
+## GET /v1/tenants/{tenant}/roles/{role}/policy-history
+
+Read captured custom-role policy changes
+
+Current reserved owner/roles.manage and platform:read required; audit.read delegation is insufficient. No additional recent MFA for reads. Captured create/update/delete before/after rules, code, membership actor and committed authorization version share the original audit/outbox transaction; no-op/refused/rolled-back writes do not create history. Deleted roles remain addressable by their original ID; reusing code creates separate history. Current roles without captured records return an empty page, unknown role/history 404. after must be a real event from the same tenant and role, including after deletion; unknown/foreign cursor 404. Strict limit/after only; GET body is rejected. No email, authentication material or arbitrary payload. No write ETag. Capture starts with this implementation, no inferred backfill, complete archive, cross-page snapshot or tamper-proof/signature claim. Frozen audit batch v1 is unchanged.
+
+OAuth scope：`platform:read`。权限：`reserved_owner:roles.manage`。
+
+### 参数
+
+```json
+[
+  {
+    "in": "path",
+    "name": "tenant",
+    "required": true,
+    "description": "Must equal the access token tenant; another tenant returns 404, even if the user also belongs to it.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "path",
+    "name": "role",
+    "required": true,
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  },
+  {
+    "in": "query",
+    "name": "limit",
+    "description": "Bounded keyset page size.",
+    "schema": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 50
+    }
+  },
+  {
+    "in": "query",
+    "name": "after",
+    "description": "Previous next_cursor; ascending UUID keyset, not a snapshot or timestamp ordering guarantee.",
+    "schema": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    }
+  }
+]
+```
+
+无请求体。
+
+### 成功响应
+
+HTTP 200
+
+```json
+{
+  "description": "Read captured custom-role policy changes",
+  "headers": {
+    "X-Request-ID": {
+      "description": "Server-generated request correlation ID.",
+      "schema": {
+        "type": "string"
+      }
+    }
+  },
+  "content": {
+    "application/json": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "format",
+          "tenant_id",
+          "role_id",
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "format": {
+            "const": "sso.role.policy-history.v1"
+          },
+          "tenant_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "role_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "actor_membership_id",
+                "role_code",
+                "action",
+                "occurred_at",
+                "authz_version",
+                "before",
+                "after"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "actor_membership_id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{32}$"
+                },
+                "role_code": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,62}$",
+                  "not": {
+                    "const": "owner"
+                  }
+                },
+                "action": {
+                  "enum": [
+                    "role.created",
+                    "role.updated",
+                    "role.deleted"
+                  ]
+                },
+                "occurred_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "authz_version": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "before": {
+                  "type": "array",
+                  "maxItems": 12,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "permission",
+                      "effect"
+                    ],
+                    "properties": {
+                      "permission": {
+                        "enum": [
+                          "audit.read",
+                          "invitations.manage",
+                          "members.read",
+                          "members.write",
+                          "organizations.read",
+                          "organizations.write"
+                        ]
+                      },
+                      "effect": {
+                        "enum": [
+                          "allow",
+                          "deny"
+                        ]
+                      }
+                    }
+                  }
+                },
+                "after": {
+                  "type": "array",
+                  "maxItems": 12,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "permission",
+                      "effect"
+                    ],
+                    "properties": {
+                      "permission": {
+                        "enum": [
+                          "audit.read",
+                          "invitations.manage",
+                          "members.read",
+                          "members.write",
+                          "organizations.read",
+                          "organizations.write"
+                        ]
+                      },
+                      "effect": {
+                        "enum": [
+                          "allow",
+                          "deny"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        }
       }
     }
   }

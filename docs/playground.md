@@ -1,6 +1,6 @@
 # API Playground
 
-Playground 是登录后的真实 API 客户端。它读取与公共服务相同的 OpenAPI 0.21.0，通过控制台 BFF 展示现有 59 项 User 管理操作，除一次性 SK 创建外，其余 58 项可真实执行。它使用真实 Hydra/主库授权，不创建演示身份或伪造 token。
+Playground 是登录后的真实 API 客户端。它读取与公共服务相同的 OpenAPI 0.22.0，通过控制台 BFF 展示现有 60 项 User 管理操作，除一次性 SK 创建外，其余 59 项可真实执行。它使用真实 Hydra/主库授权，不创建演示身份或伪造 token。
 
 ## 启动与使用
 
@@ -52,3 +52,5 @@ GCP、公网域名、TLS 和部署由 SRE 负责。本地验收不代表生产�
 0.17.0 新增 `getInvitation` / `reissueInvitation`。后者先填 invitation ID，再读取资源 ETag；预览/确认后发一次，响应 token 仍隐藏。需要实际保存并转交新 proof 时使用邀请页专用对话框，关闭后不能从 GET/Playground 找回秘密。
 
 0.18.0 增加 `inspectManagedClientProtocol` / `inspectMachineCredentialProtocol`，填写对应自有资源 ID 后直接发送 GET。结果只有受控观察，不执行修复或更改本地生效状态；该操作仍要求 owner。Playground 验收实际调用新 public client 的缺失观察并确认 pending 保留。
+
+0.22.0 新增 `listRolePolicyHistory`：填写 role ID 读取已捕获的 before/after，支持 limit/after，不读取写入 ETag。仅当前所有者可用，普通 audit.read 无此权限；角色已删除仍可用原 ID，未知角色/游标 404。零记录不证明过去未改动，详见 [策略历史](role-policy-history.md)。

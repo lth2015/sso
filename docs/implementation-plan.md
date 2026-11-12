@@ -80,3 +80,7 @@ Go 服务端验证器、独立回环身份服务及私有 stdin 输入客户端�
 ## 2026-11-11：组织关联分页 0.21.0
 
 组织关联独立加载成员与组织、明确确认、普通委托流程和未知写入结果核对已实现，复用原 59 项 User API/58 项 Playground；不改变授权/迁移或赋予角色。真实专项与文档见 organization-assignment.md / validation.md。创建/移动上级选择、全文搜索和跨页快照仍为后续。
+
+## 2026-11-11：自定义角色策略历史 0.22.0
+
+新增 owner-only 规则前后快照和读取/UI，User 合同 60 项、Playground 可执行 59 项。migration 011 不改原迁移/数据，不推测回填；变更/audit/outbox/快照共事务，旧导出/SDK 兼容。记录仅自启用采集后捕获，未交付签名/WORM/长期全档、正式消费者或 scoped RBAC。见 role-policy-history.md / ADR 0024 / validation.md。

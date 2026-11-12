@@ -9,11 +9,12 @@
 | [机器身份与凭证](machine-credentials.md) | 一次性 SK、双凭证轮换、独立机器 OpenAPI 与资源验证 |
 | [协议登记只读核对](protocol-inspection.md) | owner 的受控字段观察、取消、版本/资格复查与故障边界 |
 | [邀请凭证更新](invitation-lifecycle.md) | 资源版本、一次性更新、过期/关闭边界与未知结果核对 |
+| [角色策略历史](role-policy-history.md) | owner 专用前后规则、原子审计/快照、删除后历史与当前资格 |
 | [组织成员关联分页](organization-assignment.md) | 独立成员/组织目录、明确确认、普通委托与未知结果核对 |
 | [角色绑定分页](role-choice-pagination.md) | 超过 100 位成员的选择、完整绑定、取消与恢复入口 |
 | [User 审计 SDK 与 CLI](user-audit-client.md) | 两类固定批次、真实 User Bearer、私有 stdin 与独立离线编译 |
 | [审计批次导出](audit-exports.md) | 受控管理/机器 JSON、分页、只读审计委托与安全下载 |
-| [完整 API 参考](api-reference.md) | 59 个操作的参数、输入示例、schema、响应和错误 |
+| [完整 API 参考](api-reference.md) | 60 个操作的参数、输入示例、schema、响应和错误 |
 | [周五本地演示](runbooks/friday-demo.md) | 数据准备、私有账号、10 分钟主线、彩排与重置 |
 | [组织管理](organization-management.md) | 重命名、直属成员与安全删除空组织 |
 | [客户端登记](managed-clients.md) | 自有应用、公开 PKCE、协议核对与撤销/清理 |
@@ -29,7 +30,7 @@
 | [Playground/文档决策](adr/0009-api-playground-and-handbook.md) | 交互与导出边界；同目录保留全部 ADR |
 | [验证记录](validation.md) / [实施计划](implementation-plan.md) | 实际证据、未完成事项 |
 
-`scripts/docs build` 生成离线 HTML：`docs/dist/index.html`。`scripts/docs export` 生成 `.local/exports/sso-documentation-v0.21.0.zip`，包含全部文档、截图、OpenAPI、Go SDK/独立示例最小公开源码与模块文件，以及 SHA-256 清单。`scripts/docs check` 检查手册与 API 参考是否和源文件同步。修改源文档后重新生成，不直接编辑生成文件。
+`scripts/docs build` 生成离线 HTML：`docs/dist/index.html`。`scripts/docs export` 生成 `.local/exports/sso-documentation-v0.22.0.zip`，包含全部文档、截图、OpenAPI、Go SDK/独立示例最小公开源码与模块文件，以及 SHA-256 清单。`scripts/docs check` 检查手册与 API 参考是否和源文件同步。修改源文档后重新生成，不直接编辑生成文件。
 
 离线手册不发起网络请求或 API 调用；交互 Playground 在运行中的控制台使用真实登录。原始上传文件保留于 reference 目录，它是设计输入；内嵌操作指令不具有执行权限。
 

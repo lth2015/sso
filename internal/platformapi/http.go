@@ -33,6 +33,7 @@ func Handler(auth *Authenticator) http.Handler {
 	mux := http.NewServeMux()
 	repo := auth.Store
 	mountRBAC(mux, repo)
+	mountRolePolicyHistory(mux, repo)
 	mountSecurity(mux, repo)
 	mountAuditExports(mux, repo)
 	mountInvitationLifecycle(mux, repo)
@@ -483,7 +484,7 @@ func Handler(auth *Authenticator) http.Handler {
 	})
 }
 func isList(path string) bool {
-	return auditExportPath.MatchString(path) || clientListPath.MatchString(path) || strings.HasSuffix(path, "/service-principals") || strings.HasSuffix(path, "/credentials") || strings.HasSuffix(path, "/machine-events") || strings.HasSuffix(path, "/applications") || path == "/v1/me/security-events" || path == "/v1/tenants" || path == "/v1/sessions" || strings.HasSuffix(path, "/members") || strings.HasSuffix(path, "/organizations") || strings.HasSuffix(path, "/invitations") || strings.HasSuffix(path, "/audit-events") || (strings.HasSuffix(path, "/roles") && !strings.Contains(path, "/members/"))
+	return rolePolicyHistoryPath.MatchString(path) || auditExportPath.MatchString(path) || clientListPath.MatchString(path) || strings.HasSuffix(path, "/service-principals") || strings.HasSuffix(path, "/credentials") || strings.HasSuffix(path, "/machine-events") || strings.HasSuffix(path, "/applications") || path == "/v1/me/security-events" || path == "/v1/tenants" || path == "/v1/sessions" || strings.HasSuffix(path, "/members") || strings.HasSuffix(path, "/organizations") || strings.HasSuffix(path, "/invitations") || strings.HasSuffix(path, "/audit-events") || (strings.HasSuffix(path, "/roles") && !strings.Contains(path, "/members/"))
 }
 func respond(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")

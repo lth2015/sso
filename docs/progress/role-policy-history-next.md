@@ -1,6 +1,6 @@
 # 角色策略历史：实施约束
 
-基于已推送 0.21.0 / 8cec1fb，补齐自定义角色策略 create/update/delete 的事务前后快照。此文件为实施前约束，未验收前不表示功能已交付；当前 API 仍 59 项。
+基于已推送 0.21.0 / 8cec1fb，补齐自定义角色策略 create/update/delete 的事务前后快照。此处保留实施前约束；实际实现见 ../role-policy-history.md，证据见 ../validation.md。0.22 合同增加为 60 项，完整交付以功能提交为准。
 
 - 新增独立 role-policy-history 读取，要求真实 User platform:read、当前有效 owner/roles.manage，主库每次复查。audit.read 委托不获得角色规则；不增加可委托权限。旧 MFA 可读有效元数据，写入继续需要最近 300 秒 MFA 和精确 authz ETag。
 - 自定义角色创建、真正修改、删除在同一事务捕获 role code、before/after 规范化策略、提交后 authz_version，并与同一 audit/outbox event 关联。无操作、拒绝、陈旧版本、冲突和回滚均不新增快照。绑定/解绑沿用现有独立绑定历史，不混成策略变化。

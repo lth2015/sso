@@ -106,3 +106,7 @@ User scope/audit.read、会话/grant/角色与 tenant 始终由 API 主库复查
 ## 组织关联选择边界 0.21.0
 
 目录页是受控选择元数据，authz 与 org ETag 分开且不能互作写入前置条件；最终 PUT 使用成员页 authz ETag，由主库复查有效目标、organizations.write 与近期 MFA。字段/根/字符串 ID/游标/大小/版本异常、依赖故障清除选择；401 重新授权。用户变更目标/新页后需重新确认，提交同步单发、不能关闭；已提交丢包不自动重放，先核对实际直属成员/审计。普通委托不取得角色权限，组织归属不授予角色。见 organization-assignment.md。
+
+## 策略历史与隐私 0.22.0
+
+完整角色规则沿用当前 owner/roles.manage 边界，不因 audit.read 委托而开放；每次主库核验当前身份/会话/grant/空间/owner，旧 MFA 可读。角色写入在存储层强制近期 MFA，快照/规则/版本/audit/outbox 同事务，失败不留下部分变化。输出只有静态策略/历史 code/membership actor/time/version，拒绝未知私密字段，不查邮箱；现有冻结审计批次不扩字段。新增表只关联原事件并按历史 ID 保留，双 namespace/target 查询防串空间，读取失败无部分页。没有签名/WORM或DB管理员防篡改承诺，见 role-policy-history.md。

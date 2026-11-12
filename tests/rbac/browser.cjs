@@ -468,7 +468,23 @@ async function reauthOwner(owner, tenant) {
       path: require("node:path").join(support.root, "docs/ui/rbac-roles.png"),
       fullPage: true,
     });
-    // Verify the eight new operations all produced real contract-valid responses.
+    phase = "owner-policy-history-boundary";
+    const policyHistory = await call(
+      p,
+      "GET",
+      base + "/roles/" + choice.id + "/policy-history",
+    );
+    assert.equal(policyHistory.body.format, "sso.role.policy-history.v1");
+    assert.equal(policyHistory.body.role_id, choice.id);
+    assert.equal(policyHistory.body.items.length, 1);
+    await call(
+      guest.page,
+      "GET",
+      base + "/roles/" + choice.id + "/policy-history",
+      undefined,
+      403,
+    );
+    // Verify all nine role/permission operations produced actual valid responses.
     const spec = JSON.parse(
       fs.readFileSync(
         require("node:path").join(support.root, "api/openapi.json"),
@@ -489,7 +505,7 @@ async function reauthOwner(owner, tenant) {
       console.log(
         "RBAC acceptance passed: " +
           checks +
-          " contract-validated real responses; eight new operations, delegated read/write, deny precedence, revocation, role recovery, owner transfer, last-owner protection and React role management",
+          " contract-validated real responses; nine role/permission operations, delegated read/write, deny precedence, revocation, role recovery, owner transfer, last-owner protection and React role management",
       );
   }
 })().catch((error) => {
