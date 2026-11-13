@@ -1,0 +1,10 @@
+**
+!.local/
+!.local/console-bff
+!.local/platform-api
+!.local/identity-api
+!.local/event-worker
+!deploy/
+!deploy/images/
+!deploy/images/Dockerfile
+!deploy/images/Dockerfile.dockerignore

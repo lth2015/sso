@@ -1,87 +1,119 @@
-name: Publish container images
+name: Build and publish service images
 
 on:
+  pull_request:
+    branches: [master]
   push:
-    branches:
-      - master
+    branches: [master]
   workflow_dispatch:
 
 permissions:
   contents: read
-  packages: write
 
 concurrency:
-  group: publish-images-master
-  cancel-in-progress: false
+  group: service-images-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  publish:
-    if: github.ref == 'refs/heads/master'
+  build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: web/console/package-lock.json
-
-      - name: Build console assets
+      - name: Build embedded React console
         run: |
-          npm ci --prefix web/console --no-audit --no-fund
-          npm run --prefix web/console build
-
+          bash scripts/build-console
+          test -s internal/consoleui/static/index.html
+          test -d internal/consoleui/static/assets
       - name: Test Go packages
         run: go test ./...
-
-      - name: Build Linux binaries
+      - name: Build Linux service binaries
+        env:
+          CGO_ENABLED: '0'
+          GOOS: linux
+          GOARCH: amd64
         run: |
           mkdir -p .local
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o .local/identity-api ./cmd/identity-api
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o .local/event-worker ./cmd/event-worker
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o .local/platform-api ./cmd/platform-api
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o .local/token-policy-hook ./cmd/token-policy-hook
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o .local/demo-app ./cmd/demo-app
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o .local/demo-admin ./cmd/demo-admin
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o .local/protocol-public ./cmd/protocol-public
+          go build -trimpath -ldflags='-s -w' -o .local/console-bff ./cmd/demo-app
+          go build -trimpath -ldflags='-s -w' -o .local/platform-api ./cmd/platform-api
+          go build -trimpath -ldflags='-s -w' -o .local/identity-api ./cmd/identity-api
+          go build -trimpath -ldflags='-s -w' -o .local/event-worker ./cmd/event-worker
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-amd64-service-binaries
+          path: |
+            .local/console-bff
+            .local/platform-api
+            .local/identity-api
+            .local/event-worker
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
+  images:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [console-bff, platform-api, identity-api, event-worker]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-amd64-service-binaries
+          path: .local
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push images
+      - name: Image name
+        id: image
         env:
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_SHA: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+          SERVICE: ${{ matrix.service }}
+        run: echo "name=ghcr.io/${REPOSITORY,,}-${SERVICE}" >> "$GITHUB_OUTPUT"
+      - name: Build and optionally publish
+        id: container
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/images/Dockerfile
+          build-args: BINARY=${{ matrix.service }}
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/master' }}
+          tags: |
+            ${{ steps.image.outputs.name }}:${{ github.sha }}
+            ${{ steps.image.outputs.name }}:master
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.title=${{ matrix.service }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+          provenance: mode=min
+          sbom: true
+      - name: Record published digest
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          DIGEST: ${{ steps.container.outputs.digest }}
         run: |
-          while IFS='|' read -r name dockerfile; do
-            image="ghcr.io/${GITHUB_REPOSITORY}-${name}"
-            docker buildx build \
-              --platform linux/amd64 \
-              --file "$dockerfile" \
-              --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
-              --tag "${image}:${GITHUB_SHA}" \
-              --tag "${image}:master" \
-              --push \
-              .
-          done <<'IMAGES'
-          identity-api|deploy/local/Dockerfile.accounts
-          platform-api|deploy/local/Dockerfile.api
-          token-policy-hook|deploy/local/Dockerfile.hook
-          demo|deploy/local/Dockerfile.demo
-          IMAGES
+          printf '### %s\n\n`%s@%s`\n' '${{ matrix.service }}' "$IMAGE" "$DIGEST" >> "$GITHUB_STEP_SUMMARY"
