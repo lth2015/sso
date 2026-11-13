@@ -22,7 +22,7 @@ import (
 
 func TestDemoRejectsUnknownIssuerDestination(t *testing.T) {
 	r, _ := http.NewRequest("GET", "https://evil.invalid/.well-known/jwks.json", nil)
-	if _, err := (Bridge{http.DefaultTransport}).RoundTrip(r); err == nil {
+	if _, err := (Bridge{Base: http.DefaultTransport}).RoundTrip(r); err == nil {
 		t.Fatal("untrusted issuer destination allowed")
 	}
 }

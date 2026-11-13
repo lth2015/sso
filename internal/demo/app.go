@@ -27,16 +27,25 @@ const Audience = "https://api.demo.invalid"
 const sessionCookie = "local_app_session"
 const browserCookie = "local_app_browser"
 
-type Bridge struct{ Base http.RoundTripper }
+type Bridge struct {
+	Base             http.RoundTripper
+	Issuer, Upstream string
+}
 
 func (b Bridge) RoundTrip(request *http.Request) (*http.Response, error) {
-	if request.URL.Scheme != "http" || request.URL.Host != "auth.localhost:4464" {
+	issuer, upstream := "http://auth.localhost:4464/", "http://protocol-public:4444"
+	if b.Issuer != "" {
+		issuer, upstream = b.Issuer, b.Upstream
+	}
+	expected, e1 := url.Parse(issuer)
+	target, e2 := url.Parse(upstream)
+	if e1 != nil || e2 != nil || expected.Host == "" || target.Host == "" || request.URL.Scheme != expected.Scheme || request.URL.Host != expected.Host || request.URL.User != nil || request.URL.RawPath != "" {
 		return nil, errors.New("untrusted issuer destination")
 	}
 	clone := request.Clone(request.Context())
 	u := *request.URL
 	clone.URL = &u
-	clone.URL.Host = "protocol-public:4444"
+	clone.URL.Scheme, clone.URL.Host = target.Scheme, target.Host
 	clone.Host = ""
 	return b.Base.RoundTrip(clone)
 }
@@ -49,27 +58,48 @@ type App struct {
 	OAuth                oauth2.Config
 	HTTP                 *http.Client
 	Audience, ReadScope  string
+	Console              bool
+	PlatformURL          string
 }
 
-func New(ctx context.Context, repo store.Store, client, secret string, key []byte) (*App, error) {
+func New(ctx context.Context, repo store.Store, client, secret string, key []byte, runtime ...RuntimeConfig) (*App, error) {
 	origin := ""
 	name := ""
 	audience, readScope := Audience, "demo:read"
 	scopes := []string{"openid", "offline_access", "demo:read"}
-	switch client {
-	case "local-demo-a":
-		origin = "http://app-a.localhost:3001"
-		name = "创作工作台"
-	case "local-demo-b":
-		origin = "http://app-b.localhost:3002"
-		name = "研究工作台"
-	case "local-console":
-		origin = "http://console.localhost:3003"
-		name = "身份平台控制台"
+	production := len(runtime) > 0
+	issuer := hydra.Issuer
+	bridge := Bridge{Base: &http.Transport{Proxy: nil}}
+	platformURL := ""
+	if production {
+		cfg := runtime[0]
+		if err := cfg.Validate(); err != nil {
+			return nil, err
+		}
+		if client == "" {
+			return nil, errors.New("missing OAuth client ID")
+		}
+		origin, name = strings.TrimSuffix(cfg.Origin, "/"), "身份平台控制台"
+		issuer, platformURL = cfg.Issuer, cfg.PlatformAPIURL
+		bridge.Issuer, bridge.Upstream = cfg.Issuer, cfg.HydraPublicURL
 		audience, readScope = "https://api.sso.local", "platform:read"
 		scopes = []string{"openid", "offline_access", "platform:read", "platform:write"}
-	default:
-		return nil, errors.New("unknown local app")
+	} else {
+		switch client {
+		case "local-demo-a":
+			origin = "http://app-a.localhost:3001"
+			name = "创作工作台"
+		case "local-demo-b":
+			origin = "http://app-b.localhost:3002"
+			name = "研究工作台"
+		case "local-console":
+			origin = "http://console.localhost:3003"
+			name = "身份平台控制台"
+			audience, readScope = "https://api.sso.local", "platform:read"
+			scopes = []string{"openid", "offline_access", "platform:read", "platform:write"}
+		default:
+			return nil, errors.New("unknown local app")
+		}
 	}
 	if len(key) != 32 || len(secret) < 32 {
 		return nil, errors.New("missing local app credentials")
@@ -82,14 +112,23 @@ func New(ctx context.Context, repo store.Store, client, secret string, key []byt
 	if err != nil {
 		return nil, err
 	}
-	httpClient := &http.Client{Transport: Bridge{&http.Transport{Proxy: nil}}, Timeout: 4 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	provider, err := oidc.NewProvider(oidc.ClientContext(ctx, httpClient), hydra.Issuer)
+	httpClient := &http.Client{Transport: bridge, Timeout: 4 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	provider, err := oidc.NewProvider(oidc.ClientContext(ctx, httpClient), issuer)
 	if err != nil {
 		return nil, errors.New("issuer unavailable")
 	}
 	endpoint := provider.Endpoint()
+	if production {
+		expected, _ := url.Parse(issuer)
+		for _, raw := range []string{endpoint.AuthURL, endpoint.TokenURL} {
+			u, e := url.Parse(raw)
+			if e != nil || u.Scheme != expected.Scheme || u.Host != expected.Host || u.User != nil || u.Fragment != "" {
+				return nil, errors.New("untrusted OAuth endpoint")
+			}
+		}
+	}
 	endpoint.AuthStyle = oauth2.AuthStyleInHeader
-	return &App{Store: repo, Client: client, Name: name, Origin: origin, Key: aead, Provider: provider, OAuth: oauth2.Config{ClientID: client, ClientSecret: secret, RedirectURL: origin + "/oidc/callback", Scopes: scopes, Endpoint: endpoint}, HTTP: httpClient, Audience: audience, ReadScope: readScope}, nil
+	return &App{Store: repo, Client: client, Name: name, Origin: origin, Key: aead, Provider: provider, OAuth: oauth2.Config{ClientID: client, ClientSecret: secret, RedirectURL: origin + "/oidc/callback", Scopes: scopes, Endpoint: endpoint}, HTTP: httpClient, Audience: audience, ReadScope: readScope, Console: production, PlatformURL: platformURL}, nil
 }
 func token() (string, error) {
 	b := make([]byte, 32)
@@ -110,9 +149,7 @@ func cookie(r *http.Request, name string) []byte {
 	}
 	return hash(c.Value)
 }
-func setCookie(w http.ResponseWriter, name, value string, age int) {
-	http.SetCookie(w, &http.Cookie{Name: name, Value: value, MaxAge: age, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode})
-}
+
 func (a *App) seal(value any, aad string) ([]byte, error) {
 	plain, err := json.Marshal(value)
 	if err != nil {
@@ -224,6 +261,7 @@ func (a *App) verifyID(ctx context.Context, raw, nonce string) (string, error) {
 }
 func (a *App) Handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health/live", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) })
 	var rateMu sync.Mutex
 	var start = time.Now()
 	attempts := 0
@@ -257,14 +295,14 @@ func (a *App) Handler() http.Handler {
 			return
 		}
 		verifier := oauth2.GenerateVerifier()
-		browser := cookie(r, browserCookie)
+		browser := cookie(r, a.cookieName(browserCookie))
 		if browser == nil {
 			value, err := token()
 			if err != nil {
 				fail(w, 503)
 				return
 			}
-			setCookie(w, browserCookie, value, 8*3600)
+			a.setCookie(w, browserCookie, value, 8*3600)
 			browser = hash(value)
 		}
 		payload, err := a.seal(transaction{verifier, nonce}, "state:"+a.Client+":"+state)
@@ -292,7 +330,7 @@ func (a *App) Handler() http.Handler {
 			return
 		}
 		state := q.Get("state")
-		payload, err := a.Store.ConsumeBFFTransaction(r.Context(), hash(state), cookie(r, browserCookie), a.Client)
+		payload, err := a.Store.ConsumeBFFTransaction(r.Context(), hash(state), cookie(r, a.cookieName(browserCookie)), a.Client)
 		if err != nil {
 			fail(w, 403)
 			return
@@ -344,17 +382,17 @@ func (a *App) Handler() http.Handler {
 			fail(w, 503)
 			return
 		}
-		if a.Client == "local-console" {
+		if a.isConsole() {
 			context, err := store.NewID()
 			if err != nil {
 				fail(w, 503)
 				return
 			}
 			a.limitContextCookies(w, r)
-			setCookie(w, consoleCookiePrefix+context.String(), session, 8*3600)
+			a.setCookie(w, consoleCookiePrefix+context.String(), session, 8*3600)
 			http.Redirect(w, r, "/#workspace="+context.String(), 303)
 		} else {
-			setCookie(w, sessionCookie, session, 8*3600)
+			a.setCookie(w, sessionCookie, session, 8*3600)
 			http.Redirect(w, r, "/", 303)
 		}
 	})
@@ -465,7 +503,7 @@ func (a *App) Handler() http.Handler {
 		a.clearSessionCookie(w, r)
 		w.WriteHeader(204)
 	})
-	if a.Client == "local-console" {
+	if a.isConsole() {
 		a.mountConsole(mux, load)
 		mux.Handle("GET /", consoleui.Handler())
 	} else {
@@ -477,11 +515,11 @@ func (a *App) Handler() http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
 		origin, _ := url.Parse(a.Origin)
-		if r.Host != origin.Host {
+		if r.Host != origin.Host && !(r.Method == "GET" && (r.URL.Path == "/health/ready" || r.URL.Path == "/health/live")) {
 			fail(w, 403)
 			return
 		}
-		if r.URL.RawQuery != "" && r.URL.Path != "/oidc/callback" && r.URL.Path != "/login" && !(a.Client == "local-console" && strings.HasPrefix(r.URL.Path, "/bff/v1/") && r.Method == "GET") {
+		if r.URL.RawQuery != "" && r.URL.Path != "/oidc/callback" && r.URL.Path != "/login" && !(a.isConsole() && strings.HasPrefix(r.URL.Path, "/bff/v1/") && r.Method == "GET") {
 			fail(w, 400)
 			return
 		}

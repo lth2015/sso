@@ -1,12 +1,15 @@
-// Package localruntime configures only the isolated local development processes.
+// Package localruntime configures local processes and explicit Kubernetes database connections.
 package localruntime
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"database/sql"
 	"encoding/hex"
 	"errors"
 	driver "github.com/go-sql-driver/mysql"
+	"net"
 	"os"
 	"time"
 )
@@ -29,6 +32,9 @@ func Database() (*sql.DB, error) {
 	case "":
 	default:
 		return nil, errors.New("unknown local database role")
+	}
+	if os.Getenv("SSO_MODE") == "kubernetes" {
+		return kubernetesDatabase()
 	}
 	if len(password) != 64 {
 		return nil, errors.New("missing local database credential")
@@ -64,4 +70,51 @@ func MailKey() ([]byte, error) {
 		return nil, errors.New("missing local mail encryption key")
 	}
 	return key, nil
+}
+
+// kubernetesDatabase uses explicit credentials and verified TLS, never local defaults.
+func kubernetesDatabase() (*sql.DB, error) {
+	cfg, err := kubernetesDatabaseConfig()
+	if err != nil {
+		return nil, err
+	}
+	connector, err := driver.NewConnector(cfg)
+	if err != nil {
+		return nil, errors.New("invalid database configuration")
+	}
+	db := sql.OpenDB(connector)
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(2)
+	db.SetConnMaxLifetime(5 * time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := db.PingContext(ctx); err != nil {
+		db.Close()
+		return nil, errors.New("database unavailable")
+	}
+	return db, nil
+}
+func kubernetesDatabaseConfig() (*driver.Config, error) {
+	host, port := os.Getenv("DB_HOST"), os.Getenv("DB_PORT")
+	if port == "" {
+		port = "3306"
+	}
+	user, name, password := os.Getenv("DB_USER"), os.Getenv("DB_NAME"), os.Getenv("DB_PASSWORD")
+	if host == "" || user == "" || name == "" || password == "" {
+		return nil, errors.New("missing database configuration")
+	}
+	ca, err := os.ReadFile(os.Getenv("DB_TLS_CA_FILE"))
+	if err != nil {
+		return nil, errors.New("database CA unavailable")
+	}
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(ca) {
+		return nil, errors.New("invalid database CA")
+	}
+	cfg := driver.NewConfig()
+	cfg.User, cfg.Passwd, cfg.DBName = user, password, name
+	cfg.Net, cfg.Addr, cfg.ParseTime = "tcp", net.JoinHostPort(host, port), true
+	cfg.Timeout, cfg.ReadTimeout, cfg.WriteTimeout = 2*time.Second, 5*time.Second, 5*time.Second
+	cfg.TLS = &tls.Config{RootCAs: roots, ServerName: host, MinVersion: tls.VersionTLS12}
+	return cfg, nil
 }

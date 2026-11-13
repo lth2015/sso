@@ -22,8 +22,8 @@ import (
 const consoleCookiePrefix = "local_console_session_"
 
 func (a *App) sessionCookieName(r *http.Request) (string, bool) {
-	if a.Client != "local-console" {
-		return sessionCookie, true
+	if !a.isConsole() {
+		return a.cookieName(sessionCookie), true
 	}
 	values := r.Header.Values("X-Console-Context")
 	if len(values) != 1 {
@@ -34,23 +34,23 @@ func (a *App) sessionCookieName(r *http.Request) (string, bool) {
 	if err != nil || id.String() != value {
 		return "", false
 	}
-	return consoleCookiePrefix + value, true
+	return a.consolePrefix() + value, true
 }
 func (a *App) clearSessionCookie(w http.ResponseWriter, r *http.Request) {
 	if name, ok := a.sessionCookieName(r); ok {
-		setCookie(w, name, "", -1)
+		a.setCookie(w, name, "", -1)
 	}
 }
 func (a *App) limitContextCookies(w http.ResponseWriter, r *http.Request) {
 	names := []string{}
 	for _, c := range r.Cookies() {
-		if strings.HasPrefix(c.Name, consoleCookiePrefix) {
+		if strings.HasPrefix(c.Name, a.consolePrefix()) {
 			names = append(names, c.Name)
 		}
 	}
 	sort.Strings(names)
 	for len(names) >= 20 {
-		setCookie(w, names[0], "", -1)
+		a.setCookie(w, names[0], "", -1)
 		names = names[1:]
 	}
 }
@@ -160,7 +160,7 @@ func (a *App) mountConsole(mux *http.ServeMux, load func(http.ResponseWriter, *h
 				return
 			}
 		}
-		target := "http://platform-api:8083" + path
+		target := a.platformURL() + path
 		if r.URL.RawQuery != "" {
 			target += "?" + r.URL.RawQuery
 		}
@@ -169,6 +169,8 @@ func (a *App) mountConsole(mux *http.ServeMux, load func(http.ResponseWriter, *h
 			fail(w, 400)
 			return
 		}
+		// Keep compatibility with the platform API's current explicit Host check.
+		// Network destination is the configured, fixed Service URL.
 		upstream.Host = "api.localhost:8083"
 		upstream.Header.Set("Authorization", "Bearer "+tokens.Access)
 		for _, name := range []string{"Content-Type", "If-Match"} {
