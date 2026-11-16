@@ -205,28 +205,5 @@ jobs:
           RELEASE_DIR: release
           RELEASE_SHA: ${{ github.sha }}
         run: bash scripts/deploy-qa
-      - name: Verify QA public endpoints
-        run: |
-          set -euo pipefail
-          for url in https://bff.nsstest.com/ https://sso.nsstest.com/account; do
-            code="$(curl --fail --silent --show-error --output /dev/null --write-out '%{http_code}' --retry 30 --retry-delay 10 --retry-max-time 300 --retry-all-errors --connect-timeout 10 --max-time 30 "$url")"
-            if [[ "$code" != "200" ]]; then
-              echo "::error::QA endpoint $url returned HTTP $code"
-              exit 1
-            fi
-            printf '\nVerified `%s`: HTTP %s\n' "$url" "$code" >> "$GITHUB_STEP_SUMMARY"
-          done
-          python3 - <<'PYLOGIN'
-          import http.cookiejar
-          import urllib.parse
-          import urllib.request
-          opener = urllib.request.build_opener(
-              urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
-          with opener.open('https://bff.nsstest.com/login', timeout=30) as response:
-              target = urllib.parse.urlsplit(response.url)
-              if response.status != 200 or target.hostname != 'sso.nsstest.com' or target.path != '/login':
-                  raise SystemExit('SSO login redirect verification failed')
-              if not response.read():
-                  raise SystemExit('SSO login page is empty')
-          print('Verified BFF OAuth redirect reaches the identity login page')
-          PYLOGIN
+      - name: Verify QA public endpoints and login redirect
+        run: python3 scripts/verify-qa
