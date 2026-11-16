@@ -1,0 +1,96 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "admissionregistration.k8s.io/v1",
+      "kind": "ValidatingAdmissionPolicy",
+      "metadata": {
+        "name": "sso-qa-migration-jobs"
+      },
+      "spec": {
+        "failurePolicy": "Fail",
+        "matchConstraints": {
+          "resourceRules": [
+            {
+              "apiGroups": [
+                "batch"
+              ],
+              "apiVersions": [
+                "v1"
+              ],
+              "operations": [
+                "CREATE",
+                "UPDATE"
+              ],
+              "resources": [
+                "jobs"
+              ]
+            }
+          ]
+        },
+        "matchConditions": [
+          {
+            "name": "sso-deployment-identity",
+            "expression": "request.userInfo.username == 'sso-github-qa@netstars-ai-projects-qa.iam.gserviceaccount.com'"
+          }
+        ],
+        "validations": [
+          {
+            "expression": "object.metadata.name == 'sso-schema-migrate' && object.metadata.namespace in ['nss-sso','sso-bff']",
+            "message": "Only the named QA migration job is allowed"
+          },
+          {
+            "expression": "object.spec.template.spec.containers.size() == 1 && (!has(object.spec.template.spec.initContainers) || object.spec.template.spec.initContainers.size() == 0) && (!has(object.spec.template.spec.ephemeralContainers) || object.spec.template.spec.ephemeralContainers.size() == 0)",
+            "message": "Only one migration container is allowed"
+          },
+          {
+            "expression": "object.spec.template.spec.containers[0].image.matches('^ghcr.io/lth2015/sso-db-migrate@sha256:[a-f0-9]{64}$') && (!has(object.spec.template.spec.containers[0].command) || object.spec.template.spec.containers[0].command.size() == 0) && (!has(object.spec.template.spec.containers[0].args) || object.spec.template.spec.containers[0].args.size() == 0)",
+            "message": "Migration requires a digest-pinned image and its built-in entrypoint"
+          },
+          {
+            "expression": "object.spec.template.spec.automountServiceAccountToken == false && object.spec.template.spec.restartPolicy == 'Never' && (!has(object.spec.template.spec.serviceAccountName) || object.spec.template.spec.serviceAccountName == 'default')",
+            "message": "No Kubernetes credentials in migration jobs"
+          },
+          {
+            "expression": "(!has(object.spec.template.spec.hostNetwork) || !object.spec.template.spec.hostNetwork) && (!has(object.spec.template.spec.hostPID) || !object.spec.template.spec.hostPID) && (!has(object.spec.template.spec.hostIPC) || !object.spec.template.spec.hostIPC) && object.spec.template.spec.securityContext.runAsNonRoot && object.spec.template.spec.securityContext.runAsUser == 65532",
+            "message": "No host access or root containers"
+          },
+          {
+            "expression": "object.spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem && !object.spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation && (!has(object.spec.template.spec.containers[0].securityContext.privileged) || !object.spec.template.spec.containers[0].securityContext.privileged) && object.spec.template.spec.containers[0].securityContext.capabilities.drop == ['ALL'] && (!has(object.spec.template.spec.containers[0].securityContext.capabilities.add) || object.spec.template.spec.containers[0].securityContext.capabilities.add.size() == 0)",
+            "message": "Migration container privileges are restricted"
+          },
+          {
+            "expression": "object.spec.template.spec.volumes.size() == 1 && object.spec.template.spec.volumes[0].name == 'cloudsql-ca' && has(object.spec.template.spec.volumes[0].secret) && object.spec.template.spec.volumes[0].secret.secretName == (object.metadata.namespace == 'nss-sso' ? 'sso-cloudsql-ca' : 'sso-bff-cloudsql-ca')",
+            "message": "Only the database CA volume may be mounted"
+          },
+          {
+            "expression": "object.spec.template.spec.containers[0].volumeMounts.size() == 1 && object.spec.template.spec.containers[0].volumeMounts[0].name == 'cloudsql-ca' && object.spec.template.spec.containers[0].volumeMounts[0].mountPath == '/etc/cloudsql-ca' && object.spec.template.spec.containers[0].volumeMounts[0].readOnly",
+            "message": "Only the read-only CA mount is allowed"
+          },
+          {
+            "expression": "(!has(object.spec.template.spec.containers[0].envFrom) || object.spec.template.spec.containers[0].envFrom.size() == 0) && object.spec.template.spec.containers[0].env.size() == 9 && object.spec.template.spec.containers[0].env.all(e, e.name in ['SSO_MODE','MIGRATION_GROUP','DB_TLS_CA_FILE'] ? (has(e.value) && !has(e.valueFrom) && e.value == (e.name == 'SSO_MODE' ? 'kubernetes' : (e.name == 'DB_TLS_CA_FILE' ? '/etc/cloudsql-ca/cloudsql-ca.pem' : (object.metadata.namespace == 'nss-sso' ? 'business' : 'bff')))) : (e.name in ['DB_HOST','DB_PORT','DB_NAME','DB_USER','DB_PASSWORD','DB_TLS_SERVER_NAME'] && has(e.valueFrom) && has(e.valueFrom.secretKeyRef) && e.valueFrom.secretKeyRef.name == (object.metadata.namespace == 'nss-sso' ? 'identity-api-runtime' : 'sso-bff-runtime') && e.valueFrom.secretKeyRef.key == e.name))",
+            "message": "Only approved migration credential references and target are allowed"
+          },
+          {
+            "expression": "object.spec.backoffLimit == 0 && object.spec.activeDeadlineSeconds <= 660 && object.spec.activeDeadlineSeconds > 0 && object.spec.parallelism == 1 && object.spec.completions == 1",
+            "message": "Migration execution must be bounded and single-instance"
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "admissionregistration.k8s.io/v1",
+      "kind": "ValidatingAdmissionPolicyBinding",
+      "metadata": {
+        "name": "sso-qa-migration-jobs"
+      },
+      "spec": {
+        "policyName": "sso-qa-migration-jobs",
+        "validationActions": [
+          "Deny"
+        ]
+      }
+    }
+  ]
+}

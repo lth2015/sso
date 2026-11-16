@@ -4,12 +4,14 @@
 
 ## 触发与发布范围
 
-- 向 `master` 提交或合并 PR：构建 React、运行 Go 与 BFF 隔离测试、编译四个服务、发布 GHCR 镜像；四个镜像全部成功后自动部署 QA。
+- 向 `master` 提交或合并 PR：构建 React、运行 Go 与 BFF 隔离测试、编译四个服务及迁移工具、发布 GHCR 镜像；五个镜像全部成功后，先迁移两个数据库，再更新配置和应用。
 - 目标为 `master` 的 PR：测试与构建镜像，不发布、不获取集群凭据、不部署。使用 `pull_request`，不使用 `pull_request_target` 执行 PR 代码。
 - 在 `master` 手动运行：同样发布和部署，可用于重试。其他分支手动运行只验证构建。
 - 若要改为其他指定分支，需同时修改两个事件的 `branches`、镜像发布条件及 deploy 条件里的 `master`，并同步镜像分支标签和 GitHub Environment 分支规则。
 
-部署只更新现有 `nss-sso/identity-api`、`nss-sso/platform-api`、`nss-sso/event-worker` 和 `sso-bff/sso-bff` 的同名容器镜像。使用同次流水线上传的四个 `image@sha256:...` 产物，不从可变 `master` 标签解析版本。部署前核对全部摘要格式、镜像仓库和目标容器；更新后等待全部 rollout 成功。worker 没有 readinessProbe，其 rollout 成功只表示 Kubernetes 工作负载就绪，不代表邮件投递等业务验收通过。
+部署管理 `nss-sso`、`sso-bff` 中四个指定 Deployment 的镜像与完整环境变量引用，以及四份业务 ConfigMap。新增 `db-migrate` 镜像在两个命名空间中运行一次性 Job，两个数据库迁移均成功后才允许配置与应用更新。镜像均使用本轮产物中的摘要；应用更新后回读配置、镜像、版本和就绪副本，并验证公网页面与登录跳转。
+
+配置文件、迁移凭据、首次准备、权限和失败处理详见 [QA 配置与迁移](../../deploy/qa/README.md)。
 
 ## 首次接入
 
@@ -28,7 +30,7 @@
 
 Provider 只信任仓库 `lth2015/sso`（ID `1452342386`）、所有者 ID `12841814`、`refs/heads/master`、`repo:lth2015@12841814/sso@1452342386:environment:qa` 和该仓库 `publish-images.yml` 工作流。PR 无法满足条件。GitHub `qa` Environment 也应只允许 `master` 部署；全自动部署不要配置必须人工批准。
 
-使用独立 Pool `sso-github`，不更改集群现有的 `netstars-ai-projects-qa.svc.id.goog` Pool。服务账号的自定义 IAM 角色仅提供集群元数据读取、DNS 连接和 API 配额使用权限；应用更新权限通过 namespace Role/RoleBinding 授予，仅允许 get/list/watch/patch 指定的四个 Deployment，不授予 Secret 读取或集群管理员权限。
+使用独立 Pool `sso-github`，不更改集群现有的 `netstars-ai-projects-qa.svc.id.goog` Pool。服务账号的自定义 IAM 角色仅提供集群元数据读取、DNS 连接和 API 配额使用权限；Kubernetes Role 授权指定 Deployment、业务 ConfigMap 和迁移 Job，不直接授予 Secret 读取权限。迁移 Job 的可执行范围由额外的准入策略约束。
 
 2026-11-16 已确认：集群公网 IP 启用了固定 IP 白名单，用户已启用 DNS 外部入口（`allowExternalTraffic=true`）。身份联合不会绕过网络限制。GitHub 托管 runner 需先启用受 IAM 控制的 DNS 入口；self-hosted runner 可保留现有网络限制，并使用已有允许的访问路径。DNS 入口的连接权限由 `container.clusters.connect` 控制。
 
@@ -36,13 +38,13 @@ Provider 只信任仓库 `lth2015/sso`（ID `1452342386`）、所有者 ID `1284
 
 参考：[GitHub OIDC 认证](https://github.com/google-github-actions/auth)、[GKE 凭据 Action](https://github.com/google-github-actions/get-gke-credentials)、[GKE DNS 入口](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/latest/network-isolation)。
 
-`deploy/kubernetes/` 仍保持本地忽略，不作为云端流水线输入。初次资源创建与配置变更继续走现有基础设施流程。Hydra、Gateway、Secret 和数据库迁移不由本流水线修改；有不兼容 schema 变更时必须先完成独立迁移并确认兼容，之后再合并触发应用发布。
+`deploy/kubernetes/` 仍保持本地忽略，不作为云端流水线输入。初次资源创建与配置变更继续走现有基础设施流程。Hydra、Gateway 和 Secret 值不由本流水线修改。数据库迁移必须与仍运行的旧版应用兼容，不支持自动回滚 DDL。
 
 ## 失败与回退
 
 测试或任一镜像发布失败时，不执行部署。部署串行执行，不会取消进行中的部署；获取部署权限之前会拒绝已被分支新提交取代的版本，避免较慢的旧构建覆盖新版本。
 
-四个 Deployment 更新不是原子操作；API 错误或 rollout 失败可能留下部分服务已更新。失败会将 Actions 标红；摘要保留更新前镜像及本次镜像。检查工作负载状态与事件后，可逐一将 Deployment 镜像恢复为摘要中的上一版本，再检查 rollout。流水线不自动回退数据库或执行自动回滚。
+数据库迁移、ConfigMap 和四个 Deployment 的更新不是跨资源原子操作；API 错误或 rollout 失败可能留下部分服务已更新。失败会将 Actions 标红；摘要保留更新前镜像及本次镜像。检查工作负载状态与事件后，可逐一将 Deployment 镜像恢复为摘要中的上一版本，再检查 rollout。流水线不自动回退数据库或执行自动回滚。
 
 配置提交到 GitHub、Environment 和集群访问权限就绪后才会实际启用。本地检查无法证明 runner 的网络、凭据和集群权限有效；首次成功部署需在 Actions 中验证。
 

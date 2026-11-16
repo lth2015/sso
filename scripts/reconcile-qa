@@ -1,0 +1,14 @@
+#!/usr/bin/env python3
+import sys
+from qa_release import load, reconcile
+
+try:
+    if sys.argv[1:] == ['--validate']:
+        load()
+        print('Four QA ConfigMaps and runtime bindings validated; no cluster changes')
+    elif not sys.argv[1:]:
+        reconcile()
+    else:
+        raise ValueError('Unknown argument')
+except (RuntimeError, ValueError, KeyError, OSError) as error:
+    raise SystemExit(str(error))

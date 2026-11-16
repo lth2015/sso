@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Update existing QA workloads only; cluster resources and secrets are managed separately.
+# Gate QA configuration and images on checksummed business and BFF migrations.
 set -euo pipefail
 
 : "${RELEASE_DIR:?Set RELEASE_DIR to the downloaded release artifact directory}"
@@ -45,13 +45,11 @@ report="${GITHUB_STEP_SUMMARY:-/dev/stdout}"
   done
 } >> "$report"
 
-for i in "${!services[@]}"; do
-  kubectl set image -n "${namespaces[$i]}" "deployment/${deployments[$i]}" "${deployments[$i]}=${images[$i]}"
-done
+python3 scripts/reconcile-qa
 
 result=0
 for i in "${!services[@]}"; do
-  if ! kubectl rollout status -n "${namespaces[$i]}" "deployment/${deployments[$i]}" --timeout=180s; then
+  if ! kubectl rollout status -n "${namespaces[$i]}" "deployment/${deployments[$i]}" --timeout=300s; then
     printf '\nRollout failed: `%s/%s`\n' "${namespaces[$i]}" "${deployments[$i]}" >> "$report"
     result=1
   fi

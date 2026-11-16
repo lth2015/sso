@@ -28,6 +28,49 @@
             "watch",
             "patch"
           ]
+        },
+        {
+          "apiGroups": [
+            ""
+          ],
+          "resources": [
+            "configmaps"
+          ],
+          "resourceNames": [
+            "identity-api-config",
+            "platform-api-config",
+            "event-worker-config"
+          ],
+          "verbs": [
+            "get",
+            "update"
+          ]
+        },
+        {
+          "apiGroups": [
+            "batch"
+          ],
+          "resources": [
+            "jobs"
+          ],
+          "verbs": [
+            "create"
+          ]
+        },
+        {
+          "apiGroups": [
+            "batch"
+          ],
+          "resources": [
+            "jobs"
+          ],
+          "resourceNames": [
+            "sso-schema-migrate"
+          ],
+          "verbs": [
+            "get",
+            "delete"
+          ]
         }
       ]
     },
@@ -74,6 +117,47 @@
             "list",
             "watch",
             "patch"
+          ]
+        },
+        {
+          "apiGroups": [
+            ""
+          ],
+          "resources": [
+            "configmaps"
+          ],
+          "resourceNames": [
+            "sso-bff-config"
+          ],
+          "verbs": [
+            "get",
+            "update"
+          ]
+        },
+        {
+          "apiGroups": [
+            "batch"
+          ],
+          "resources": [
+            "jobs"
+          ],
+          "verbs": [
+            "create"
+          ]
+        },
+        {
+          "apiGroups": [
+            "batch"
+          ],
+          "resources": [
+            "jobs"
+          ],
+          "resourceNames": [
+            "sso-schema-migrate"
+          ],
+          "verbs": [
+            "get",
+            "delete"
           ]
         }
       ]

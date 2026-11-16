@@ -1,0 +1,72 @@
+[
+  {
+    "namespace": "nss-sso",
+    "deployment": "identity-api",
+    "container": "identity-api",
+    "configMap": "identity-api-config",
+    "secret": "identity-api-runtime",
+    "secretKeys": [
+      "BUSINESS_HOOK_KEY",
+      "DB_HOST",
+      "DB_NAME",
+      "DB_PASSWORD",
+      "DB_PORT",
+      "DB_TLS_SERVER_NAME",
+      "DB_USER",
+      "IDENTITY_MAIL_KEY",
+      "SSO_FLOW_KEY",
+      "SSO_MFA_KEY"
+    ]
+  },
+  {
+    "namespace": "nss-sso",
+    "deployment": "platform-api",
+    "container": "platform-api",
+    "configMap": "platform-api-config",
+    "secret": "platform-api-runtime",
+    "secretKeys": [
+      "DB_HOST",
+      "DB_NAME",
+      "DB_PASSWORD",
+      "DB_PORT",
+      "DB_TLS_SERVER_NAME",
+      "DB_USER"
+    ]
+  },
+  {
+    "namespace": "nss-sso",
+    "deployment": "event-worker",
+    "container": "event-worker",
+    "configMap": "event-worker-config",
+    "secret": "event-worker-runtime",
+    "secretKeys": [
+      "DB_HOST",
+      "DB_NAME",
+      "DB_PASSWORD",
+      "DB_PORT",
+      "DB_TLS_SERVER_NAME",
+      "DB_USER",
+      "IDENTITY_MAIL_KEY",
+      "SMTP_FROM",
+      "SMTP_PASSWORD",
+      "SMTP_USERNAME"
+    ]
+  },
+  {
+    "namespace": "sso-bff",
+    "deployment": "sso-bff",
+    "container": "sso-bff",
+    "configMap": "sso-bff-config",
+    "secret": "sso-bff-runtime",
+    "secretKeys": [
+      "DB_HOST",
+      "DB_NAME",
+      "DB_PASSWORD",
+      "DB_PORT",
+      "DB_TLS_SERVER_NAME",
+      "DB_USER",
+      "OAUTH_CLIENT_SECRET",
+      "SSO_BFF_KEY"
+    ]
+  }
+]

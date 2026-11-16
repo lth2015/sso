@@ -1,0 +1,82 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "metadata": {
+        "name": "identity-api-config",
+        "namespace": "nss-sso",
+        "labels": {
+          "app.kubernetes.io/managed-by": "sso-ci"
+        }
+      },
+      "data": {
+        "AUTH_ORIGIN": "https://sso.nsstest.com",
+        "CONSOLE_ORIGIN": "https://bff.nsstest.com",
+        "DB_TLS_CA_FILE": "/etc/cloudsql-ca/cloudsql-ca.pem",
+        "HYDRA_ADMIN_URL": "http://hydra-admin.ory-hydra.svc.cluster.local:4445",
+        "OIDC_ISSUER": "https://sso.nsstest.com/",
+        "SSO_ENABLED": "true",
+        "SSO_MODE": "kubernetes"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "metadata": {
+        "name": "platform-api-config",
+        "namespace": "nss-sso",
+        "labels": {
+          "app.kubernetes.io/managed-by": "sso-ci"
+        }
+      },
+      "data": {
+        "DB_TLS_CA_FILE": "/etc/cloudsql-ca/cloudsql-ca.pem",
+        "HYDRA_ADMIN_URL": "http://hydra-admin.ory-hydra.svc.cluster.local:4445",
+        "HYDRA_PUBLIC_URL": "http://hydra-public.ory-hydra.svc.cluster.local:4444",
+        "OIDC_ISSUER": "https://sso.nsstest.com/",
+        "SSO_MODE": "kubernetes"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "metadata": {
+        "name": "event-worker-config",
+        "namespace": "nss-sso",
+        "labels": {
+          "app.kubernetes.io/managed-by": "sso-ci"
+        }
+      },
+      "data": {
+        "DB_TLS_CA_FILE": "/etc/cloudsql-ca/cloudsql-ca.pem",
+        "MAIL_ACCOUNT_URL": "https://sso.nsstest.com/account",
+        "SMTP_HOST": "smtp.office365.com",
+        "SMTP_PORT": "587",
+        "SSO_MODE": "kubernetes"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "metadata": {
+        "name": "sso-bff-config",
+        "namespace": "sso-bff",
+        "labels": {
+          "app.kubernetes.io/managed-by": "sso-ci"
+        }
+      },
+      "data": {
+        "SSO_MODE": "kubernetes",
+        "CONSOLE_ORIGIN": "https://bff.nsstest.com",
+        "OIDC_ISSUER": "https://sso.nsstest.com/",
+        "HYDRA_PUBLIC_URL": "http://hydra-public.ory-hydra.svc.cluster.local:4444",
+        "PLATFORM_API_URL": "http://platform-api.nss-sso.svc.cluster.local:8083",
+        "OAUTH_CLIENT_ID": "sso-bff",
+        "DB_TLS_CA_FILE": "/etc/cloudsql-ca/cloudsql-ca.pem"
+      }
+    }
+  ]
+}

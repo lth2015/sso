@@ -34,10 +34,16 @@ jobs:
           bash scripts/build-console
           test -s internal/consoleui/static/index.html
           test -d internal/consoleui/static/assets
+      - name: Validate managed QA configuration
+        run: |
+          python3 scripts/reconcile-qa --validate
+          python3 -m unittest discover -s tests/ci -v
       - name: Test Go packages
         run: go test ./...
       - name: Test isolated BFF storage and revocation
         run: bash scripts/test-bff-isolation
+      - name: Test database migration gates on disposable MySQL
+        run: bash scripts/test-migrations
       - name: Build Linux service binaries
         env:
           CGO_ENABLED: '0'
@@ -45,6 +51,7 @@ jobs:
           GOARCH: amd64
         run: |
           mkdir -p .local
+          go build -trimpath -ldflags='-s -w' -o .local/db-migrate ./cmd/db-migrate
           go build -trimpath -ldflags='-s -w' -o .local/console-bff ./cmd/demo-app
           go build -trimpath -ldflags='-s -w' -o .local/platform-api ./cmd/platform-api
           go build -trimpath -ldflags='-s -w' -o .local/identity-api ./cmd/identity-api
@@ -57,6 +64,7 @@ jobs:
             .local/platform-api
             .local/identity-api
             .local/event-worker
+            .local/db-migrate
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 7
@@ -71,7 +79,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [console-bff, platform-api, identity-api, event-worker]
+        service: [console-bff, platform-api, identity-api, event-worker, db-migrate]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -143,7 +151,7 @@ jobs:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
     # Use a QA runner label here if the GKE API is reachable only from a private network.
     runs-on: ${{ vars.QA_DEPLOY_RUNNER || 'ubuntu-latest' }}
-    timeout-minutes: 20
+    timeout-minutes: 40
     environment: qa
     permissions:
       contents: read

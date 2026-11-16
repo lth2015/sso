@@ -122,3 +122,22 @@ func kubernetesDatabaseConfig() (*driver.Config, error) {
 	cfg.TLS = &tls.Config{RootCAs: roots, ServerName: serverName, MinVersion: tls.VersionTLS12}
 	return cfg, nil
 }
+
+// MigrationDatabase is exclusively for the one-shot schema job, never application startup.
+func MigrationDatabase() (*sql.DB, error) {
+	cfg, err := kubernetesDatabaseConfig()
+	if err != nil {
+		return nil, err
+	}
+	cfg.MultiStatements = true
+	cfg.ReadTimeout = 5 * time.Minute
+	cfg.WriteTimeout = 30 * time.Second
+	connector, err := driver.NewConnector(cfg)
+	if err != nil {
+		return nil, errors.New("invalid migration database configuration")
+	}
+	db := sql.OpenDB(connector)
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(0)
+	return db, nil
+}
