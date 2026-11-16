@@ -26,7 +26,7 @@
 
 不再需要 `QA_KUBECONFIG_B64`、`QA_KUBE_CONTEXT` 或服务账号 JSON 私钥。部署 job 单独授予 `id-token: write`，使用 `google-github-actions/auth@v3` 兑换临时身份，再由 `get-gke-credentials@v3` 生成临时 kubeconfig；两个 action 在结束时清理凭据。构建和 PR job 不授予 OIDC 权限。
 
-Provider 只信任仓库 `lth2015/sso`（ID `1452342386`）、所有者 ID `12841814`、`refs/heads/master`、`repo:lth2015/sso:environment:qa` 和该仓库 `publish-images.yml` 工作流。PR 无法满足条件。GitHub `qa` Environment 也应只允许 `master` 部署；全自动部署不要配置必须人工批准。
+Provider 只信任仓库 `lth2015/sso`（ID `1452342386`）、所有者 ID `12841814`、`refs/heads/master`、`repo:lth2015@12841814/sso@1452342386:environment:qa` 和该仓库 `publish-images.yml` 工作流。PR 无法满足条件。GitHub `qa` Environment 也应只允许 `master` 部署；全自动部署不要配置必须人工批准。
 
 使用独立 Pool `sso-github`，不更改集群现有的 `netstars-ai-projects-qa.svc.id.goog` Pool。服务账号的自定义 IAM 角色仅提供集群元数据读取、DNS 连接和 API 配额使用权限；应用更新权限通过 namespace Role/RoleBinding 授予，仅允许 get/list/watch/patch 指定的四个 Deployment，不授予 Secret 读取或集群管理员权限。
 
@@ -47,3 +47,5 @@ Provider 只信任仓库 `lth2015/sso`（ID `1452342386`）、所有者 ID `1284
 配置提交到 GitHub、Environment 和集群访问权限就绪后才会实际启用。本地检查无法证明 runner 的网络、凭据和集群权限有效；首次成功部署需在 Actions 中验证。
 
 QA 部署身份的 Kubernetes 授权清单：`deploy/ci/qa-deployer-rbac.json`，由集群管理员一次性应用；流水线不能自行提升权限。
+
+部署完成后回读镜像、observedGeneration 和就绪副本，并检查公网账户页面及 BFF 到身份登录页的 OAuth 跳转；不自动提交账号密码或发送邮件。
