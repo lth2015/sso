@@ -1,4 +1,4 @@
-// event-worker currently delivers account notifications to a private local mailbox.
+// event-worker delivers queued account notifications.
 package main
 
 import (
@@ -10,15 +10,18 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 )
 
 func main() {
-	once := flag.Bool("once", false, "drain currently eligible local notifications then exit")
+	once := flag.Bool("once", false, "drain currently eligible notifications then exit")
+	checkSMTP := flag.Bool("check-smtp", false, "verify SMTP TLS and authentication without sending email")
 	flag.Parse()
-	if os.Getenv("SSO_MODE") != "local-accounts" {
-		log.Fatal("local accounts mode must be explicit")
+	mode := os.Getenv("SSO_MODE")
+	if mode != "local-accounts" && mode != "kubernetes" {
+		log.Fatal("worker mode must be explicit")
 	}
 	db, err := localruntime.Database()
 	if err != nil {
@@ -38,12 +41,28 @@ func main() {
 	sink := identity.FileSink("/mailbox", aead)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
+	if mode == "kubernetes" {
+		port, _ := strconv.Atoi(os.Getenv("SMTP_PORT"))
+		cfg := identity.SMTPConfig{Host: os.Getenv("SMTP_HOST"), Port: port, From: os.Getenv("SMTP_FROM"), Username: os.Getenv("SMTP_USERNAME"), Password: os.Getenv("SMTP_PASSWORD"), AccountURL: os.Getenv("MAIL_ACCOUNT_URL")}
+		if err := cfg.Validate(); err != nil {
+			log.Fatal("invalid SMTP configuration")
+		}
+		if *checkSMTP {
+			if err := cfg.Check(ctx); err != nil {
+				log.Fatal("SMTP check failed: " + identity.DeliveryFailureCode(err))
+			}
+			log.Print("SMTP TLS and authentication verified; no email sent")
+			return
+		}
+		sink = cfg.Sink(ctx, aead)
+	}
+	log.Print("notification worker ready")
 	for ctx.Err() == nil {
-		step, cancel := context.WithTimeout(ctx, 5*time.Second)
+		step, cancel := context.WithTimeout(ctx, 20*time.Second)
 		didWork, err := repo.DeliverOne(step, sink)
 		cancel()
 		if err != nil {
-			log.Print("local notification delivery failed: " + identity.DeliveryFailureCode(err))
+			log.Print("notification delivery failed: " + identity.DeliveryFailureCode(err))
 			if *once {
 				os.Exit(1)
 			}

@@ -17,8 +17,9 @@ const Issuer = "http://auth.localhost:4464/"
 const AuthOrigin = "http://auth.localhost:8080"
 
 type Client struct {
-	HTTP *http.Client
-	Base string
+	HTTP      *http.Client
+	Base      string
+	IssuerURL string
 }
 
 // New targets only the private fixed Admin service. Like the private protocol
@@ -90,8 +91,16 @@ func (c *Client) Decide(ctx context.Context, kind, challenge, decision string, b
 	if err != nil {
 		return "", err
 	}
+	issuer := c.IssuerURL
+	if issuer == "" {
+		issuer = Issuer
+	}
+	expected, issuerErr := url.Parse(issuer)
+	if issuerErr != nil {
+		return "", errors.New("invalid issuer")
+	}
 	parsed, err := url.Parse(response.Redirect)
-	if err != nil || parsed.Scheme != "http" || parsed.Host != "auth.localhost:4464" || parsed.Path != "/oauth2/auth" || parsed.User != nil || parsed.Fragment != "" {
+	if err != nil || parsed.Scheme != expected.Scheme || parsed.Host != expected.Host || parsed.Path != "/oauth2/auth" || parsed.User != nil || parsed.Fragment != "" {
 		return "", errors.New("protocol redirect invalid")
 	}
 	return response.Redirect, nil

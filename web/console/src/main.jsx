@@ -466,7 +466,7 @@ function App() {
           <a className="button" href="/login">
             登录管理控制台
           </a>
-          <a className="text-link" href="http://auth.localhost:8080/account">
+          <a className="text-link" href="/auth/account">
             创建账户或找回密码
           </a>
         </div>
@@ -1023,7 +1023,7 @@ function App() {
                   <div className="panel-heading">
                     <h2>我的统一登录会话</h2>
                     <a
-                      href="http://auth.localhost:8080/sso/logout"
+                      href="/auth/logout"
                       className="danger-link"
                     >
                       退出所有设备

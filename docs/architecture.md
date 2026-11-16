@@ -126,3 +126,10 @@ User/BFF 新增只读 audit-exports 资源，管理与机器来源分别以独�
 ## 应用准入历史（0.26.0）
 
 复用 012 的准入上下文与同 event 审计，当前 owner 读取固定 ID/动作/当时模式/版本，namespace 双向绑定；不依赖当前成员资料或 outbox 生命周期，无新迁移及权威规则改变。 见 application-access-history.md / ADR 0028 / validation.md。
+
+
+## Kubernetes BFF 数据隔离（2026-11-16）
+
+Kubernetes 模式的 BFF 仅访问自身数据库中的登录交易、加密会话和撤销 outbox，不再读取业务授权视图。platform-api 的私有 BFF 接口执行实时资格检查，验证所有身份与授权上下文；只有配置的第一方 BFF client 可以申请专用撤销凭证。凭证只绑定一个 grant，不能用来登录或执行业务请求。过期 Access Token 不接受为业务授权。
+
+本地退出、刷新失败与会话超时使本地会话失效，并事务性保存加密撤销任务。平台端 grant 失效、审计和业务 outbox 同事务，重复投递幂等；跨库故障期间采用持久重试，中央撤销可能延迟，不能把本地退出响应等同于全局立即失效。迁移与验证见 runbooks/bff-isolation.md，内部合同见 ../api/bff-internal.openapi.yaml。local-accounts 演示链路继续保留原有隔离视图，不受此切换影响。

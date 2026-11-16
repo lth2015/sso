@@ -70,7 +70,11 @@ func clientPagination(w http.ResponseWriter, r *http.Request) (int, string, bool
 	}
 	return n, after, true
 }
-func mountApplications(mux *http.ServeMux, repo store.Store) {
+func mountApplications(mux *http.ServeMux, repo store.Store, configuredIssuer ...string) {
+	issuer := hydra.Issuer
+	if len(configuredIssuer) > 0 {
+		issuer = configuredIssuer[0]
+	}
 	const base = "/v1/tenants/{tenant}/applications"
 	mux.HandleFunc("GET "+base, func(w http.ResponseWriter, r *http.Request) {
 		n, after, ok := pagination(w, r)
@@ -117,7 +121,7 @@ func mountApplications(mux *http.ServeMux, repo store.Store) {
 			value := items[len(items)-1].Client
 			next = &value
 		}
-		respond(w, 200, map[string]any{"issuer": hydra.Issuer, "items": items, "next_cursor": next})
+		respond(w, 200, map[string]any{"issuer": issuer, "items": items, "next_cursor": next})
 	})
 	for _, enabled := range []bool{false, true} {
 		action := "disable"

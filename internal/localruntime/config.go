@@ -115,6 +115,10 @@ func kubernetesDatabaseConfig() (*driver.Config, error) {
 	cfg.User, cfg.Passwd, cfg.DBName = user, password, name
 	cfg.Net, cfg.Addr, cfg.ParseTime = "tcp", net.JoinHostPort(host, port), true
 	cfg.Timeout, cfg.ReadTimeout, cfg.WriteTimeout = 2*time.Second, 5*time.Second, 5*time.Second
-	cfg.TLS = &tls.Config{RootCAs: roots, ServerName: host, MinVersion: tls.VersionTLS12}
+	serverName := os.Getenv("DB_TLS_SERVER_NAME")
+	if serverName == "" {
+		serverName = host
+	}
+	cfg.TLS = &tls.Config{RootCAs: roots, ServerName: serverName, MinVersion: tls.VersionTLS12}
 	return cfg, nil
 }

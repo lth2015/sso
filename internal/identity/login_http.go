@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lth2015/sso/internal/adapter/hydra"
 	store "github.com/lth2015/sso/internal/storage/mysql"
 	"html/template"
 	"mime"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -39,7 +39,7 @@ func (l *Login) Handler() http.Handler {
 					writeError(w, 503, "temporarily_unavailable")
 					return
 				}
-				setLocalCookie(w, BrowserCookie, value, 8*3600)
+				l.setCookie(w, BrowserCookie, value, 8*3600)
 				browser = digest(value)
 			}
 			csrf, err := randomToken()
@@ -63,7 +63,7 @@ func (l *Login) Handler() http.Handler {
 					return
 				}
 				if session != "" {
-					setLocalCookie(w, SessionCookie, session, 24*3600)
+					l.setCookie(w, SessionCookie, session, 24*3600)
 				}
 				http.Redirect(w, r, redirect, http.StatusSeeOther)
 				return
@@ -170,7 +170,13 @@ func (l *Login) Handler() http.Handler {
 		}
 		response := map[string]any{"state": state}
 		if secret != "" {
+			qr, err := enrollmentQR(secret, email)
+			if err != nil {
+				writeError(w, 503, "temporarily_unavailable")
+				return
+			}
 			response["secret"] = secret
+			response["qr_code"] = qr
 		}
 		jsonResponse(w, response)
 	})
@@ -212,7 +218,7 @@ func (l *Login) Handler() http.Handler {
 			return
 		}
 		if session != "" {
-			setLocalCookie(w, SessionCookie, session, 24*3600)
+			l.setCookie(w, SessionCookie, session, 24*3600)
 		}
 		jsonResponse(w, map[string]string{"redirect_to": redirect})
 	})
@@ -282,7 +288,7 @@ func (l *Login) Handler() http.Handler {
 			flowError(w, err)
 			return
 		}
-		setLocalCookie(w, SessionCookie, "", -1)
+		l.setCookie(w, SessionCookie, "", -1)
 		w.WriteHeader(204)
 	})
 	mux.HandleFunc("GET /sso/health/ready", func(w http.ResponseWriter, r *http.Request) {
@@ -300,8 +306,9 @@ func (l *Login) Handler() http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
-		if r.Host != "auth.localhost:8080" {
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+		origin, _ := url.Parse(l.Config.Origin)
+		if r.Host != origin.Host {
 			writeError(w, 403, "invalid_origin")
 			return
 		}
@@ -310,7 +317,7 @@ func (l *Login) Handler() http.Handler {
 			return
 		}
 		kind, _, mediaErr := mime.ParseMediaType(r.Header.Get("Content-Type"))
-		if r.Method == "POST" && (r.Header.Get("Origin") != hydra.AuthOrigin || mediaErr != nil || kind != "application/json" || r.Header.Get("Sec-Fetch-Site") == "cross-site") {
+		if r.Method == "POST" && (r.Header.Get("Origin") != strings.TrimSuffix(l.Config.Origin, "/") || mediaErr != nil || kind != "application/json" || r.Header.Get("Sec-Fetch-Site") == "cross-site") {
 			writeError(w, 403, "invalid_origin")
 			return
 		}

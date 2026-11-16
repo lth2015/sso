@@ -58,6 +58,9 @@ func main() {
 	if err != nil {
 		log.Fatal("BFF initialization failed: ", err)
 	}
+	if mode == "kubernetes" {
+		go app.ReconcileRevocations(ctx)
+	}
 	server := &http.Server{Addr: ":3000", Handler: app.Handler(), ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 12 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 32768}
 	go func() {
 		<-ctx.Done()

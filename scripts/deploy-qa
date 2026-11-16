@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Update existing QA workloads only; cluster resources and secrets are managed separately.
+set -euo pipefail
+
+: "${RELEASE_DIR:?Set RELEASE_DIR to the downloaded release artifact directory}"
+: "${RELEASE_SHA:?Set RELEASE_SHA to the full source commit}"
+: "${GITHUB_REPOSITORY:?Set GITHUB_REPOSITORY}"
+
+services=(identity-api platform-api console-bff event-worker)
+namespaces=(nss-sso nss-sso sso-bff nss-sso)
+deployments=(identity-api platform-api sso-bff event-worker)
+repository="$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+images=()
+previous=()
+
+# Validate every artifact and target before changing any deployment.
+for i in "${!services[@]}"; do
+  service="${services[$i]}"
+  image="$(cat "$RELEASE_DIR/$service")"
+  prefix="ghcr.io/$repository-$service@"
+  digest="${image#"$prefix"}"
+  if [[ "$image" != "$prefix"* || ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+    echo "Invalid release image for $service" >&2
+    exit 1
+  fi
+  images+=("$image")
+  target="$(kubectl get deployment "${deployments[$i]}" -n "${namespaces[$i]}" -o json)"
+  previous+=("$(printf '%s' "$target" | python3 -c '
+import json, sys
+obj = json.load(sys.stdin)
+name = sys.argv[1]
+matches = [c["image"] for c in obj["spec"]["template"]["spec"]["containers"] if c["name"] == name]
+if len(matches) != 1:
+    sys.exit("Expected deployment container missing: " + name)
+print(matches[0])
+' "${deployments[$i]}")")
+done
+
+report="${GITHUB_STEP_SUMMARY:-/dev/stdout}"
+{
+  printf '### QA deployment\n\nCommit: `%s`\n\n' "$RELEASE_SHA"
+  printf '| Namespace / Deployment | Previous image | Release image |\n| --- | --- | --- |\n'
+  for i in "${!services[@]}"; do
+    printf '| %s / %s | `%s` | `%s` |\n' "${namespaces[$i]}" "${deployments[$i]}" "${previous[$i]}" "${images[$i]}"
+  done
+} >> "$report"
+
+for i in "${!services[@]}"; do
+  kubectl set image -n "${namespaces[$i]}" "deployment/${deployments[$i]}" "${deployments[$i]}=${images[$i]}"
+done
+
+result=0
+for i in "${!services[@]}"; do
+  if ! kubectl rollout status -n "${namespaces[$i]}" "deployment/${deployments[$i]}" --timeout=180s; then
+    printf '\nRollout failed: `%s/%s`\n' "${namespaces[$i]}" "${deployments[$i]}" >> "$report"
+    result=1
+  fi
+done
+if (( result != 0 )); then
+  echo 'QA rollout failed. Review workload events and the previous images in the summary.' >&2
+  exit 1
+fi
+# Read the Deployment back after rollout; verify the requested digest and observed generation.
+for i in "${!services[@]}"; do
+  kubectl get deployment "${deployments[$i]}" -n "${namespaces[$i]}" -o json |
+    python3 -c '
+import json, sys
+obj = json.load(sys.stdin)
+name, expected = sys.argv[1:]
+containers = obj["spec"]["template"]["spec"]["containers"]
+assert any(c["name"] == name and c["image"] == expected for c in containers), "Image readback mismatch"
+status = obj.get("status", {})
+desired = obj["spec"].get("replicas", 1)
+assert desired > 0, "Deployment is scaled to zero; cannot verify a running release"
+assert status.get("observedGeneration", 0) >= obj["metadata"]["generation"], "Generation not observed"
+for field in ("replicas", "updatedReplicas", "readyReplicas", "availableReplicas"):
+    assert status.get(field, 0) == desired, "Replica readback mismatch: " + field
+print("Verified " + name + ": " + expected)
+' "${deployments[$i]}" "${images[$i]}" >> "$report"
+done
+printf '\nAll four workload rollouts and image readbacks completed successfully.\n' >> "$report"

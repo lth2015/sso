@@ -60,6 +60,6 @@ if (state === "ready") {
   });
   get("done").addEventListener("click", () => {
     clearCodes();
-    location.assign("http://console.localhost:3003/login?force=1");
+    location.assign("/sso/console");
   });
 }

@@ -108,11 +108,15 @@ func (a *App) mountConsole(mux *http.ServeMux, load func(http.ResponseWriter, *h
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
-		if a.Store.UserGrantStorageReady(ctx, a.Client) != nil {
+		if a.sessions().BFFStorageReady(ctx, a.Client) != nil {
 			fail(w, 503)
 			return
 		}
-		w.WriteHeader(204)
+		if a.Console {
+			w.WriteHeader(http.StatusOK)
+		} else {
+			w.WriteHeader(http.StatusNoContent)
+		}
 	})
 	proxyHandler := func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/bff")
@@ -134,7 +138,7 @@ func (a *App) mountConsole(mux *http.ServeMux, load func(http.ResponseWriter, *h
 		}
 		// Refresh before forwarding. Never replay a business mutation after any response.
 		if tokens.Expiry.Before(time.Now().Add(15 * time.Second)) {
-			err := a.Store.RefreshBFF(r.Context(), digest, a.Client, func(entry store.BFFSession) ([]byte, error) {
+			err := a.sessions().RefreshBFF(r.Context(), digest, a.Client, func(entry store.BFFSession) ([]byte, error) {
 				current, err := a.consoleRefresh(r, entry, digest)
 				if err != nil {
 					return nil, err
@@ -144,6 +148,7 @@ func (a *App) mountConsole(mux *http.ServeMux, load func(http.ResponseWriter, *h
 			})
 			if err != nil {
 				a.clearSessionCookie(w, r)
+				a.flushRevocation(r.Context())
 				fail(w, 401)
 				return
 			}

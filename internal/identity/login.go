@@ -25,9 +25,21 @@ type Login struct {
 	Admin           *hydra.Client
 	FlowKey, MFAKey cipher.AEAD
 	Limit           *Limiter
+	Config          LoginConfig
+}
+
+type LoginConfig struct {
+	Issuer, Origin, AdminURL, ConsoleOrigin string
 }
 
 func NewLogin(account *Service, flowKey, mfaKey []byte) (*Login, error) {
+	return NewLoginWithConfig(account, flowKey, mfaKey, LoginConfig{hydra.Issuer, hydra.AuthOrigin, "http://hydra-login:4445", "http://console.localhost:3003"})
+}
+func NewLoginWithConfig(account *Service, flowKey, mfaKey []byte, cfg LoginConfig) (*Login, error) {
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+
 	flow, err := NewCipher(flowKey)
 	if err != nil {
 		return nil, err
@@ -36,7 +48,9 @@ func NewLogin(account *Service, flowKey, mfaKey []byte) (*Login, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Login{account, hydra.New(), flow, factor, NewLimiter()}, nil
+	admin := hydra.New()
+	admin.Base, admin.IssuerURL = cfg.AdminURL, cfg.Issuer
+	return &Login{account, admin, flow, factor, NewLimiter(), cfg}, nil
 }
 func randomToken() (string, error) {
 	b := make([]byte, 32)
@@ -56,9 +70,7 @@ func cookieDigest(r *http.Request, name string) []byte {
 	}
 	return digest(cookie.Value)
 }
-func setLocalCookie(w http.ResponseWriter, name, value string, seconds int) {
-	http.SetCookie(w, &http.Cookie{Name: name, Value: value, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: false, MaxAge: seconds})
-}
+
 func seal(key cipher.AEAD, body []byte, aad string) ([]byte, error) {
 	nonce := make([]byte, key.NonceSize())
 	if _, err := rand.Read(nonce); err != nil {
@@ -94,7 +106,7 @@ func (l *Login) Start(ctx context.Context, kind, challenge string, browser, csrf
 		return flow, false, store.ErrDenied
 	}
 	query := requested.Query()
-	if requested.Scheme != "http" || requested.Host != "auth.localhost:4464" || query.Get("redirect_uri") != client.Redirect || query.Get("code_challenge_method") != "S256" || query.Get("code_challenge") == "" || !hydra.ScopeSubset(info.RequestedScopes, client.Scopes) || len(info.RequestedAudience) != 1 || info.RequestedAudience[0] != client.Audience {
+	if !sameOrigin(requested, l.Config.Issuer) || requested.Path != "/oauth2/auth" || requested.User != nil || requested.Fragment != "" || query.Get("redirect_uri") != client.Redirect || query.Get("code_challenge_method") != "S256" || query.Get("code_challenge") == "" || !hydra.ScopeSubset(info.RequestedScopes, client.Scopes) || len(info.RequestedAudience) != 1 || info.RequestedAudience[0] != client.Audience {
 		return flow, false, store.ErrDenied
 	}
 	flow.ID, err = store.NewID()
@@ -358,3 +370,21 @@ func (l *Login) Reject(ctx context.Context, f store.Flow, browser []byte) (strin
 	}
 	return redirect, nil
 }
+
+func (cfg LoginConfig) Validate() error {
+	for _, raw := range []string{cfg.Issuer, cfg.Origin, cfg.AdminURL, cfg.ConsoleOrigin} {
+		u, err := url.Parse(raw)
+		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
+			return errors.New("invalid identity endpoint configuration")
+		}
+	}
+	return nil
+}
+func sameOrigin(u *url.URL, expected string) bool {
+	origin, err := url.Parse(expected)
+	return err == nil && u.Scheme == origin.Scheme && u.Host == origin.Host
+}
+func (l *Login) setCookie(w http.ResponseWriter, name, value string, seconds int) {
+	http.SetCookie(w, &http.Cookie{Name: name, Value: value, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: strings.HasPrefix(l.Config.Origin, "https://"), MaxAge: seconds})
+}
+func (l *Login) consoleOrigin() string { return strings.TrimSuffix(l.Config.ConsoleOrigin, "/") }

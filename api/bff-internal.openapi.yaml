@@ -1,0 +1,85 @@
+openapi: 3.1.0
+info:
+  title: Internal BFF authority and revocation API
+  version: 1.0.0
+  description: >-
+    Server-to-server only. Not exposed by the browser BFF proxy or public ingress.
+    Bearer requests require platform:read and the configured first-party BFF client.
+    Revocation credentials are random opaque values, stored only as hashes in the
+    business database, and authorize only deactivation of their bound grant.
+servers:
+  - url: http://platform-api.nss-sso.svc.cluster.local:8083
+    description: Current transport uses the explicit Host api.localhost:8083.
+paths:
+  /internal/bff/authorization:
+    get:
+      security: [{Bearer: []}]
+      responses:
+        '200':
+          description: Current authority, after primary-database qualification checks.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user, tenant, grant, member, session, client]
+                properties:
+                  user: {type: string}
+                  tenant: {type: string}
+                  grant: {type: string}
+                  member: {type: string}
+                  session: {type: string}
+                  client: {type: string}
+        '401': {description: Missing, expired or revoked access token.}
+        '403': {description: Wrong client or missing scope.}
+        '503': {description: Authority unavailable; do not authorize on cached results.}
+  /internal/bff/revocation-credentials:
+    post:
+      security: [{Bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: false}
+      responses:
+        '201':
+          description: One-purpose secret; keep encrypted server-side, never return to a browser.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [credential, expires_at]
+                properties:
+                  credential: {type: string, minLength: 43, maxLength: 43}
+                  expires_at: {type: integer, format: int64}
+        '401': {description: Missing, expired or revoked access token.}
+        '403': {description: Wrong client or missing scope.}
+        '503': {description: Capability could not be persisted.}
+  /internal/bff/revoke:
+    post:
+      security: [{RevocationCredential: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  enum: [authorization.logout, authorization.refresh_failed, authorization.session_expired]
+      responses:
+        '204': {description: Bound grant revoked or already inactive; audit/outbox changes are atomic and idempotent.}
+        '400': {description: Invalid or ambiguous body.}
+        '401': {description: Invalid revocation credential; ordinary Bearer tokens are not accepted.}
+        '410': {description: Capability and its bound grant lifetime have expired.}
+        '503': {description: Retry using the durable encrypted BFF outbox.}
+components:
+  securitySchemes:
+    Bearer: {type: http, scheme: bearer, bearerFormat: JWT}
+    RevocationCredential:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: 'BFF-Revoke <opaque credential>. Never accepted for authentication or business operations.'

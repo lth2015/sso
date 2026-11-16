@@ -1,0 +1,102 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "Role",
+      "metadata": {
+        "name": "sso-github-deployer",
+        "namespace": "nss-sso"
+      },
+      "rules": [
+        {
+          "apiGroups": [
+            "apps"
+          ],
+          "resources": [
+            "deployments"
+          ],
+          "resourceNames": [
+            "identity-api",
+            "platform-api",
+            "event-worker"
+          ],
+          "verbs": [
+            "get",
+            "list",
+            "watch",
+            "patch"
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "RoleBinding",
+      "metadata": {
+        "name": "sso-github-deployer",
+        "namespace": "nss-sso"
+      },
+      "subjects": [
+        {
+          "kind": "User",
+          "name": "sso-github-qa@netstars-ai-projects-qa.iam.gserviceaccount.com",
+          "apiGroup": "rbac.authorization.k8s.io"
+        }
+      ],
+      "roleRef": {
+        "kind": "Role",
+        "name": "sso-github-deployer",
+        "apiGroup": "rbac.authorization.k8s.io"
+      }
+    },
+    {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "Role",
+      "metadata": {
+        "name": "sso-github-deployer",
+        "namespace": "sso-bff"
+      },
+      "rules": [
+        {
+          "apiGroups": [
+            "apps"
+          ],
+          "resources": [
+            "deployments"
+          ],
+          "resourceNames": [
+            "sso-bff"
+          ],
+          "verbs": [
+            "get",
+            "list",
+            "watch",
+            "patch"
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "RoleBinding",
+      "metadata": {
+        "name": "sso-github-deployer",
+        "namespace": "sso-bff"
+      },
+      "subjects": [
+        {
+          "kind": "User",
+          "name": "sso-github-qa@netstars-ai-projects-qa.iam.gserviceaccount.com",
+          "apiGroup": "rbac.authorization.k8s.io"
+        }
+      ],
+      "roleRef": {
+        "kind": "Role",
+        "name": "sso-github-deployer",
+        "apiGroup": "rbac.authorization.k8s.io"
+      }
+    }
+  ]
+}

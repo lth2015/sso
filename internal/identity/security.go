@@ -67,6 +67,9 @@ func (l *Login) regenerateRecovery(ctx context.Context, f store.SecurityAction, 
 }
 func (l *Login) mountSecurity(mux *http.ServeMux) {
 	l.mountAuthenticator(mux)
+	mux.HandleFunc("GET /sso/console", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, l.consoleOrigin()+"/login?force=1", http.StatusSeeOther)
+	})
 	page, err := template.ParseFS(web, "web/security.html")
 	if err != nil {
 		panic("invalid security template")
@@ -82,13 +85,13 @@ func (l *Login) mountSecurity(mux *http.ServeMux) {
 		if err != nil {
 			if errors.Is(err, store.ErrDenied) {
 				w.WriteHeader(401)
-				_ = page.Execute(w, map[string]string{"State": "login"})
+				_ = page.Execute(w, map[string]string{"State": "login", "ConsoleOrigin": l.consoleOrigin()})
 				return
 			}
 			flowError(w, err)
 			return
 		}
-		_ = page.Execute(w, map[string]string{"State": "ready", "ID": f.ID.String(), "CSRF": csrf})
+		_ = page.Execute(w, map[string]string{"ConsoleOrigin": l.consoleOrigin(), "State": "ready", "ID": f.ID.String(), "CSRF": csrf})
 	})
 	for _, asset := range []string{"security.js", "security.css"} {
 		mux.HandleFunc("GET /sso/"+asset, func(w http.ResponseWriter, r *http.Request) {
@@ -147,7 +150,7 @@ func (l *Login) mountSecurity(mux *http.ServeMux) {
 			flowError(w, err)
 			return
 		}
-		setLocalCookie(w, SessionCookie, "", -1)
+		l.setCookie(w, SessionCookie, "", -1)
 		jsonResponse(w, map[string]any{"recovery_codes": codes, "sessions_revoked": true})
 	})
 }

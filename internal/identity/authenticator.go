@@ -97,13 +97,13 @@ func (l *Login) mountAuthenticator(mux *http.ServeMux) {
 		if err != nil {
 			if errors.Is(err, store.ErrDenied) {
 				w.WriteHeader(401)
-				page.Execute(w, map[string]string{"State": "login"})
+				page.Execute(w, map[string]string{"State": "login", "ConsoleOrigin": l.consoleOrigin()})
 				return
 			}
 			flowError(w, err)
 			return
 		}
-		page.Execute(w, map[string]string{"State": "ready", "ID": f.ID.String(), "CSRF": csrf})
+		page.Execute(w, map[string]string{"ConsoleOrigin": l.consoleOrigin(), "State": "ready", "ID": f.ID.String(), "CSRF": csrf})
 	})
 	mux.HandleFunc("GET /sso/authenticator.js", func(w http.ResponseWriter, r *http.Request) {
 		content, err := web.ReadFile("web/authenticator.js")
@@ -169,7 +169,12 @@ func (l *Login) mountAuthenticator(mux *http.ServeMux) {
 			flowError(w, err)
 			return
 		}
-		jsonResponse(w, map[string]string{"state": "enrolling", "secret": secret})
+		qr, err := enrollmentQR(secret, f.User.String())
+		if err != nil {
+			writeError(w, 503, "temporarily_unavailable")
+			return
+		}
+		jsonResponse(w, map[string]string{"state": "enrolling", "secret": secret, "qr_code": qr})
 	})
 	mux.HandleFunc("POST /v1/sso/authenticator/{id}/confirm", func(w http.ResponseWriter, r *http.Request) {
 		var input struct {
@@ -194,7 +199,7 @@ func (l *Login) mountAuthenticator(mux *http.ServeMux) {
 			flowError(w, err)
 			return
 		}
-		setLocalCookie(w, SessionCookie, "", -1)
+		l.setCookie(w, SessionCookie, "", -1)
 		jsonResponse(w, map[string]any{"recovery_codes": codes, "sessions_revoked": true})
 	})
 	mux.HandleFunc("POST /v1/sso/authenticator/{id}/cancel", func(w http.ResponseWriter, r *http.Request) {

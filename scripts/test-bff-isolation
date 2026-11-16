@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Disposable local MySQL only; never uses deployment database credentials.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+container="sso-bff-isolation-test-$$"
+trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+docker run -d --rm --name "$container" -p 127.0.0.1::3306 \
+  -e MYSQL_ROOT_PASSWORD=local-bff-test-only mysql:8.4 >/dev/null
+for attempt in $(seq 1 60); do
+  if docker exec -e MYSQL_PWD=local-bff-test-only "$container" mysqladmin --protocol=TCP --host=127.0.0.1 -uroot ping --silent >/dev/null 2>&1; then break; fi
+  sleep 1
+done
+port=$(docker port "$container" 3306/tcp)
+export SSO_BFF_TEST_MYSQL_ADDR="$port"
+go test ./internal/storage/mysql -run 'TestIsolatedBFF|TestBFFCapability' -count=1 -v

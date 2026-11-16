@@ -36,6 +36,8 @@ jobs:
           test -d internal/consoleui/static/assets
       - name: Test Go packages
         run: go test ./...
+      - name: Test isolated BFF storage and revocation
+        run: bash scripts/test-bff-isolation
       - name: Build Linux service binaries
         env:
           CGO_ENABLED: '0'
@@ -117,3 +119,92 @@ jobs:
           DIGEST: ${{ steps.container.outputs.digest }}
         run: |
           printf '### %s\n\n`%s@%s`\n' '${{ matrix.service }}' "$IMAGE" "$DIGEST" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Save release image reference
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          DIGEST: ${{ steps.container.outputs.digest }}
+          SERVICE: ${{ matrix.service }}
+        run: |
+          mkdir -p release
+          printf '%s@%s\n' "$IMAGE" "$DIGEST" > "release/$SERVICE"
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+        with:
+          name: release-${{ matrix.service }}
+          path: release/${{ matrix.service }}
+          if-no-files-found: error
+          retention-days: 30
+
+  deploy:
+    name: Deploy QA
+    needs: images
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+    # Use a QA runner label here if the GKE API is reachable only from a private network.
+    runs-on: ${{ vars.QA_DEPLOY_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    environment: qa
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: sso-deploy-qa
+      cancel-in-progress: false
+    steps:
+      - name: Reject superseded releases
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.repos.getBranch({
+              ...context.repo, branch: context.ref.replace('refs/heads/', '')
+            });
+            if (data.commit.sha !== context.sha) {
+              core.setFailed('A newer commit exists on this branch; deploy its successful run instead.');
+            }
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release
+          merge-multiple: true
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: ${{ vars.KUBECTL_VERSION || 'v1.36.0' }}
+      - name: Validate federation configuration
+        env:
+          PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          SERVICE_ACCOUNT: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+        run: |
+          : "${PROVIDER:?Set qa secret GCP_WORKLOAD_IDENTITY_PROVIDER}"
+          : "${SERVICE_ACCOUNT:?Set qa secret GCP_DEPLOY_SERVICE_ACCOUNT}"
+      - name: Authenticate to GCP using GitHub OIDC
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: netstars-ai-projects-qa
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - name: Get QA cluster credentials
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          project_id: netstars-ai-projects-qa
+          cluster_name: qa-gcp-tokyo-ai-gke-latest
+          location: asia-northeast1
+          use_dns_based_endpoint: ${{ secrets.GKE_USE_DNS_ENDPOINT == 'true' }}
+          use_internal_ip: ${{ vars.GKE_USE_INTERNAL_IP == 'true' }}
+      - name: Deploy the matching image digests and verify rollouts
+        env:
+          RELEASE_DIR: release
+          RELEASE_SHA: ${{ github.sha }}
+        run: bash scripts/deploy-qa
+      - name: Verify QA public endpoints
+        run: |
+          set -euo pipefail
+          for url in https://bff.nsstest.com/ https://sso.nsstest.com/login; do
+            code="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --retry 3 --retry-delay 5 --retry-all-errors --connect-timeout 10 --max-time 30 "$url")"
+            if [[ "$code" != "200" ]]; then
+              echo "::error::QA endpoint $url returned HTTP $code"
+              exit 1
+            fi
+            printf '\nVerified `%s`: HTTP %s\n' "$url" "$code" >> "$GITHUB_STEP_SUMMARY"
+          done

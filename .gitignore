@@ -7,6 +7,12 @@ dist/
 coverage/
 __pycache__/
 *.pyc
+# Cluster-specific Kubernetes manifests stay local.
+/deploy/kubernetes/
 # Generated console bundle; built before compiling the local BFF.
 internal/consoleui/static/index.html
 internal/consoleui/static/assets/
+
+# Ephemeral GitHub Actions Google credentials
+gha-creds-*.json
+gha-kubeconfig-*

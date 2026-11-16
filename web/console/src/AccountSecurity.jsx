@@ -53,13 +53,13 @@ export default function AccountSecurity({
         <div className="actions">
           <a
             className="button secondary"
-            href="http://auth.localhost:8080/sso/security"
+            href="/auth/security"
           >
             重新生成恢复码
           </a>
           <a
             className="button secondary"
-            href="http://auth.localhost:8080/sso/security/authenticator"
+            href="/auth/authenticator"
           >
             更换认证器
           </a>

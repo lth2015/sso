@@ -60,6 +60,8 @@ type App struct {
 	Audience, ReadScope  string
 	Console              bool
 	PlatformURL          string
+	AuthOrigin           string
+	Sessions             sessionStorage
 }
 
 func New(ctx context.Context, repo store.Store, client, secret string, key []byte, runtime ...RuntimeConfig) (*App, error) {
@@ -128,7 +130,14 @@ func New(ctx context.Context, repo store.Store, client, secret string, key []byt
 		}
 	}
 	endpoint.AuthStyle = oauth2.AuthStyleInHeader
-	return &App{Store: repo, Client: client, Name: name, Origin: origin, Key: aead, Provider: provider, OAuth: oauth2.Config{ClientID: client, ClientSecret: secret, RedirectURL: origin + "/oidc/callback", Scopes: scopes, Endpoint: endpoint}, HTTP: httpClient, Audience: audience, ReadScope: readScope, Console: production, PlatformURL: platformURL}, nil
+	app := &App{Store: repo, Client: client, Name: name, Origin: origin, Key: aead, Provider: provider, OAuth: oauth2.Config{ClientID: client, ClientSecret: secret, RedirectURL: origin + "/oidc/callback", Scopes: scopes, Endpoint: endpoint}, HTTP: httpClient, Audience: audience, ReadScope: readScope, Console: production, PlatformURL: platformURL}
+	if production {
+		app.Sessions = store.NewIsolatedBFFStore(repo)
+		app.AuthOrigin = strings.TrimSuffix(issuer, "/")
+	} else {
+		app.AuthOrigin = hydra.AuthOrigin
+	}
+	return app, nil
 }
 func token() (string, error) {
 	b := make([]byte, 32)
@@ -179,6 +188,8 @@ type transaction struct{ Verifier, Nonce string }
 type Tokens struct {
 	Access, Refresh, ID, Nonce, CSRF, User, Tenant, Grant string
 	Expiry                                                time.Time
+	Revocation                                            string
+	RevocationExpires                                     int64
 }
 type accessClaims struct {
 	Subject  string   `json:"sub"`
@@ -221,6 +232,9 @@ func (a *App) verifyAccess(ctx context.Context, raw, subject string) (accessClai
 			return claims, store.ErrDenied
 		}
 	}
+	if a.Console {
+		return claims, a.checkAuthority(ctx, raw, claims)
+	}
 	user, _ := store.ParseID(subject)
 	tenant, _ := store.ParseID(claims.Ext.Tenant)
 	grant, _ := store.ParseID(claims.Ext.Grant)
@@ -261,6 +275,7 @@ func (a *App) verifyID(ctx context.Context, raw, nonce string) (string, error) {
 }
 func (a *App) Handler() http.Handler {
 	mux := http.NewServeMux()
+	a.mountAuthLinks(mux)
 	mux.HandleFunc("GET /health/live", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) })
 	var rateMu sync.Mutex
 	var start = time.Now()
@@ -310,7 +325,7 @@ func (a *App) Handler() http.Handler {
 			fail(w, 503)
 			return
 		}
-		if err = a.Store.CreateBFFTransaction(r.Context(), hash(state), browser, a.Client, payload); err != nil {
+		if err = a.sessions().CreateBFFTransaction(r.Context(), hash(state), browser, a.Client, payload); err != nil {
 			fail(w, 503)
 			return
 		}
@@ -330,7 +345,7 @@ func (a *App) Handler() http.Handler {
 			return
 		}
 		state := q.Get("state")
-		payload, err := a.Store.ConsumeBFFTransaction(r.Context(), hash(state), cookie(r, a.cookieName(browserCookie)), a.Client)
+		payload, err := a.sessions().ConsumeBFFTransaction(r.Context(), hash(state), cookie(r, a.cookieName(browserCookie)), a.Client)
 		if err != nil {
 			fail(w, 403)
 			return
@@ -370,7 +385,14 @@ func (a *App) Handler() http.Handler {
 			fail(w, 503)
 			return
 		}
-		tokens := Tokens{exchanged.AccessToken, exchanged.RefreshToken, rawID, data.Nonce, csrf, subject, access.Ext.Tenant, access.Ext.Grant, exchanged.Expiry}
+		tokens := Tokens{Access: exchanged.AccessToken, Refresh: exchanged.RefreshToken, ID: rawID, Nonce: data.Nonce, CSRF: csrf, User: subject, Tenant: access.Ext.Tenant, Grant: access.Ext.Grant, Expiry: exchanged.Expiry}
+		if a.Console {
+			tokens.Revocation, tokens.RevocationExpires, err = a.issueRevocation(r.Context(), tokens.Access)
+			if err != nil {
+				fail(w, 503)
+				return
+			}
+		}
 		cipher, err := a.seal(tokens, "session:"+a.Client+":"+base64.RawURLEncoding.EncodeToString(hash(session)))
 		if err != nil {
 			fail(w, 503)
@@ -378,7 +400,7 @@ func (a *App) Handler() http.Handler {
 		}
 		user, _ := store.ParseID(subject)
 		grant, _ := store.ParseID(access.Ext.Grant)
-		if err = a.Store.CreateBFFSession(r.Context(), hash(session), a.Client, user, grant, cipher); err != nil {
+		if err = a.sessions().CreateBFFSession(r.Context(), hash(session), a.Client, user, grant, cipher); err != nil {
 			fail(w, 503)
 			return
 		}
@@ -403,7 +425,7 @@ func (a *App) Handler() http.Handler {
 			return Tokens{}, nil, false
 		}
 		digest := cookie(r, cname)
-		entry, err := a.Store.BFFSession(r.Context(), digest, a.Client)
+		entry, err := a.sessions().BFFSession(r.Context(), digest, a.Client)
 		if err != nil {
 			fail(w, 401)
 			return Tokens{}, nil, false
@@ -413,16 +435,55 @@ func (a *App) Handler() http.Handler {
 			fail(w, 401)
 			return tokens, nil, false
 		}
-		tenant, err := store.ParseID(tokens.Tenant)
-		if err != nil || a.Store.GrantCurrent(r.Context(), entry.Grant, entry.User, tenant, a.Client) != nil {
-			a.clearSessionCookie(w, r)
+
+		if _, err = store.ParseID(tokens.Tenant); err != nil {
 			fail(w, 401)
 			return tokens, nil, false
 		}
+		// Check CSRF before any renewal or remote mutation.
 		if r.Method != "GET" && r.Method != "HEAD" && subtle.ConstantTimeCompare([]byte(tokens.CSRF), []byte(r.Header.Get("X-CSRF-Token"))) != 1 {
 			fail(w, 403)
 			return tokens, nil, false
 		}
+		if a.Console {
+			// Refresh/logout may use a valid local session and CSRF even after AT expiry.
+			// Refresh performs fresh Hook/API checks; logout can only revoke its own grant.
+			if r.URL.Path != "/session/logout" && r.URL.Path != "/session/refresh" {
+				if tokens.Expiry.Before(time.Now().Add(15 * time.Second)) {
+					err = a.sessions().RefreshBFF(r.Context(), digest, a.Client, func(current store.BFFSession) ([]byte, error) {
+						next, e := a.consoleRefresh(r, current, digest)
+						if e != nil {
+							return nil, e
+						}
+						tokens = next
+						return a.seal(next, a.sessionAAD(digest))
+					})
+					if err != nil {
+						a.clearSessionCookie(w, r)
+						a.flushRevocation(r.Context())
+						fail(w, 401)
+						return tokens, nil, false
+					}
+				}
+				if _, err = a.verifyAccess(r.Context(), tokens.Access, tokens.User); err != nil {
+					if errors.Is(err, store.ErrDenied) {
+						a.clearSessionCookie(w, r)
+						fail(w, 401)
+					} else {
+						fail(w, 503)
+					}
+					return tokens, nil, false
+				}
+			}
+		} else {
+			tenant, _ := store.ParseID(tokens.Tenant)
+			if a.Store.GrantCurrent(r.Context(), entry.Grant, entry.User, tenant, a.Client) != nil {
+				a.clearSessionCookie(w, r)
+				fail(w, 401)
+				return tokens, nil, false
+			}
+		}
+
 		return tokens, digest, true
 	}
 	mux.HandleFunc("GET /session", func(w http.ResponseWriter, r *http.Request) {
@@ -453,7 +514,7 @@ func (a *App) Handler() http.Handler {
 		if !ok {
 			return
 		}
-		err := a.Store.RefreshBFF(r.Context(), digest, a.Client, func(entry store.BFFSession) ([]byte, error) {
+		err := a.sessions().RefreshBFF(r.Context(), digest, a.Client, func(entry store.BFFSession) ([]byte, error) {
 			var current Tokens
 			if err := a.open(entry.Tokens, "session:"+a.Client+":"+base64.RawURLEncoding.EncodeToString(digest), &current); err != nil {
 				return nil, err
@@ -486,6 +547,7 @@ func (a *App) Handler() http.Handler {
 		})
 		if err != nil {
 			a.clearSessionCookie(w, r)
+			a.flushRevocation(r.Context())
 			fail(w, 401)
 			return
 		}
@@ -496,11 +558,12 @@ func (a *App) Handler() http.Handler {
 		if !ok {
 			return
 		}
-		if err := a.Store.RevokeBFF(r.Context(), digest, a.Client); err != nil {
+		if err := a.sessions().RevokeBFF(r.Context(), digest, a.Client); err != nil {
 			fail(w, 503)
 			return
 		}
 		a.clearSessionCookie(w, r)
+		a.flushRevocation(r.Context())
 		w.WriteHeader(204)
 	})
 	if a.isConsole() {

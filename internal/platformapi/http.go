@@ -32,17 +32,25 @@ func authority(r *http.Request) store.Authorization { return principal(r).Author
 func Handler(auth *Authenticator) http.Handler {
 	mux := http.NewServeMux()
 	repo := auth.Store
+	admin := auth.Admin
+	if admin == nil {
+		admin = hydra.New()
+	}
+	issuer := auth.Issuer
+	if issuer == "" {
+		issuer = hydra.Issuer
+	}
 	mountRBAC(mux, repo)
 	mountRolePolicyHistory(mux, repo)
 	mountSecurity(mux, repo)
 	mountAuditExports(mux, repo)
 	mountInvitationLifecycle(mux, repo)
-	mountProtocolObservations(mux, repo, hydra.New())
-	mountApplications(mux, repo)
+	mountProtocolObservations(mux, repo, admin)
+	mountApplications(mux, repo, issuer)
 	mountApplicationUserAccess(mux, repo)
 	mountApplicationAccessHistory(mux, repo)
-	mountManagedClients(mux, repo, hydra.New())
-	mountMachineManagement(mux, repo, hydra.New())
+	mountManagedClients(mux, repo, admin)
+	mountMachineManagement(mux, repo, admin)
 	mountOrganizationLifecycle(mux, repo)
 	limit := identity.NewLimiter()
 	capacity := make(chan struct{}, 32)
@@ -68,6 +76,12 @@ func Handler(auth *Authenticator) http.Handler {
 		if err := repo.SSOReady(r.Context()); err != nil {
 			problem(w, 503, "temporarily_unavailable")
 			return
+		}
+		if auth.BFFClientID != "" {
+			if err := bffAuthorityReady(r.Context(), repo); err != nil {
+				problem(w, 503, "temporarily_unavailable")
+				return
+			}
 		}
 		w.WriteHeader(204)
 	})
@@ -413,6 +427,10 @@ func Handler(auth *Authenticator) http.Handler {
 				return
 			}
 			auth.machineResource(w, r, app)
+			return
+		}
+		if r.URL.Path == bffAuthorityPath || r.URL.Path == bffCredentialPath || r.URL.Path == bffRevokePath {
+			auth.bffInternal(w, r)
 			return
 		}
 		raw, err := bearer(r)

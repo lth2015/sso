@@ -7,6 +7,8 @@ if (document.querySelector('[name="change-state"]').content === "ready") {
     stage = "pending";
   const clearSecrets = () => {
     get("new-secret").textContent = "";
+    get("new-qr").removeAttribute("src");
+    get("new-qr").hidden = true;
     get("codes").textContent = "";
     get("password").value = "";
     get("old-code").value = "";
@@ -78,6 +80,8 @@ if (document.querySelector('[name="change-state"]').content === "ready") {
     get("old-factor-form").hidden = true;
     get("new-secret").textContent = data.secret;
     data.secret = "";
+    if(data.qr_code){ get("new-qr").src=data.qr_code; get("new-qr").hidden=false; }
+    data.qr_code="";
     get("new-factor-form").hidden = false;
     get("new-code").focus();
   });
@@ -110,6 +114,6 @@ if (document.querySelector('[name="change-state"]').content === "ready") {
   });
   get("done").addEventListener("click", () => {
     clearSecrets();
-    location.assign("http://console.localhost:3003/login?force=1");
+    location.assign("/sso/console");
   });
 }

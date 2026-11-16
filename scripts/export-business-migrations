@@ -1,0 +1,17 @@
+#!/usr/bin/env python3
+"""Print the same checksummed migration SQL as the local runner, without connecting."""
+from pathlib import Path
+import hashlib
+
+root = Path(__file__).resolve().parents[1]
+print("SET @locked=GET_LOCK('sso_business_migrations',10);")
+print("CREATE TEMPORARY TABLE migration_guard (locked INT NOT NULL CHECK(locked=1));")
+print("INSERT INTO migration_guard VALUES(@locked);")
+print("CREATE TABLE IF NOT EXISTS schema_migrations (version VARCHAR(64) PRIMARY KEY, checksum CHAR(64) NOT NULL);")
+for path in sorted((root / 'migrations/business').glob('*.sql')):
+    version = path.stem
+    checksum = hashlib.sha256(path.read_bytes()).hexdigest()
+    print(f"INSERT INTO migration_guard SELECT 0 FROM schema_migrations WHERE version='{version}' AND checksum<>'{checksum}';")
+    print(path.read_text())
+    print(f"INSERT IGNORE INTO schema_migrations VALUES('{version}','{checksum}');")
+print("DO RELEASE_LOCK('sso_business_migrations');")

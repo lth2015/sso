@@ -5,6 +5,8 @@ const csrf=document.querySelector('[name=flow-csrf]').content;
 const kind=document.querySelector('[name=flow-kind]').content;
 // Remove protocol challenges immediately; they never go into browser storage.
 history.replaceState(null,'',kind==='logout'?'/sso/logout':'/flow');
+function clearEnrollment(){$('secret').textContent='';$('enrollment-qr').removeAttribute('src');$('enrollment-qr').hidden=true;}
+window.addEventListener('pagehide',clearEnrollment);
 let stage='';
 function state(value){stage=value;$('reject').hidden=false;for(const [id,visible]of [['password-form','password'],['mfa-form','mfa'],['passed','passed'],['consent-form','consent']])$(id).hidden=visible!==value;}
 async function post(action,body){
@@ -17,11 +19,11 @@ async function post(action,body){
  }catch(error){$('error').textContent=error.message;return null}
  finally{buttons.forEach(b=>b.disabled=false)}
 }
-$('password-form').addEventListener('submit',async event=>{event.preventDefault();const data=await post('password',{email:$('email').value,password:$('password').value});$('password').value='';if(!data)return;state('mfa');$('title').textContent=data.state==='enroll'?'设置双重验证':'验证你的身份';$('description').textContent='输入认证器中的六位动态验证码。';$('setup').hidden=!data.secret;$('secret').textContent=data.secret||'';$('recovery-option').hidden=data.state==='enroll';$('code').focus()});
-$('mfa-form').addEventListener('submit',async event=>{event.preventDefault();const data=await post('mfa',{code:$('code').value,recovery_code:$('recovery').value});$('code').value='';$('recovery').value='';if(!data)return;$('secret').textContent='';state('passed');$('title').textContent='身份验证完成';$('description').textContent='继续返回应用的授权流程。';$('codes-panel').hidden=!data.recovery_codes?.length;$('codes').textContent=(data.recovery_codes||[]).join('\n');$('continue').textContent=data.recovery_codes?.length?'我已安全保存，继续':'继续';});
+$('password-form').addEventListener('submit',async event=>{event.preventDefault();const data=await post('password',{email:$('email').value,password:$('password').value});$('password').value='';if(!data)return;state('mfa');$('title').textContent=data.state==='enroll'?'设置双重验证':'验证你的身份';$('description').textContent='输入认证器中的六位动态验证码。';$('setup').hidden=!data.secret;$('secret').textContent=data.secret||'';if(data.qr_code){$('enrollment-qr').src=data.qr_code;$('enrollment-qr').hidden=false;}data.secret='';data.qr_code='';$('recovery-option').hidden=data.state==='enroll';$('code').focus()});
+$('mfa-form').addEventListener('submit',async event=>{event.preventDefault();const data=await post('mfa',{code:$('code').value,recovery_code:$('recovery').value});$('code').value='';$('recovery').value='';if(!data)return;clearEnrollment();state('passed');$('title').textContent='身份验证完成';$('description').textContent='继续返回应用的授权流程。';$('codes-panel').hidden=!data.recovery_codes?.length;$('codes').textContent=(data.recovery_codes||[]).join('\n');$('continue').textContent=data.recovery_codes?.length?'我已安全保存，继续':'继续';});
 $('continue').addEventListener('click',async()=>{const data=await post('complete',{});if(data?.redirect_to){$('codes').textContent='';location.assign(data.redirect_to)}});
 $('consent-form').addEventListener('submit',async event=>{event.preventDefault();const data=await post('consent',{tenant_id:$('tenant').value});if(data?.redirect_to)location.assign(data.redirect_to)});
-$('reject').addEventListener('click',async()=>{const data=await post('reject',{});if(data?.redirect_to)location.assign(data.redirect_to)});
+$('reject').addEventListener('click',async()=>{clearEnrollment();const data=await post('reject',{});if(data?.redirect_to)location.assign(data.redirect_to)});
 $('logout').addEventListener('click',async()=>{const data=await post('',{});if(data){$('logout').hidden=true;$('title').textContent='已退出统一登录';$('description').textContent='所有设备上的统一会话已撤销。应用再次访问时需要重新登录。'}});
 (async()=>{
  if(kind==='logout'){$('title').textContent='退出所有设备';$('description').textContent='这会撤销当前账户所有统一登录会话及其后续访问资格。';$('logout').hidden=false;return}

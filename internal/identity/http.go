@@ -70,7 +70,11 @@ func Handler(service *Service, origin string, assets http.Handler) http.Handler 
 			writeError(w, 503, "not_ready")
 			return
 		}
-		w.WriteHeader(204)
+		if strings.HasPrefix(origin, "https://") {
+			w.WriteHeader(http.StatusOK)
+		} else {
+			w.WriteHeader(http.StatusNoContent)
+		}
 	})
 	for path, purpose := range map[string]string{"/v1/registrations": "register", "/v1/password-resets": "reset"} {
 		mux.HandleFunc("POST "+path, func(w http.ResponseWriter, r *http.Request) {

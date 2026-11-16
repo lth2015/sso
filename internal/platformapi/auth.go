@@ -9,7 +9,6 @@ import (
 	store "github.com/lth2015/sso/internal/storage/mysql"
 	"net/http"
 	"strings"
-	"time"
 )
 
 const Audience = "https://api.sso.local"
@@ -31,18 +30,48 @@ func (t ProtocolTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 }
 
 type Authenticator struct {
-	Provider *oidc.Provider
-	HTTP     *http.Client
-	Store    store.Store
+	Provider    *oidc.Provider
+	HTTP        *http.Client
+	Store       store.Store
+	Admin       *hydra.Client
+	Issuer      string
+	BFFClientID string
 }
 
+type RuntimeConfig struct{ Issuer, PublicURL, AdminURL string }
+
+func (c RuntimeConfig) Validate() error {
+	for _, value := range []string{c.Issuer, c.PublicURL, c.AdminURL} {
+		if err := hydra.ValidateEndpoint(value); err != nil {
+			return err
+		}
+	}
+	if !strings.HasPrefix(c.Issuer, "https://") {
+		return errors.New("production issuer requires HTTPS")
+	}
+	return nil
+}
 func NewAuthenticator(ctx context.Context, repo store.Store) (*Authenticator, error) {
-	client := &http.Client{Transport: ProtocolTransport{&http.Transport{Proxy: nil}}, Timeout: 4 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	provider, err := oidc.NewProvider(oidc.ClientContext(ctx, client), hydra.Issuer)
+	return newAuthenticator(ctx, repo, RuntimeConfig{hydra.Issuer, "http://hydra-login:4444", "http://hydra-login:4445"})
+}
+func NewAuthenticatorWithConfig(ctx context.Context, repo store.Store, cfg RuntimeConfig) (*Authenticator, error) {
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+	return newAuthenticator(ctx, repo, cfg)
+}
+func newAuthenticator(ctx context.Context, repo store.Store, cfg RuntimeConfig) (*Authenticator, error) {
+	client, err := hydra.ProtocolClient(cfg.Issuer, cfg.PublicURL)
+	if err != nil {
+		return nil, err
+	}
+	provider, err := oidc.NewProvider(oidc.ClientContext(ctx, client), cfg.Issuer)
 	if err != nil {
 		return nil, errors.New("issuer unavailable")
 	}
-	return &Authenticator{provider, client, repo}, nil
+	admin := hydra.New()
+	admin.Base, admin.IssuerURL = cfg.AdminURL, cfg.Issuer
+	return &Authenticator{Provider: provider, HTTP: client, Store: repo, Admin: admin, Issuer: cfg.Issuer}, nil
 }
 
 type Principal struct {

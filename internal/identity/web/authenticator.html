@@ -41,10 +41,10 @@
         <form id="new-factor-form" hidden>
           <h2>配置新的认证器</h2>
           <p>
-            在新认证器中手动添加以下密钥，使用六位 TOTP、SHA-1、30
-            秒周期。密钥仅在此步骤显示一次；不要分享。
+            使用新认证器扫描二维码，再输入六位动态验证码。二维码与密钥仅在此步骤显示，请勿分享。
           </p>
-          <pre id="new-secret"></pre>
+          <img id="new-qr" width="280" height="280" alt="新认证器绑定二维码" hidden>
+<details><summary>无法扫码？手动输入密钥</summary><pre id="new-secret"></pre></details>
           <label for="new-code">新认证器动态验证码</label
           ><input
             id="new-code"
@@ -72,7 +72,7 @@
         <button id="cancel" type="button">取消更换，保留原认证器</button
         ><a
           id="relogin"
-          href="http://console.localhost:3003/login?force=1"
+          href="{{.ConsoleOrigin}}/login?force=1"
           hidden
           >重新登录核对</a
         >
@@ -80,8 +80,8 @@
         <p id="error" role="alert"></p>
         {{else}}
         <p>当前统一登录已失效。请先完成登录，再进入此页面。</p>
-        <a href="http://console.localhost:3003/login?force=1">登录控制台</a
-        >{{end}}<a class="back" href="http://console.localhost:3003"
+        <a href="{{.ConsoleOrigin}}/login?force=1">登录控制台</a
+        >{{end}}<a class="back" href="{{.ConsoleOrigin}}"
           >返回控制台</a
         >
       </section>

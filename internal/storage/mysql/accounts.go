@@ -217,8 +217,8 @@ type Notification struct {
 	Expires            int64
 }
 
-// DeliverOne holds a row lock while the local idempotent sink writes. Failure
-// rolls back its acknowledgement; SKIP LOCKED permits independent workers.
+// DeliverOne holds a row lock during delivery. Failure schedules another attempt;
+// SKIP LOCKED permits independent workers. Network delivery is at-least-once.
 func (s Store) DeliverOne(ctx context.Context, deliver func(Notification) error) (bool, error) {
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
