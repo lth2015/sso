@@ -25,6 +25,8 @@ def kubectl(args, body=None, missing=False):
             return None
         # Do not echo Kubernetes errors, objects or commands that might contain configuration.
         raise RuntimeError('Kubernetes operation failed: ' + args[0])
+    if args[0] == 'delete':
+        return None
     return json.loads(result.stdout) if result.stdout.strip() else None
 
 
@@ -132,7 +134,7 @@ def reconcile():
         jobs.append((ns, group, existing, migration_job(ns, group, migration_image, live_deps[(ns, source)])))
     for ns, group, existing, job in jobs:
         if existing:
-            kubectl(['delete', 'job', 'sso-schema-migrate', '-n', ns, '--wait=true', '-o', 'json'])
+            kubectl(['delete', 'job', 'sso-schema-migrate', '-n', ns, '--wait=true'])
         kubectl(['create', '-f', '-', '-o', 'json'], job)
         print('Started migration gate: ' + ns + '/' + group, flush=True)
     deadline = time.monotonic() + 720

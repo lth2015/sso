@@ -47,6 +47,8 @@ class ReleaseTests(unittest.TestCase):
             job = copy.deepcopy(body)
             job['status'] = {'conditions': [{'type': 'Failed' if self.fail_migration else 'Complete', 'status': 'True'}]}
             self.objects[('job', ns, 'sso-schema-migrate')] = job
+        elif action == 'delete':
+            del self.objects[('job', args[4], args[2])]
         elif action == 'replace':
             self.objects[('configmap', body['metadata']['namespace'], body['metadata']['name'])] = copy.deepcopy(body)
         elif action == 'patch':
@@ -85,6 +87,22 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(cm['data'], self.maps[(r['namespace'], r['configMap'])]['data'])
             container = self.objects[('deployment', r['namespace'], r['deployment'])]['spec']['template']['spec']['containers'][0]
             self.assertTrue(all('value' not in e for e in container['env']))
+
+    def test_rerun_replaces_terminal_migration_jobs(self):
+        for ns in ('nss-sso', 'sso-bff'):
+            self.objects[('job', ns, 'sso-schema-migrate')] = {
+                'status': {'conditions': [{'type': 'Failed', 'status': 'True'}]}}
+        with patch.object(qa, 'get', self.get), patch.object(qa, 'kubectl', self.kubectl):
+            qa.reconcile()
+        self.assertEqual(sum(a[0] == 'delete' for a in self.actions), 2)
+        self.assertEqual(sum(a[0] == 'create' for a in self.actions), 2)
+
+    def test_delete_accepts_kubectl_plain_text_response(self):
+        import subprocess
+        completed = subprocess.CompletedProcess([], 0, stdout='job.batch "sso-schema-migrate" deleted', stderr='')
+        with patch.object(qa.subprocess, 'run', return_value=completed) as run:
+            self.assertIsNone(qa.kubectl(['delete', 'job', 'sso-schema-migrate', '-n', 'nss-sso', '--wait=true']))
+            self.assertNotIn('json', run.call_args.args[0])
 
     def test_invalid_migration_image_blocks_all_cluster_mutations(self):
         (Path(self.temp.name) / 'db-migrate').write_text('ghcr.io/another/repo@sha256:' + 'a' * 64)
